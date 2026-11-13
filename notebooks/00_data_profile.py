@@ -19,6 +19,7 @@
 # Tüm çıktılar `outputs/<run_id>/nb00/` altına yazılır ve audit log'a kaydedilir.
 
 # %%
+import json
 import os
 import sys
 from pathlib import Path
@@ -41,7 +42,10 @@ from sandbox.io import schema
 SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
 pd.set_option("display.width", 160)
 
-run = Run("nb00_data_profile", source=SOURCE)
+P = dict(PARAMS)
+# Duyarlılık çalıştırmaları için: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (audit'e yazılır)
+P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
+run = Run("nb00_data_profile", params=P, source=SOURCE)
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in COHORTS if (CANONICAL_DIR / SOURCE / c).exists()])
 data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in COHORTS
         if (CANONICAL_DIR / SOURCE / c).exists()}
@@ -99,10 +103,13 @@ demo = pd.DataFrame(demo)
 run.save_table(demo, "nb00/demographics.csv", "Demografi özeti")
 print(demo.to_string(index=False))
 
-eth = pd.concat({c: d["patients"]["ethnicity_raw"].fillna("<missing>").value_counts()
+# Etnik grup kaynağı P["ethnicity_source"] (uyruk veya etnisite); grup eşlemesi NB1'de
+eth_col = codelists.ETHNICITY_SOURCE_COLUMN[P["ethnicity_source"]]
+eth = pd.concat({c: d["patients"][eth_col].fillna("<missing>").value_counts()
                  for c, d in data.items()}, axis=1).fillna(0).astype(int)
-eth_out = sdc.suppress_small_counts(eth.reset_index().rename(columns={"index": "ethnicity_raw"}), list(data))
-run.save_table(eth_out, "nb00/ethnicity_categories.csv", "Etnisite kategorileri (küçük hücre bastırılmış)")
+eth_out = sdc.suppress_small_counts(eth.rename_axis(eth_col).reset_index(), list(data))
+run.save_table(eth_out, "nb00/ethnicity_categories.csv",
+               f"Etnik grup kaynağı ({eth_col}) kategorileri (küçük hücre bastırılmış)")
 print(eth_out.to_string(index=False))
 
 fig, axes = plt.subplots(1, len(data), figsize=(5 * len(data), 4), squeeze=False)
@@ -163,19 +170,19 @@ print(unmapped if len(unmapped) else "Eşlenemeyen kod yok")
 # ## 5. 8 çekirdek değişkenin tamlığı
 #
 # C1/C2: veri sonu itibarıyla tüm geçmiş ("as currently recorded").
-# C3: index tarihinde, prediktör lookback = `PARAMS["predictor_lookback_days"]`.
+# C3: index tarihinde, prediktör lookback = `P["predictor_lookback_days"]`.
 
 # %%
 comp_rows, joint_rows, snaps = [], [], {}
 ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
 for c, d in data.items():
     if c == "c3":
-        snap = cohorts.build_c3(d)["cohort"]
+        snap = cohorts.build_c3(d, P)["cohort"]
         snap["group"] = "non-diabetic"
     else:
         pool = cohorts.positive_pool(d)
         ref = pd.Series(cohorts.data_end_date(d), index=pool.index)
-        snap = phenotype.core_snapshot(d, ref, lookback_days=None).join(pool["status"].rename("group"))
+        snap = phenotype.core_snapshot(d, ref, lookback_days=None, p=P).join(pool["status"].rename("group"))
     snaps[c] = snap
     for grp, s in [("all", snap), *snap.groupby("group")]:
         for col in ok_cols + ["waist_cm"]:
@@ -241,8 +248,8 @@ if "c3" in snaps:
         "incident_t2d_incl_med": int(s["incident_diabetes_incl_med"].sum()),
         "incident_prediabetes": int(s["incident_prediabetes"].sum()),
         "followup_years_median": round(s["followup_years"].median(), 2),
-        "followup_ge_horizon_pct": round(100 * (s["followup_years"] >= PARAMS["horizon_years"]).mean(), 1),
-        "followup_ge_fallback_pct": round(100 * (s["followup_years"] >= PARAMS["horizon_years_fallback"]).mean(), 1),
+        "followup_ge_horizon_pct": round(100 * (s["followup_years"] >= P["horizon_years"]).mean(), 1),
+        "followup_ge_fallback_pct": round(100 * (s["followup_years"] >= P["horizon_years_fallback"]).mean(), 1),
         "n_followup_glycaemic_median": float(s["n_followup_glycaemic"].median()),
     }])
     run.save_table(c3_sum, "nb00/c3_followup_summary.csv", "C3 takip ve olay özeti")
@@ -258,7 +265,7 @@ if "c3" in snaps:
     print(bins)
     sens = []
     for w in (0, 90, 180):
-        r = cohorts.build_c3(data["c3"], dict(PARAMS, outcome_washout_days=w))
+        r = cohorts.build_c3(data["c3"], dict(P, outcome_washout_days=w))
         sens.append({"washout_days": w, "n": r["funnel"]["c3_final"] if w == 0 else r["funnel"]["after_outcome_washout"],
                      "events": int(r["cohort"]["incident_diabetes"].sum()),
                      "followup_years_median": round(r["cohort"]["followup_years"].median(), 2)})
@@ -268,7 +275,7 @@ if "c3" in snaps:
 
     fig, ax = plt.subplots(figsize=(7, 3.5))
     s["followup_years"].plot.hist(bins=30, ax=ax, color="#55A868")
-    ax.axvline(PARAMS["horizon_years"], ls="--", color="k")
+    ax.axvline(P["horizon_years"], ls="--", color="k")
     ax.set_title("C3 takip süresi (yıl)")
     run.save_figure(fig, "nb00/c3_followup_hist.png", "C3 takip süresi")
 

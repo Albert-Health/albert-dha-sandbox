@@ -35,7 +35,8 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    varsayılanını medikal ekip onayı olmadan değiştirme. Karar gelince: config'i güncelle, yorumdaki
    işareti `[KARAR: <tarih>, <kim>]` yap, `docs/OPEN_ITEMS.md`'de "Kararlar" bölümüne işle.
 7. **Kaynak formatı yalnızca adapter'da.** Analiz kodu sadece kanonik şemayı okur
-   (`src/sandbox/io/schema.py`). NABIDH formatı değişirse yalnızca `io/adapters/nabidh.py` (MAPPING) değişir.
+   (`src/sandbox/io/schema.py`). NABIDH formatı değişirse yalnızca `io/adapters/nabidh.py` (SOURCES ve
+   değer sözlükleri) değişir.
 8. **Çıktı ifşa kontrolü:** enclave'den çıkacak tablolarda sayımlar `sdc.suppress_small_counts`
    ile (<10 → "<10"). Hasta kimliği içeren dosya enclave dışına çıkmaz.
 9. **Push yok:** commit serbest, `git push` yalnızca kullanıcı isteyince.
@@ -44,9 +45,10 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
 ```
 src/sandbox/
   config.py            PARAMS + yollar
-  codelists.py         ICD-10 / SNOMED / ATC / LOINC + etnisite eşlemeleri
+  codelists.py         ICD-10 / SNOMED / ATC / LOINC + uyruk → etnik grup → QDiabetes / LRS eşlemeleri
   io/schema.py         kanonik şema (6 tablo), okuma/yazma, validate()
-  io/adapters/         synthetic.py, nabidh.py
+  io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, SocialHistory,
+                       FamilyHistory, Medication, Encounter → kanonik)
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
   scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py
@@ -55,7 +57,8 @@ src/sandbox/
   kpi.py               KPI Framework satırları + actual/met + markdown rapor
   audit.py, sdc.py
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
-tools/                 build_synthetic_cohorts, kpi_report, build_evidence_package, positive_control, py2ipynb
+tools/                 ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
+                       build_evidence_package, positive_control, py2ipynb
 docs/                  OPEN_ITEMS.md, evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 .run/                  IntelliJ run configuration'ları (repoda)
@@ -72,7 +75,9 @@ Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
 .venv/bin/python notebooks/02_c3_benchmark.py            # SANDBOX_BOOTSTRAP_REPS=100 ile hızlı
 .venv/bin/python tools/kpi_report.py
 .venv/bin/python tools/build_evidence_package.py
-# Enclave: SANDBOX_SOURCE=nabidh (kanonik veri data/canonical/nabidh/ altında)
+# NABIDH adapter provası: make_nabidh_dryrun → ingest_nabidh --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
+#   → SANDBOX_SOURCE=nabidh_dryrun ile NB0/NB1/NB2
+# Enclave: tools/ingest_nabidh.py (data/nabidh/raw/<kohort> → data/canonical/nabidh/), sonra SANDBOX_SOURCE=nabidh
 ```
 
 ## Değişiklik yaparken

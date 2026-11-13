@@ -185,14 +185,18 @@ run.save_table(dist, "nb01/score_summary.csv", "Skor özetleri (betimleyici)")
 print(dist.to_string(index=False))
 
 # %% [markdown]
-# ## 4. Etnisite eşlemesi kontrolü (NABIDH → QDiabetes)
+# ## 4. Etnik grup eşlemesi kontrolü (uyruk / etnisite → grup → QDiabetes)
+# Kaynak: `PARAMS["ethnicity_source"]`. "Other (unmapped nationality)" satırları eşleme tablosuna
+# (codelists.NATIONALITY_COUNTRIES) eklenecek adaylardır [karar bekliyor — D6].
 
 # %%
-eth_map = pd.concat({c: s.groupby([s["ethnicity"].fillna("<missing>"), "ethn_qd"]).size() for c, s in snaps.items()},
-                    axis=1).fillna(0).astype(int).reset_index()
-eth_map.columns = ["ethnicity_raw", "qdiabetes_category", *snaps]
+src_name = P["ethnicity_source"]
+eth_map = pd.concat({c: s.groupby([s["ethnicity_source_value"].fillna("<missing>"),
+                                   s["ethnicity"].fillna("<missing>"), "ethn_qd"]).size()
+                     for c, s in snaps.items()}, axis=1).fillna(0).astype(int).reset_index()
+eth_map.columns = [f"{src_name}_raw", "ethnic_group", "qdiabetes_category", *snaps]
 run.save_table(sdc.suppress_small_counts(eth_map, list(snaps)), "nb01/ethnicity_mapping.csv",
-               "NABIDH → QDiabetes etnisite eşlemesi [karar bekliyor]")
+               f"{src_name} → etnik grup → QDiabetes eşlemesi [karar bekliyor]")
 print(eth_map.to_string(index=False))
 
 # %%

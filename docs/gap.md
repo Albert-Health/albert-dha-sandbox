@@ -18,24 +18,24 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 ## 2. Medikal ekipten kararlar (config parametresiyle)
 | # | Karar | Parametre | Varsayılan | Bağlam |
 |---|---|---|---|---|
-| D1 | Outcome washout (index sonrası N gün içindeki olay = prevalent, hasta çıkarılır) | `outcome_washout_days` | 0 (v2) | Sentetikte olayların %74'ü ≤30 gün; öneri 90 |
-| D2 | Birincil horizon 5 y mı 3 y mı | `horizon_years`, `horizon_years_fallback` | 5 / 3 | Sentetikte takip medyanı 2,35 y; ≥5 y %20 |
-| D3 | Prediktör penceresi (index öncesi; index sonrası ± gün) | `predictor_lookback_days` | 365 | v2 iki sürüm: 12 vs 24 ay. Sentetikte index'te BMI %37, sigara %21 |
-| D4 | Eksik veri yaklaşımı | (K2 ile eklenecek) | complete-case | — |
-| D5 | QDiabetes risk eşiği (sens/spec/PPV/alert rate) | `qd_risk_threshold_pct` | None | Yoksa ilgili KPI'lar "Pending" |
+| D1 | Outcome washout (index sonrası N gün içindeki olay = prevalent, hasta çıkarılır) | `outcome_washout_days` | **90 [KARAR]** (v2: 0 → duyarlılık) | Sentetikte olayların %74'ü ≤30 gün |
+| D2 | Birincil horizon 5 y mı 3 y mı | `horizon_years`, `horizon_years_fallback` | **3 / 5 [KARAR — şimdilik]** | Ayrıntılı bakılacak. Sentetikte takip medyanı 2,35 y; ≥5 y %20 |
+| D3 | Prediktör penceresi (index öncesi; index sonrası ± gün) | `predictor_lookback_days` | **365 [KARAR]**; 730 duyarlılık | v2 iki sürüm: 12 vs 24 ay. Sentetikte index'te BMI %37, sigara %21 |
+| D4 | Eksik veri yaklaşımı | (K2 ile eklenecek) | complete-case | Parametre türüne göre değişecek [KARAR — ayrıntı açık] |
+| D5 | QDiabetes risk eşiği (sens/spec/PPV/alert rate) | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | İlgili KPI'lar "Pending" |
 | D6 | Etnisite eşlemesi NABIDH → QDiabetes 9 kategori / LRS | `codelists` eşleme tabloları | Emirati, Gulf Arab, Arab → "Other" | Sentetikte "Other" eşlemesi tek başına ~2× düşük tahmin üretiyor |
 | D7 | Yoğunluksuz "current" sigara kategorisi | `qd_smoking_current_category` | 3 (moderate) | Midwakh / shisha nasıl ele alınacak |
-| D8 | Sigara kaydı yok = non-smoker mı | `qd_missing_smoking_as_non` | False | — |
-| D9 | Kapsam dışı 7 Model A prediktörü = 0 (indirgenmiş model) | `qd_force_reduced_model` | True | Statin, steroid, atipik antipsikotik, şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS |
-| D10 | Townsend = 0 | `qd_townsend` | 0.0 | UAE'de karşılığı yok |
+| D8 | Sigara kaydı yok = non-smoker mı | `qd_missing_smoking_as_non` | **False [KARAR]** | Kayıt yok = bilinmiyor |
+| D9 | Kapsam dışı 7 Model A prediktörü = 0 (indirgenmiş model) | `qd_force_reduced_model` | **True [KARAR]** | Statin, steroid, atipik antipsikotik, şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS |
+| D10 | Townsend = 0 | `qd_townsend` | **0.0 [KARAR]** | UAE'de karşılığı yok |
 | D11 | 5 y risk için baseline ölçekleme S0(t) = S0(10)^(t/10) | `qd_baseline_time_scaling` | "power" | Yayınlanmış kodda yalnız 10 y baseline var — ayrıca [KISIT] |
 | D12 | LRS'de etnisite "Not recorded" → skor hesaplanmaz | `lrs_unknown_ethnicity_as_missing` | True | — |
 | D13 | Recalibration bölme yöntemi | `recal_split` | "temporal" | Temporal test parçasında 5 y AUROC hesaplanamıyor (≥5 y takipli kontrol yok) |
 | D14 | Başlangıçta prediyabet: hariç (v2) / duyarlılıkta dahil | (eklenecek) | hariç | QDiabetes geliştirme popülasyonuyla uyum |
 | D15 | Outcome için doğrulayıcı ikinci test; random glukoz ≥200 ve yalnız E11 tanısı olay mı | (eklenecek) | tek test; ikisi de olay | ADA ikinci test ister |
-| D16 | Gebelik dönemi lab'ları dışlansın mı | (eklenecek) | dışlanmıyor | GDM / O24 |
-| D17 | Aile öyküsü kaydı yok = negatif mi (C1 tamlık) | `c1_require_fh_record` | False | — |
-| D18 | KVH tanımı (I50 ve tüm I60–I69 dahil mi) | `codelists.DX["cvd"]` | geniş | QDiabetes: angina, MI, inme, TIA |
+| D16 | Gebelik dönemi lab'ları dışlansın mı | — | **gerekmiyor [KARAR]** | Gebelik verisi yok |
+| D17 | Aile öyküsü kaydı yok = negatif mi (C1 tamlık) | `c1_require_fh_record` | False | Enclave'de netleşecek |
+| D18 | KVH tanımı (I50 ve tüm I60–I69 dahil mi) | `codelists.DX["cvd"]` | **NABIDH listesi [KARAR]** | I20–I25, I50, I6x, G45 |
 | D19 | Adım 3'ü tetikleyecek "yeterli performans" | (eklenecek) | — | Veriye bakmadan önce yazılmalı |
 | D20 | Fairness alt grupları ve kabul edilebilir fark | (eklenecek) | cinsiyet, yaş bandı, etnisite | — |
 | D21 | Kod listelerinin klinik onayı; model card klinik bölümleri | — | — | Evidence package (Critical KPI) için şart |
@@ -60,8 +60,33 @@ Layer 2 koşullu).
 - QDiabetes 5 y riski 10 y baseline'dan varsayımla türetiliyor (D11).
 - İndirgenmiş Model A (D9) ve Townsend = 0 (D10) karşılaştırılabilirliği sınırlar.
 - C3 iki glisemik ölçüm şartı daha sık test edilen (muhtemelen daha riskli) hastaları seçer.
+- Etnik grup uyruktan türetiliyor (D6); uyruk etnisite değildir (ör. Hindistan kökenli İngiltere vatandaşı).
 
 ## 5. Kararlar (verildikçe buraya)
 | Tarih | Karar | Kim | Parametre / commit |
 |---|---|---|---|
-| — | — | — | — |
+| 2026-11-13 | D6: etnik grup NABIDH etnisite alanı yerine **uyruktan** (nationality) türetilir. Uyruk → grup eşlemesinin içeriği hâlâ medikal ekip onayında | ensargunesdogdu | `ethnicity_source = "nationality"`, `codelists.NATIONALITY_COUNTRIES` |
+| 2026-11-13 | D1: outcome washout 90 gün (index sonrası ≤ 90 günde olay = prevalent, hasta çıkarılır); v2 (0 gün) duyarlılık | ensargunesdogdu | `outcome_washout_days = 90`; .run 4b (0 gün) |
+| 2026-11-13 | D2: birincil horizon 3 yıl — şimdilik, ayrıntılı bakılacak; 5 yıl ikincil | ensargunesdogdu | `horizon_years = 3`, `horizon_years_fallback = 5` |
+| 2026-11-13 | D3: prediktör penceresi 1 yıl birincil; 2 yıl ek kontrol (duyarlılık) | ensargunesdogdu | `predictor_lookback_days = 365`; `SANDBOX_PARAMS='{"predictor_lookback_days": 730}'`, .run 4c |
+| 2026-11-13 | D4: eksik veri yaklaşımı parametrenin türüne göre değişecek (ayrıntı açık, K2) | ensargunesdogdu | — (şimdilik complete-case) |
+| 2026-11-13 | D5: QDiabetes risk eşiği şimdilik varsayılan (yok) → eşik KPI'ları "Pending" | ensargunesdogdu | `qd_risk_threshold_pct = None` |
+| 2026-11-13 | D8: sigara kaydı yok = bilinmiyor (non-smoker sayılmaz). Notlarda D7 başlığı altında yazılmıştı; içerik D8'e karşılık geliyor | ensargunesdogdu | `qd_missing_smoking_as_non = False` |
+| 2026-11-13 | D9: kapsam dışı 7 Model A prediktörü kapsam dışı kalır (indirgenmiş model) | ensargunesdogdu | `qd_force_reduced_model = True` |
+| 2026-11-13 | D10: Townsend kapsam dışı → 0 | ensargunesdogdu | `qd_townsend = 0.0` |
+| 2026-11-13 | D16: gebelik verisi yok → dışlama kuralı gerekmiyor | ensargunesdogdu | — |
+| 2026-11-13 | D18: KVH tanımı NABIDH Data availability listesindeki gibi (I20–I25, I50, I6x, G45) | ensargunesdogdu | `codelists.DX["cvd"]` (zaten aynı) |
+
+D1 - 90 Gün
+D2 - 3 Yıl şimdilik ama bu konuya detaylı bir bakmak gerekiyor.
+D3 - Bizim için bir yıl öncelikli, iki yıl ek olarak kontrol edeceğimiz bir mekanizma olabilir.
+D4 - Her parametrenin türüne göre değişecek.
+D5 - default neyse odur şu an için
+D6 - Nationality kullanacağız.
+D7 - Sigara statüsü olmayan bilinmiyor olarak işaretlenecek. C2 ve C3 için C1 de hepsinde mevcut.
+D8
+D9 - Kapsam Dışı kalacak
+D10- Out of scope
+D16 - Gebelik olan veri yok.
+D17 - Orada netleştireceğiz.
+D18 - Selahattin screenshot'da mevcut

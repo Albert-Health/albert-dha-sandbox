@@ -13,17 +13,27 @@ from ... import codelists
 from ..schema import Dataset, coerce
 
 
-def read_raw_csv(path: Path) -> pd.DataFrame:
-    """Başta '#' ile başlayan banner satır(lar)ını atlayarak CSV okur; her şey text."""
+# Sentetik veride uyruk yok. PARAMS["ethnicity_source"] = "nationality" ile pipeline'ı sınamak için
+# sentetik etnisiteden temsili bir uyruk türetilir (yalnız test; eşleme codelists'te aynı gruba döner).
+SYNTHETIC_ETHNICITY_TO_NATIONALITY = {
+    "Emirati": "United Arab Emirates", "Gulf Arab (non-Emirati)": "Saudi Arabia", "Arab (non-Gulf)": "Egypt",
+    "Indian": "India", "Pakistani": "Pakistan", "Bangladeshi": "Bangladesh", "Filipino": "Philippines",
+    "Other Asian": "Nepal", "African": "Kenya", "Western": "United Kingdom",
+}
+
+
+def read_raw_csv(path: Path, sep: str = ",", encoding: str = "utf-8-sig") -> pd.DataFrame:
+    """Başta '#' ile başlayan banner satır(lar)ını atlayarak CSV okur; her şey text.
+    utf-8-sig: Excel'den çıkan dosyalardaki BOM'u temizler (düz UTF-8'i de okur)."""
     skip = 0
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding=encoding) as fh:
         for line in fh:
             if line.startswith("#"):
                 skip += 1
             else:
                 break
     return pd.read_csv(path, skiprows=skip, dtype=str, keep_default_na=False,
-                       na_values=[""], encoding="utf-8")
+                       na_values=[""], encoding=encoding, sep=sep)
 
 
 def load(raw_dir: Path) -> Dataset:
@@ -44,6 +54,8 @@ def load(raw_dir: Path) -> Dataset:
 
     pts = r["patients"].rename(columns={"ethnicity_nabidh": "ethnicity_raw"})
     pts["facility_id"] = pts["patient_id"].map(main_fac)
+    if "nationality" not in pts.columns:
+        pts["nationality"] = pts["ethnicity_raw"].map(SYNTHETIC_ETHNICITY_TO_NATIONALITY)
 
     cond = r["conditions"].rename(columns={"recorded_date": "date", "code_description": "description"})
     meds = r["medications"].rename(columns={"prescription_date": "date"})

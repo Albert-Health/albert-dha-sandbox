@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="4b · NB2 C3 benchmark (washout 90d sensitivity)" type="PythonConfigurationType" factoryName="Python">
+  <configuration default="false" name="4c · NB2 C3 benchmark (lookback 730d sensitivity)" type="PythonConfigurationType" factoryName="Python">
     <module name="sandbox-git" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -7,7 +7,7 @@
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PYTHONPATH" value="$PROJECT_DIR$/src" />
-      <env name="SANDBOX_PARAMS" value="{&quot;outcome_washout_days&quot;: 90}" />
+      <env name="SANDBOX_PARAMS" value="{&quot;predictor_lookback_days&quot;: 730}" />
     </envs>
     <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/bin/python" />
     <option name="SDK_NAME" value="~/Desktop/Projects/Sandbox/sandbox-git/.venv" />

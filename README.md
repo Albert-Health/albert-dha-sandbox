@@ -26,7 +26,8 @@ src/sandbox/
   audit.py                audit trail (run log, kod/veri hash) — KPI: Audit Trail %100
   sdc.py                  küçük hücre bastırma
 notebooks/                .py (percent format) — Jupyter/VS Code'da hücre hücre açılır
-tools/                    build_synthetic_cohorts.py, kpi_report.py, build_evidence_package.py,
+tools/                    ingest_nabidh.py (NABIDH ham → kanonik), make_nabidh_dryrun.py (prova verisi),
+                          build_synthetic_cohorts.py, kpi_report.py, build_evidence_package.py,
                           positive_control.py, py2ipynb.py
 docs/evidence_package/    model card, validasyon, veri kalite, kohort türetme şablonları
 tests/                    unittest (pytest gerekmez)
@@ -38,6 +39,7 @@ archive/                  önceki prototip notebook ve raporlar
 
 | Adım | Notebook | Kohort | Çıktı / KPI |
 |---|---|---|---|
+| — | `tools/ingest_nabidh.py` | C1, C2, C3 | NABIDH ham → kanonik şema, şema kontrolü, kaynak değer dağılımları (eşleme sözlükleri için) |
 | 0 | `00_data_profile.py` | C1, C2, C3 | şema doğrulama, tamlık, istenen-vs-gelen kod eşlemesi · *Data Completeness, Framework Match* |
 | 1 | `01_c1_c2_feasibility.py` | C1, C2 | birlikte tamlık, C1–C2 seçilim etkisi, skor hesaplanabilirliği (kesitsel) |
 | 2 | `02_c3_benchmark.py` | C3 | QDiabetes + LRS: C-index, AUROC, kalibrasyon, eşik metrikleri, recalibration · *klinik/teknik KPI'lar* |
@@ -49,21 +51,22 @@ archive/                  önceki prototip notebook ve raporlar
 Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (synthetic / nabidh / synthetic_pc),
 `SANDBOX_PARAMS` (JSON, config override — duyarlılık analizleri), `SANDBOX_BOOTSTRAP_REPS`.
 
-## Karar bekleyen parametreler (`src/sandbox/config.py`)
+## Parametreler ve kararlar (`src/sandbox/config.py`; kayıt: `docs/gap.md` §5)
 
-| Parametre | Varsayılan | Konu |
+| Parametre | Değer | Konu |
 |---|---|---|
-| `outcome_washout_days` | 0 | index'e yakın olay = prevalent (öneri 90) |
-| `horizon_years` / `_fallback` | 5 / 3 | birincil horizon |
-| `predictor_lookback_days` | 365 | prediktör penceresi (v2 sürümleri 12 vs 24 ay) |
-| `qd_force_reduced_model` | True | 7 Model A prediktörü = 0 (revize MVP) |
-| `qd_townsend` | 0.0 | UAE'de deprivation proxy yok |
-| `qd_smoking_current_category` | 3 (moderate) | yoğunluksuz "current" sigara |
-| `qd_missing_smoking_as_non` | False | sigara kaydı yoksa non-smoker say |
-| `qd_baseline_time_scaling` | power | 10 y dışı horizon için S0(t)=S0(10)^(t/10) (Kol 1) |
-| `qd_risk_threshold_pct` | None | sens/spec/PPV/alert rate eşiği — None iken KPI'lar "Pending" |
+| `outcome_washout_days` | 90 **[KARAR]** | index'e ≤ 90 gün olay = prevalent; 0 = v2 duyarlılığı |
+| `horizon_years` / `_fallback` | 3 / 5 **[KARAR — şimdilik]** | birincil / ikincil horizon |
+| `predictor_lookback_days` | 365 **[KARAR]** | prediktör penceresi; 730 duyarlılık (.run 4c) |
+| `qd_force_reduced_model` | True **[KARAR]** | 7 Model A prediktörü = 0 (kapsam dışı) |
+| `qd_townsend` | 0.0 **[KARAR]** | kapsam dışı |
+| `qd_smoking_current_category` | 3 (moderate) | yoğunluksuz "current" sigara [karar bekliyor] |
+| `qd_missing_smoking_as_non` | False **[KARAR]** | sigara kaydı yok = bilinmiyor |
+| `qd_baseline_time_scaling` | power | 10 y dışı horizon için S0(t)=S0(10)^(t/10) (Kol 1) [karar bekliyor] |
+| `qd_risk_threshold_pct` | None **[KARAR — şimdilik]** | sens/spec/PPV/alert rate eşiği; KPI'lar "Pending" |
 | `lrs_unknown_ethnicity_as_missing` | True | etnisite kayıtsızsa LRS hesaplanmaz |
-| `codelists.NABIDH_TO_QDIABETES` | Emirati/Gulf/Arab → Other | etnisite eşlemesi |
+| `ethnicity_source` | nationality | **[KARAR: 2026-11-13]** etnik grup uyruktan türetilir |
+| `codelists.NATIONALITY_COUNTRIES` → `NABIDH_TO_QDIABETES` | BAE/Körfez/Arap → Other | uyruk → etnik grup → QDiabetes eşlemesi |
 | LRS madde puanları | Gray 2010 | birincil makaleden teyit |
 
 ## Kurulum ve çalıştırma
@@ -76,8 +79,15 @@ python -m unittest discover -s tests -v          # kural testleri
 python tools/build_synthetic_cohorts.py          # data/synthetic/raw → data/canonical/synthetic/{c1,c2,c3}
 python notebooks/00_data_profile.py
 
-# Enclave'de: src/sandbox/io/adapters/nabidh.py içindeki MAPPING'i gerçek dosya/sütun adlarıyla doldur,
-# kanonik veriyi data/canonical/nabidh/ altına yaz, notebook'larda SOURCE = "nabidh".
+# NABIDH adapter provası (sentetik veri NABIDH teslim biçiminde):
+python tools/make_nabidh_dryrun.py
+python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
+SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py
+
+# Enclave'de: ham dosyalar data/nabidh/raw/<c1|c2|c3>/ altına; src/sandbox/io/adapters/nabidh.py içindeki
+# SOURCES'ta dosya/sütun adlarını gerçek adlarla değiştir, sonra:
+python tools/ingest_nabidh.py                    # → data/canonical/nabidh/ + outputs/<run_id>/ingest/
+SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
 python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üretir
 ```
 

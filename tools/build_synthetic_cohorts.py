@@ -33,8 +33,10 @@ def main() -> None:
 
     sel = cohorts.build_c1_c2(full, PARAMS)
     run.log("C1/C2 selected", **sel["report"])
-    c3 = cohorts.build_c3(full, PARAMS)
-    run.log("C3 built", **c3["funnel"])
+    # NABIDH C3'ü v2 spesifikasyonuyla (washout yok) teslim eder; outcome washout (D1) bir analiz
+    # kararıdır ve NB0 / NB2'de uygulanır. Teslimi taklit ederken washout = 0.
+    c3 = cohorts.build_c3(full, dict(PARAMS, outcome_washout_days=0))
+    run.log("C3 built (delivery emulation, washout 0)", **c3["funnel"])
 
     out_base = CANONICAL_DIR
     for name, ids in [("c1", sel["c1_ids"]), ("c2", sel["c2_ids"]), ("c3", list(c3["cohort"].index))]:

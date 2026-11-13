@@ -90,6 +90,8 @@ def dm_evidence(ds: Dataset, glyc: pd.DataFrame | None = None) -> pd.DataFrame:
 # Çekirdek değişkenler (snapshot)
 # --------------------------------------------------------------------------
 _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none", "other - not stated"}
+# FamilyHistory kaydının "kayıt var" sayıldığı değerler (unknown / unmapped sayılmaz)
+FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
 
 
 def _z68_to_bmi(code: pd.Series) -> pd.Series:
@@ -136,8 +138,12 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out["sex"] = pts["sex"].reindex(out.index)
     dob = pts["date_of_birth"].reindex(out.index)
     out["age"] = (ref - dob).dt.days / 365.25
-    eth = pts["ethnicity_raw"].reindex(out.index)
-    out["ethnicity"] = eth.where(~eth.astype("string").str.strip().str.lower().isin(_MISSING_ETH).fillna(True))
+    # Etnik grup: PARAMS["ethnicity_source"] sütunundan (uyruk veya NABIDH etnisitesi)
+    src = p.get("ethnicity_source", PARAMS["ethnicity_source"])
+    eth = pts[codelists.ETHNICITY_SOURCE_COLUMN[src]].reindex(out.index)
+    eth = eth.where(~eth.astype("string").str.strip().str.lower().isin(_MISSING_ETH).fillna(True))
+    out["ethnicity_source_value"] = eth
+    out["ethnicity"] = codelists.ethnic_group(eth, src)
 
     # Gözlemler (pencere içi)
     obs_all = ds["observations"]
@@ -168,9 +174,13 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
 
     out["waist_cm"] = _latest(num[(num["concept"] == "waist_cm") & num["v"].between(40, 250)], "v").reindex(out.index)
 
-    # Sigara: en son durum (tüm geçmiş, ref'e kadar) — önce yapısal alan, sonra tanı kodu
+    # Sigara: en son durum (tüm geçmiş, ref'e kadar) — önce yapısal alan, sonra tanı kodu.
+    # Yalnızca tanınan değerler (never/ex/current/light/moderate/heavy …) sayılır; "unknown" veya
+    # adapter'ın eşleyemediği değerler önceki bilgili kaydı ezmez.
     sm = obs_hist[obs_hist["concept"] == "smoking_status"]
-    sm_raw = _latest(sm.assign(v=sm["value"].astype("string").str.strip().str.lower()), "v")
+    sm = sm.assign(v=sm["value"].astype("string").str.strip().str.lower())
+    sm = sm[sm["v"].isin(list(codelists.SMOKING_TEXT_TO_CAT)).fillna(False).astype(bool)]
+    sm_raw = _latest(sm, "v")
     out["smoking_raw"] = sm_raw.reindex(out.index)
     out["smoking_source"] = np.where(out["smoking_raw"].notna(), "structured", None)
     cond_hist = _window(ds["conditions"], ref, None)
@@ -192,6 +202,17 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
         ids = set(cond_hist.loc[codelists.match_dx(cond_hist, grp), "patient_id"])
         out[col] = out.index.isin(ids)
 
+    # Aile öyküsü: Z83.3 tanısı VEYA FamilyHistory kaydı (adapter → observations concept
+    # family_history_dm; değer positive / negative / positive_non_first_degree / unknown).
+    # Pozitif = birinci derece akrabada diyabet (QDiabetes ve LRS tanımı). Kayıt var = pozitif veya negatif.
+    fh = obs_hist[obs_hist["concept"] == "family_history_dm"]
+    fh_val = fh["value"].astype("string").str.strip().str.lower()
+    fh_pos = set(fh.loc[fh_val.eq("positive").fillna(False).astype(bool), "patient_id"])
+    fh_rec = set(fh.loc[fh_val.isin(list(FH_RECORDED_VALUES)).fillna(False).astype(bool), "patient_id"])
+    dx_fh = out["family_history"]
+    out["family_history"] = dx_fh | out.index.isin(fh_pos)
+    out["family_history_recorded"] = dx_fh | out.index.isin(fh_rec)
+
     # İlaç bayrakları (pencere içi)
     med_win = _window(ds["medications"], ref, lookback_days)
     for grp, col in [("antihypertensive", "htn_med"), ("statin", "statin"),
@@ -208,7 +229,7 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out["ok_ethnicity"] = out["ethnicity"].notna()
     out["ok_bmi"] = out["bmi_source"].isin(["direct", "height_weight"])   # Z68 bandı tam sayılmaz
     out["ok_smoking"] = out["smoking_raw"].notna()
-    out["ok_family_history"] = out["family_history"] if p["c1_require_fh_record"] else True
+    out["ok_family_history"] = out["family_history_recorded"] if p["c1_require_fh_record"] else True
     out["ok_cvd"] = True            # EHR'de var/yok
     out["ok_hypertension"] = True   # tanı ve ilaç ayrı alanlar; var/yok
     ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]

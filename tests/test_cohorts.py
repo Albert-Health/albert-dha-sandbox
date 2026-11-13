@@ -66,6 +66,18 @@ class TestC3(unittest.TestCase):
 
 
 class TestWashout(unittest.TestCase):
+    def test_default_washout_90_days(self):
+        # D1 (2026-11-13): varsayılan washout 90 gün → 45. günde olay = prevalent, hasta çıkarılır
+        res = cohorts.build_c3(tiny_dataset())
+        self.assertNotIn("P11", res["cohort"].index)
+        self.assertLess(res["funnel"]["after_outcome_washout"], res["funnel"]["c3_final"])
+
+    def test_no_washout_keeps_early_event(self):
+        from sandbox.config import PARAMS
+        c3 = cohorts.build_c3(tiny_dataset(), dict(PARAMS, outcome_washout_days=0))["cohort"]
+        self.assertTrue(c3.loc["P11", "incident_diabetes"])
+        self.assertEqual(c3.loc["P11", "incident_date"], pd.Timestamp("2019-02-15"))
+
     def test_washout_removes_early_event(self):
         from sandbox.config import PARAMS
         p = dict(PARAMS, outcome_washout_days=1000)   # P01 olayı index'ten ~792 gün sonra

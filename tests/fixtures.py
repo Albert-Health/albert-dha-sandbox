@@ -22,18 +22,22 @@ def tiny_dataset() -> Dataset:
     P08 pozitif havuz (T2DM, tanı), 8 değişken tam → C1 adayı
     P09 pozitif havuz (prediyabet lab), sigara yok → C1 dışı, C2 adayı
     P10 C3: 2018 A10, 2019 normal HbA1c → prevalent (ilaç) → hariç
+    P11 C3 adayı: 2019-01-01 normal HbA1c, 45 gün sonra HbA1c 6.9 → varsayılan 90 gün washout ile
+        hariç (D1); washout 0 ile incident
     """
+    # Uyruk (PARAMS["ethnicity_source"] = "nationality") farklı yazımlarla: ad, ISO3, ISO2, sıfat
     pts = _df([
-        ("P01", "Male", "1970-01-01", "Emirati", None, "F1"),
-        ("P02", "Female", "1965-06-15", "Indian", None, "F1"),
-        ("P03", "Male", "1960-01-01", "Pakistani", None, "F2"),
-        ("P04", "Female", "1975-01-01", "Filipino", None, "F2"),
-        ("P05", "Male", "1980-01-01", "Emirati", None, "F1"),
-        ("P06", "Female", "1997-01-01", "Western", None, "F3"),
+        ("P01", "Male", "1970-01-01", "Emirati", "United Arab Emirates", "F1"),
+        ("P02", "Female", "1965-06-15", "Indian", "IND", "F1"),
+        ("P03", "Male", "1960-01-01", "Pakistani", "Pakistan", "F2"),
+        ("P04", "Female", "1975-01-01", "Filipino", "PH", "F2"),
+        ("P05", "Male", "1980-01-01", "Emirati", "UAE", "F1"),
+        ("P06", "Female", "1997-01-01", "Western", "British", "F3"),
         ("P07", "Male", "1955-01-01", "Not recorded", None, "F3"),
-        ("P08", "Male", "1960-01-01", "Emirati", None, "F1"),
-        ("P09", "Female", "1985-01-01", "Indian", None, "F1"),
-        ("P10", "Male", "1950-01-01", "Indian", None, "F2"),
+        ("P08", "Male", "1960-01-01", "Emirati", "United Arab Emirates", "F1"),
+        ("P09", "Female", "1985-01-01", "Indian", "India", "F1"),
+        ("P10", "Male", "1950-01-01", "Indian", "Iran", "F2"),
+        ("P11", "Female", "1970-01-01", "Arab (non-Gulf)", "Egypt", "F2"),
     ], ["patient_id", "sex", "date_of_birth", "ethnicity_raw", "nationality", "facility_id"])
 
     labs = _df([
@@ -53,6 +57,8 @@ def tiny_dataset() -> Dataset:
         ("P09", "4548-4", "HbA1c", 6.0, "%", "2021-01-01"),
         ("P10", "4548-4", "HbA1c", 5.5, "%", "2019-01-01"),
         ("P10", "4548-4", "HbA1c", 5.6, "%", "2020-01-01"),
+        ("P11", "4548-4", "HbA1c", 5.4, "%", "2019-01-01"),
+        ("P11", "4548-4", "HbA1c", 6.9, "%", "2019-02-15"),
     ], ["patient_id", "loinc", "test_name", "value", "unit", "date"])
 
     cond = _df([

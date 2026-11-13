@@ -181,7 +181,7 @@ m2a = recalibration.fit_stratified(train["T"], train["E"], train["qd_lp"], train
 qd_set["p1"] = qd.risk(qd_set["qd_lp"], qd_set["sex"], h, P).to_numpy()
 qd_set["p2a"] = recalibration.predict_stratified(m2a, qd_set["qd_lp"], qd_set["sex"])
 sub_rows = []
-for gtype, col in [("Sex", "sex"), ("Age band", "age_band"), ("NABIDH ethnicity", "ethnicity"),
+for gtype, col in [("Sex", "sex"), ("Age band", "age_band"), (f"Ethnic group ({P['ethnicity_source']})", "ethnicity"),
                    ("QDiabetes ethnicity", "ethn_qd")]:
     for g, d in qd_set.groupby(col, observed=True, dropna=False):
         t, e = d["T"].to_numpy(), d["E"].to_numpy()

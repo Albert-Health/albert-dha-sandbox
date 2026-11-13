@@ -18,6 +18,8 @@ DX = {
     "t1d": {"icd10": ["E10"], "snomed": ["46635009"]},
     "prediabetes": {"icd10": ["R73"], "snomed": ["714628002", "9414007", "390951007"]},
     "hypertension": {"icd10": ["I10", "I11", "I12", "I13", "I15", "I16", "I1A"], "snomed": ["38341003"]},
+    # [KARAR: 2026-11-13, ensargunesdogdu] D18: NABIDH Data availability listesindeki tanım
+    # (I20–I25, I50, I6x, G45) — bu liste ile aynı.
     "cvd": {
         "icd10": ["I20", "I21", "I22", "I23", "I24", "I25", "I50",
                   "I60", "I61", "I62", "I63", "I64", "I65", "I66", "I67", "I68", "I69", "G45"],
@@ -126,12 +128,127 @@ NABIDH_TO_QDIABETES = {
     "gulf arab (non-emirati)": "Other",
     "arab (non-gulf)": "Other",
     "arab": "Other",
+    "other": "Other",
+    "other (unmapped nationality)": "Other",
 }
 QDIABETES_ETHNICITIES = ["WhiteNA", "Indian", "Pakistani", "Bangladeshi", "OtherAsian",
                          "BlackCaribbean", "BlackAfrican", "Chinese", "Other"]
 # LRS: beyaz = 0 puan, diğer tüm gruplar = 6 puan
 LRS_WHITE = {"western", "white", "european"}
 ETHNICITY_UNKNOWN = {"not recorded", "unknown", "", "not stated", "na", "n/a"}
+
+
+# --------------------------------------------------------------------------
+# Uyruk → etnik grup  [KARAR: 2026-11-13 kaynak = uyruk; eşleme içeriği KARAR BEKLİYOR — D6]
+# --------------------------------------------------------------------------
+# PARAMS["ethnicity_source"] = "nationality" iken etnik grup uyruktan türetilir. Gruplar yukarıdaki
+# NABIDH etnisite sözlüğünün etiketleridir; böylece QDiabetes / LRS eşlemesi ve alt-grup analizleri
+# aynı kalır. Uyruk etnisite değildir (ör. Hindistan kökenli İngiltere vatandaşı) — bilinen kısıt.
+# Yalnızca açık durumlar eşlendi. Belirsiz uyruklar (İran, Afganistan, Türkiye, Sudan, Güney Afrika,
+# Latin Amerika, Orta Asya …) bilerek eşlenmedi: "Other (unmapped nationality)" → QDiabetes "Other",
+# LRS beyaz-dışı; ingest raporunda görünür, medikal ekip karar verince buraya eklenir.
+# Satır: (grup, ISO3, ISO2, [ad / sıfat varyantları]) — hepsi küçük harfe çevrilerek anahtar olur.
+NATIONALITY_COUNTRIES = [
+    ("Emirati", "ARE", "AE", ["united arab emirates", "uae", "u.a.e.", "emirati", "uae national"]),
+    ("Gulf Arab (non-Emirati)", "SAU", "SA", ["saudi arabia", "saudi", "saudi arabian", "ksa"]),
+    ("Gulf Arab (non-Emirati)", "KWT", "KW", ["kuwait", "kuwaiti"]),
+    ("Gulf Arab (non-Emirati)", "QAT", "QA", ["qatar", "qatari"]),
+    ("Gulf Arab (non-Emirati)", "BHR", "BH", ["bahrain", "bahraini"]),
+    ("Gulf Arab (non-Emirati)", "OMN", "OM", ["oman", "omani"]),
+    ("Arab (non-Gulf)", "EGY", "EG", ["egypt", "egyptian"]),
+    ("Arab (non-Gulf)", "JOR", "JO", ["jordan", "jordanian"]),
+    ("Arab (non-Gulf)", "LBN", "LB", ["lebanon", "lebanese"]),
+    ("Arab (non-Gulf)", "SYR", "SY", ["syria", "syrian", "syrian arab republic"]),
+    ("Arab (non-Gulf)", "IRQ", "IQ", ["iraq", "iraqi"]),
+    ("Arab (non-Gulf)", "YEM", "YE", ["yemen", "yemeni"]),
+    ("Arab (non-Gulf)", "PSE", "PS", ["palestine", "palestinian", "state of palestine"]),
+    ("Arab (non-Gulf)", "MAR", "MA", ["morocco", "moroccan"]),
+    ("Arab (non-Gulf)", "DZA", "DZ", ["algeria", "algerian"]),
+    ("Arab (non-Gulf)", "TUN", "TN", ["tunisia", "tunisian"]),
+    ("Arab (non-Gulf)", "LBY", "LY", ["libya", "libyan"]),
+    ("Indian", "IND", "IN", ["india", "indian"]),
+    ("Pakistani", "PAK", "PK", ["pakistan", "pakistani"]),
+    ("Bangladeshi", "BGD", "BD", ["bangladesh", "bangladeshi"]),
+    ("Filipino", "PHL", "PH", ["philippines", "filipino", "filipina", "philippine"]),
+    ("Other Asian", "LKA", "LK", ["sri lanka", "sri lankan"]),
+    ("Other Asian", "NPL", "NP", ["nepal", "nepali", "nepalese"]),
+    ("Other Asian", "IDN", "ID", ["indonesia", "indonesian"]),
+    ("Other Asian", "MYS", "MY", ["malaysia", "malaysian"]),
+    ("Other Asian", "THA", "TH", ["thailand", "thai"]),
+    ("Other Asian", "VNM", "VN", ["vietnam", "viet nam", "vietnamese"]),
+    ("Other Asian", "MMR", "MM", ["myanmar", "burmese"]),
+    ("Other Asian", "BTN", "BT", ["bhutan", "bhutanese"]),
+    ("Other Asian", "MDV", "MV", ["maldives", "maldivian"]),
+    ("Other Asian", "JPN", "JP", ["japan", "japanese"]),
+    ("Other Asian", "KOR", "KR", ["south korea", "korea", "republic of korea", "korean"]),
+    ("Chinese", "CHN", "CN", ["china", "chinese"]),
+    ("Chinese", "HKG", "HK", ["hong kong"]),
+    ("Chinese", "TWN", "TW", ["taiwan", "taiwanese"]),
+    ("African", "NGA", "NG", ["nigeria", "nigerian"]),
+    ("African", "GHA", "GH", ["ghana", "ghanaian"]),
+    ("African", "KEN", "KE", ["kenya", "kenyan"]),
+    ("African", "UGA", "UG", ["uganda", "ugandan"]),
+    ("African", "ETH", "ET", ["ethiopia", "ethiopian"]),
+    ("African", "ERI", "ER", ["eritrea", "eritrean"]),
+    ("African", "SOM", "SO", ["somalia", "somali"]),
+    ("African", "TZA", "TZ", ["tanzania", "tanzanian"]),
+    ("African", "CMR", "CM", ["cameroon", "cameroonian"]),
+    ("African", "ZWE", "ZW", ["zimbabwe", "zimbabwean"]),
+    ("African", "ZMB", "ZM", ["zambia", "zambian"]),
+    ("African", "SEN", "SN", ["senegal", "senegalese"]),
+    ("Black Caribbean", "JAM", "JM", ["jamaica", "jamaican"]),
+    ("Black Caribbean", "TTO", "TT", ["trinidad and tobago", "trinidadian"]),
+    ("Black Caribbean", "BRB", "BB", ["barbados", "barbadian"]),
+    ("Western", "GBR", "GB", ["united kingdom", "uk", "great britain", "british", "england", "english"]),
+    ("Western", "IRL", "IE", ["ireland", "irish"]),
+    ("Western", "USA", "US", ["united states", "united states of america", "usa", "american"]),
+    ("Western", "CAN", "CA", ["canada", "canadian"]),
+    ("Western", "AUS", "AU", ["australia", "australian"]),
+    ("Western", "NZL", "NZ", ["new zealand", "new zealander"]),
+    ("Western", "FRA", "FR", ["france", "french"]),
+    ("Western", "DEU", "DE", ["germany", "german"]),
+    ("Western", "ITA", "IT", ["italy", "italian"]),
+    ("Western", "ESP", "ES", ["spain", "spanish"]),
+    ("Western", "PRT", "PT", ["portugal", "portuguese"]),
+    ("Western", "NLD", "NL", ["netherlands", "dutch"]),
+    ("Western", "BEL", "BE", ["belgium", "belgian"]),
+    ("Western", "CHE", "CH", ["switzerland", "swiss"]),
+    ("Western", "AUT", "AT", ["austria", "austrian"]),
+    ("Western", "SWE", "SE", ["sweden", "swedish"]),
+    ("Western", "NOR", "NO", ["norway", "norwegian"]),
+    ("Western", "DNK", "DK", ["denmark", "danish"]),
+    ("Western", "FIN", "FI", ["finland", "finnish"]),
+    ("Western", "POL", "PL", ["poland", "polish"]),
+    ("Western", "GRC", "GR", ["greece", "greek"]),
+    ("Western", "ROU", "RO", ["romania", "romanian"]),
+    ("Western", "RUS", "RU", ["russia", "russian", "russian federation"]),
+    ("Western", "UKR", "UA", ["ukraine", "ukrainian"]),
+]
+NATIONALITY_TO_GROUP = {
+    key: group
+    for group, iso3, iso2, names in NATIONALITY_COUNTRIES
+    for key in [iso3.lower(), iso2.lower(), *names]
+}
+UNMAPPED_NATIONALITY = "Other (unmapped nationality)"
+
+# PARAMS["ethnicity_source"] → patients tablosundaki sütun
+ETHNICITY_SOURCE_COLUMN = {"nationality": "nationality", "ethnicity": "ethnicity_raw"}
+
+
+def ethnic_group(raw: pd.Series, source: str) -> pd.Series:
+    """Kaynak değer (uyruk veya NABIDH etnisitesi) → analizde kullanılan etnik grup etiketi.
+
+    source="ethnicity": değer olduğu gibi döner. source="nationality": NATIONALITY_TO_GROUP;
+    kayıtlı ama eşlenemeyen uyruk → UNMAPPED_NATIONALITY. Kayıtsız (NA) → NA.
+    """
+    if source == "ethnicity":
+        return raw
+    if source != "nationality":
+        raise ValueError(f"Bilinmeyen ethnicity_source: {source}")
+    key = raw.astype("string").str.strip().str.lower()
+    grp = key.map(NATIONALITY_TO_GROUP).astype(object)
+    # "string" dtype: kayıtsızlar NA kalır (etnisite kaynağıyla aynı davranış, ör. .eq() → NA)
+    return grp.where(key.isna() | grp.notna(), UNMAPPED_NATIONALITY).where(key.notna()).astype("string")
 
 
 def map_ethnicity_qdiabetes(raw: pd.Series) -> pd.Series:
