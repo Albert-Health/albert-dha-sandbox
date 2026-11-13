@@ -51,6 +51,22 @@ python notebooks/00_data_profile.py
 python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üretir
 ```
 
+## IntelliJ IDEA ile çalışma
+
+1. **Python ortamı (bir kez):** `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt jupyter ipykernel`
+2. **SDK (bir kez):** *File → Project Structure → SDKs → + → Add Python SDK → Virtualenv → Existing* → `.venv/bin/python`.
+   Ardından *Modules → sandbox-git → + → Python* facet'ini ekleyip bu SDK'yı seç.
+3. **Kaynak klasörleri:** `src/` Sources, `tests/` Test Sources; `data/`, `outputs/`, `.venv/`, `archive/` Excluded olmalı
+   (*Project Structure → Modules → Sources*).
+4. **Run configuration'lar** `.run/` klasöründe hazır ve repoda; sağ üstteki listeden seçilir:
+   - `0 · Tests (unittest)` — kural testleri
+   - `1 · Build synthetic C1-C2-C3` — `data/synthetic/raw` → `data/canonical/synthetic/`
+   - `2 · NB0 Data profile` — çıktılar `outputs/<run_id>/nb00/`
+   - `9 · Generate .ipynb from notebooks` — `notebooks/00_data_profile.ipynb` üretir; IntelliJ'de Jupyter olarak açılır
+     (kernel: `.venv`). Kaynak her zaman `.py` dosyasıdır; `.ipynb` git'e girmez.
+
+Not: Notebook'lar `ROOT/src`'yi kendisi `sys.path`'e ekler; working directory proje kökü olmalı (run config'lerde ayarlı).
+
 ## Kanonik şema (özet)
 
 Uzun format, kohort başına 6 tablo, UTF-8 CSV, ISO-8601 tarih, kodlar text:
