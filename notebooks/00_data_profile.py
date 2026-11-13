@@ -19,6 +19,7 @@
 # Tüm çıktılar `outputs/<run_id>/nb00/` altına yazılır ve audit log'a kaydedilir.
 
 # %%
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +38,7 @@ from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
 
-SOURCE = "synthetic"          # enclave'de: "nabidh"
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
 pd.set_option("display.width", 160)
 
 run = Run("nb00_data_profile")
@@ -292,6 +293,15 @@ kpi.append({"kpi": "Applicant Data Requirement Framework Match", "cohort": "all"
             "weakest_variable": ", ".join(sorted(not_received["group"].unique())[:6])})
 kpi = pd.DataFrame(kpi)
 run.save_table(kpi, "nb00/kpi_preview.csv", "NB0'dan beslenen KPI'lar")
+core_min = allc[allc["variable"].isin(codelists.CORE_VARIABLES)].groupby("cohort")["complete_pct"].min()
+run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
+               "data_completeness_weakest": {c: r["weakest_variable"] for c, r in
+                                             kpi[kpi["cohort"] != "all"].set_index("cohort").iterrows()},
+               "framework_match": bool(not_received.empty),
+               "framework_missing_groups": sorted(not_received["group"].unique().tolist()),
+               "schema_errors": int((val["severity"] == "ERROR").sum()),
+               "schema_warnings": int((val["severity"] == "WARN").sum())},
+              "nb00/kpi_values.json", "NB0 KPI girdileri")
 print(kpi.to_string(index=False))
 
 # %%

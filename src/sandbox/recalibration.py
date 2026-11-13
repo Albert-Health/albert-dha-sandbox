@@ -43,3 +43,21 @@ def fit(time, event, lp, horizon: float, method: str = "baseline") -> dict:
 def predict(model: dict, lp) -> np.ndarray:
     lp = np.asarray(lp, float)
     return 1.0 - model["s0_h"] ** np.exp(model["beta"] * lp)
+
+
+def fit_stratified(time, event, lp, strata, horizon: float, method: str = "baseline") -> dict:
+    """Katman (ör. cinsiyet) başına ayrı recalibration. QDiabetes kadın/erkek için ayrı baseline
+    survival kullandığından Kol 2 de cinsiyete göre katmanlı yapılmalıdır; aksi halde katmanlar arası
+    sıralama değişir."""
+    t, e, lp, s = (np.asarray(a) for a in (time, event, lp, strata))
+    return {str(k): fit(t[s == k], e[s == k].astype(bool), lp[s == k].astype(float), horizon, method)
+            for k in np.unique(s)}
+
+
+def predict_stratified(models: dict, lp, strata) -> np.ndarray:
+    lp, s = np.asarray(lp, float), np.asarray(strata).astype(str)
+    out = np.full(len(lp), np.nan)
+    for k, m in models.items():
+        idx = s == k
+        out[idx] = predict(m, lp[idx])
+    return out
