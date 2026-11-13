@@ -59,6 +59,9 @@ PARAMS = {
     "horizon_years": 5,               # birincil; 3 yıl yedek
     "horizon_years_fallback": 3,
     "c3_cap": None,                   # v2: "no cap"
+    # Index'ten sonraki N gün içinde olay = başlangıçta zaten diyabetik (tanı konmamış) kabul edilir
+    # ve hasta kohorttan çıkarılır. v2'de yok → varsayılan 0; NB0 duyarlılık tablosu 0/90/180 raporlar.
+    "outcome_washout_days": 0,
 
     # İstatistik
     "bootstrap_reps": 500,

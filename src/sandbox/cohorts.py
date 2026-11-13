@@ -158,6 +158,13 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     c3["incident_prediabetes"] = c3.index.isin(pre.index)
     c3["prediabetes_date"] = pre["date"].reindex(c3.index)
 
+    # Washout: index'e çok yakın olay → prevalent sayılır, hasta çıkarılır
+    w = p.get("outcome_washout_days", 0) or 0
+    if w > 0:
+        early = c3["incident_diabetes"] & ((c3["incident_date"] - c3["index_date"]).dt.days <= w)
+        c3 = c3[~early]
+    funnel["after_outcome_washout"] = int(len(c3))
+
     # Takip sonu ve süre (birincil outcome)
     c3["followup_end"] = c3["incident_date"].where(c3["incident_diabetes"], c3["last_glycaemic_date"])
     c3["followup_years"] = (c3["followup_end"] - c3["index_date"]).dt.days / 365.25

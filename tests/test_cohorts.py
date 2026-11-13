@@ -65,6 +65,15 @@ class TestC3(unittest.TestCase):
         self.assertEqual(seq, sorted(seq, reverse=True))
 
 
+class TestWashout(unittest.TestCase):
+    def test_washout_removes_early_event(self):
+        from sandbox.config import PARAMS
+        p = dict(PARAMS, outcome_washout_days=1000)   # P01 olayı index'ten ~792 gün sonra
+        c3 = cohorts.build_c3(tiny_dataset(), p)["cohort"]
+        self.assertNotIn("P01", c3.index)
+        self.assertIn("P02", c3.index)
+
+
 class TestPositivePool(unittest.TestCase):
     def test_pool(self):
         ds = tiny_dataset()

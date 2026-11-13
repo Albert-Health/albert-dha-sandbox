@@ -13,6 +13,7 @@ outputs/<run_id>/run_manifest.json. Ağ erişimi yoktur, her şey yereldir.
 """
 from __future__ import annotations
 
+import atexit
 import datetime as _dt
 import getpass
 import hashlib
@@ -66,7 +67,7 @@ def _now() -> str:
 
 class Run:
     def __init__(self, name: str, params: dict | None = None):
-        ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")   # UTC: makineden bağımsız sıralama
         self.run_id = f"{ts}_{name}_{uuid.uuid4().hex[:6]}"
         self.name = name
         self.dir = OUTPUT_DIR / self.run_id
@@ -80,6 +81,13 @@ class Run:
         }
         self._append({"event": "run_start", "run_id": self.run_id, "name": name,
                       "code_sha256": self.record["code"]["combined_sha256"], "ts": _now()})
+        self._finished = False
+        # Script hata ile biterse de run_end yazılsın (audit trail boşluk bırakmasın)
+        atexit.register(self._close_if_open)
+
+    def _close_if_open(self) -> None:
+        if not self._finished:
+            self.finish(status="failed_or_interrupted")
 
     # -- kayıtlar ---------------------------------------------------------
     def _append(self, obj: dict) -> None:
@@ -131,6 +139,7 @@ class Run:
         return self.register_output(p, description)
 
     def finish(self, status: str = "success") -> Path:
+        self._finished = True
         self.record["status"] = status
         self.record["finished_utc"] = _now()
         manifest = self.dir / "run_manifest.json"

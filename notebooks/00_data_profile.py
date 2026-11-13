@@ -248,6 +248,23 @@ if "c3" in snaps:
     print(c3_sum.T)
     ev = s.loc[s["incident_diabetes"], "incident_evidence"].value_counts()
     run.save_table(ev.reset_index(), "nb00/c3_incident_evidence.csv", "İlk olay kanıt tipi")
+    # Olay index'e ne kadar yakın? (çok yakın olay = muhtemelen başlangıçta tanı konmamış diyabet)
+    dte = (s["incident_date"] - s["index_date"]).dt.days.dropna()
+    bins = pd.cut(dte, [0, 30, 90, 180, 365, 730, 100000],
+                  labels=["≤30g", "31–90g", "91–180g", "181–365g", "1–2y", ">2y"]).value_counts().sort_index()
+    run.save_table(bins.rename_axis("days_to_event").reset_index(name="events"), "nb00/c3_days_to_event.csv",
+                   "İlk olaya kadar geçen gün dağılımı")
+    print(bins)
+    sens = []
+    for w in (0, 90, 180):
+        r = cohorts.build_c3(data["c3"], dict(PARAMS, outcome_washout_days=w))
+        sens.append({"washout_days": w, "n": r["funnel"]["c3_final"] if w == 0 else r["funnel"]["after_outcome_washout"],
+                     "events": int(r["cohort"]["incident_diabetes"].sum()),
+                     "followup_years_median": round(r["cohort"]["followup_years"].median(), 2)})
+    sens = pd.DataFrame(sens)
+    run.save_table(sens, "nb00/c3_washout_sensitivity.csv", "Outcome washout duyarlılığı")
+    print(sens.to_string(index=False))
+
     fig, ax = plt.subplots(figsize=(7, 3.5))
     s["followup_years"].plot.hist(bins=30, ax=ax, color="#55A868")
     ax.axvline(PARAMS["horizon_years"], ls="--", color="k")

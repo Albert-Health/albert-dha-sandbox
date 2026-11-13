@@ -9,6 +9,7 @@
       <env name="PYTHONPATH" value="$PROJECT_DIR$/src" />
     </envs>
     <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/bin/python" />
+    <option name="SDK_NAME" value="~/Desktop/Projects/Sandbox/sandbox-git/.venv" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
