@@ -63,6 +63,33 @@ PARAMS = {
     # ve hasta kohorttan çıkarılır. v2'de yok → varsayılan 0; NB0 duyarlılık tablosu 0/90/180 raporlar.
     "outcome_washout_days": 0,
 
+    # QDiabetes-2018 Model A (scores/qdiabetes2018a.py) — [KARAR BEKLİYOR] işaretliler medikal ekipte
+    # Revize MVP yalnızca 8 çekirdek değişkeni istiyor → steroid, statin, atipik antipsikotik,
+    # şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS = 0 ("indirgenmiş Model A"). False → veride varsa kullanılır.
+    "qd_force_reduced_model": True,          # [KARAR BEKLİYOR]
+    "qd_townsend": 0.0,                      # UAE'de Townsend yok; 0 [KARAR BEKLİYOR]
+    "qd_smoking_current_category": 3,        # yoğunluksuz "current" → 3=moderate [KARAR BEKLİYOR]
+    "qd_missing_smoking_as_non": False,      # True → sigara kaydı yok = non-smoker [KARAR BEKLİYOR]
+    # Kaynak kod yalnızca 10 yıllık baseline survival verir. Diğer horizon'lar için
+    # S0(t) = S0(10)^(t/10) (sabit baseline hazard varsayımı) [KARAR BEKLİYOR]
+    "qd_baseline_time_scaling": "power",
+    "qd_risk_threshold_pct": None,           # sens/spec/PPV için horizon riski eşiği (%) [KARAR BEKLİYOR]
+
+    # Leicester Risk Assessment (scores/lrs.py)
+    "lrs_high_risk_threshold": 16,           # ≥16 yüksek risk (NHS Health Check pratik kılavuzu)
+    "lrs_unknown_ethnicity_as_missing": True,  # "Not recorded" → skor hesaplanmaz [KARAR BEKLİYOR]
+
+    # Recalibration (Kol 2)
+    "recal_split": "temporal",               # "temporal" (index tarihine göre) | "random"
+    "recal_train_frac": 0.7,
+
+    # Alt-gruplar
+    "age_band_edges": [25, 40, 55, 70, 85],  # [25,40) [40,55) [55,70) [70,85)
+    "age_band_labels": ["25–39", "40–54", "55–69", "70–84"],
+
+    # Manuel KPI girdisi
+    "security_incidents": 0,                 # Data Security KPI — enclave olay kaydından manuel
+
     # İstatistik
     "bootstrap_reps": 500,
     "min_events_subgroup": 50,

@@ -100,6 +100,49 @@ SMOKING_TEXT_TO_CAT = {
 }
 
 # --------------------------------------------------------------------------
+# Etnisite eşlemeleri  [KARAR BEKLİYOR — medikal ekip onayı]
+# --------------------------------------------------------------------------
+# QDiabetes 9 kategori: WhiteNA (beyaz veya kayıtsız — kaynak kodda birleşik), Indian, Pakistani,
+# Bangladeshi, OtherAsian, BlackCaribbean, BlackAfrican, Chinese, Other.
+# Emirati / Gulf Arab / Arab → "Other": UK modelinde karşılığı yok (çekirdek gap hedefi).
+NABIDH_TO_QDIABETES = {
+    "indian": "Indian",
+    "pakistani": "Pakistani",
+    "bangladeshi": "Bangladeshi",
+    "other asian": "OtherAsian",
+    "filipino": "OtherAsian",
+    "sri lankan": "OtherAsian",
+    "nepali": "OtherAsian",
+    "chinese": "Chinese",
+    "african": "BlackAfrican",
+    "black african": "BlackAfrican",
+    "black caribbean": "BlackCaribbean",
+    "western": "WhiteNA",
+    "white": "WhiteNA",
+    "european": "WhiteNA",
+    "not recorded": "WhiteNA",     # QDiabetes: "White or not recorded"
+    "unknown": "WhiteNA",
+    "emirati": "Other",
+    "gulf arab (non-emirati)": "Other",
+    "arab (non-gulf)": "Other",
+    "arab": "Other",
+}
+QDIABETES_ETHNICITIES = ["WhiteNA", "Indian", "Pakistani", "Bangladeshi", "OtherAsian",
+                         "BlackCaribbean", "BlackAfrican", "Chinese", "Other"]
+# LRS: beyaz = 0 puan, diğer tüm gruplar = 6 puan
+LRS_WHITE = {"western", "white", "european"}
+ETHNICITY_UNKNOWN = {"not recorded", "unknown", "", "not stated", "na", "n/a"}
+
+
+def map_ethnicity_qdiabetes(raw: pd.Series) -> pd.Series:
+    """NABIDH ham kategori → QDiabetes kategorisi. Eşlenemeyen → 'Other' (raporlanır)."""
+    key = raw.astype("string").str.strip().str.lower()
+    out = key.map(NABIDH_TO_QDIABETES)
+    out = out.where(key.notna(), "WhiteNA")       # tamamen boş = kayıtsız
+    return out.fillna("Other")
+
+
+# --------------------------------------------------------------------------
 # 8 çekirdek değişken (revize MVP) + LRS ek değişkeni
 # --------------------------------------------------------------------------
 CORE_VARIABLES = [
