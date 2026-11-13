@@ -1,0 +1,5 @@
+# Çekirdek (enclave'de offline kurulabilir olmalı). Python >= 3.10.
+numpy>=1.24,<3
+pandas>=2.0,<4
+matplotlib>=3.7
+# Opsiyonel (yoksa kod çalışır): jupyter, ipykernel — notebook arayüzü için

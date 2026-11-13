@@ -1,0 +1,21 @@
+# --- Veri: hiçbir hasta verisi (gerçek veya sentetik) repoya girmez ---
+data/**/raw/
+data/canonical/
+!data/**/.gitkeep
+
+# --- Çalıştırma çıktıları (enclave'de üretilir) ---
+outputs/
+!outputs/.gitkeep
+
+# --- Türetilmiş notebook'lar (.py kaynak) ---
+notebooks/*.ipynb
+.ipynb_checkpoints/
+
+# --- Python / IDE / OS ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
