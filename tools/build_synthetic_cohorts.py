@@ -40,7 +40,9 @@ def main() -> None:
     for name, ids in [("c1", sel["c1_ids"]), ("c2", sel["c2_ids"]), ("c3", list(c3["cohort"].index))]:
         ds = cohorts.subset(full, ids, name)
         d = schema.write_dataset(ds, out_base)
-        run.log(f"{name} written", path=str(d), n_patients=ds.n_patients)
+        for f in sorted(d.glob("*.csv")):
+            run.register_output(f, f"canonical {name} {f.stem}")
+        run.log(f"{name} written", path=str(d.relative_to(out_base.parent.parent)), n_patients=ds.n_patients)
 
     report = {"c1_c2": sel["report"], "c3_funnel": c3["funnel"], "params": PARAMS,
               "note": "SYNTHETIC — NOT REAL PATIENT DATA"}
