@@ -28,7 +28,7 @@
     <option name="RUN_TOOL" value="" />
     <option name="RUN_AS_SCRIPT" value="false" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tools/py2ipynb.py" />
-    <option name="PARAMETERS" value="notebooks/00_data_profile.py" />
+    <option name="PARAMETERS" value="notebooks/00_data_profile.py notebooks/01_c1_c2_feasibility.py notebooks/02_c3_benchmark.py" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

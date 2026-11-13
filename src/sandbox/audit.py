@@ -66,7 +66,7 @@ def _now() -> str:
 
 
 class Run:
-    def __init__(self, name: str, params: dict | None = None):
+    def __init__(self, name: str, params: dict | None = None, source: str | None = None):
         ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")   # UTC: makineden bağımsız sıralama
         self.run_id = f"{ts}_{name}_{uuid.uuid4().hex[:6]}"
         self.name = name
@@ -74,7 +74,7 @@ class Run:
         self.dir.mkdir(parents=True, exist_ok=True)
         AUDIT_DIR.mkdir(parents=True, exist_ok=True)
         self.record = {
-            "run_id": self.run_id, "name": name, "status": "running", "started_utc": _now(),
+            "run_id": self.run_id, "name": name, "source": source, "status": "running", "started_utc": _now(),
             "user": getpass.getuser(), "host": platform.node(), "platform": platform.platform(),
             "versions": _versions(), "code": code_fingerprint(),
             "params": dict(params or PARAMS), "inputs": [], "outputs": [], "events": [],

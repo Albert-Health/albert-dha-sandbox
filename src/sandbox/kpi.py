@@ -33,11 +33,15 @@ KPI_ROWS = [
 ]
 
 
-def latest_run(prefix: str, base: Path = OUTPUT_DIR) -> Path | None:
-    """Adı prefix içeren, başarıyla bitmiş en son run klasörü (manifest started_utc'ye göre)."""
+def latest_run(prefix: str, source: str | None = None, base: Path = OUTPUT_DIR) -> Path | None:
+    """Adı prefix içeren, başarıyla bitmiş en son run klasörü (manifest started_utc'ye göre).
+    source verilirse yalnızca o veri kaynağıyla (synthetic / nabidh / synthetic_pc) çalışmış run'lar."""
     best, best_ts = None, ""
     for m in base.glob(f"*{prefix}*/run_manifest.json"):
         rec = json.loads(m.read_text(encoding="utf-8"))
+        rec_source = rec.get("source") or "synthetic"     # source alanı öncesi run'lar sentetikti
+        if source is not None and rec_source != source:
+            continue
         if rec.get("status") == "success" and rec.get("started_utc", "") > best_ts:
             best, best_ts = m.parent, rec["started_utc"]
     return best

@@ -41,7 +41,7 @@ from sandbox.io import schema
 SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
 pd.set_option("display.width", 160)
 
-run = Run("nb00_data_profile")
+run = Run("nb00_data_profile", source=SOURCE)
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in COHORTS if (CANONICAL_DIR / SOURCE / c).exists()])
 data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in COHORTS
         if (CANONICAL_DIR / SOURCE / c).exists()}

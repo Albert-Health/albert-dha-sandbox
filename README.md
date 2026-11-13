@@ -17,11 +17,18 @@ src/sandbox/
   io/schema.py            kanonik şema, okuma/yazma, doğrulama
   io/adapters/            synthetic.py, nabidh.py (kaynak → kanonik)
   phenotype.py            glisemik ölçümler, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
-  cohorts.py              pozitif havuz (C1/C2), C3 (v2 incident kuralları)
+  cohorts.py              pozitif havuz (C1/C2), C3 (v2 incident kuralları, washout)
+  scores/qdiabetes2018a.py  QDiabetes-2018 Model A (CRAN QDiabetes 1.0-2 katsayıları; referans testli)
+  scores/lrs.py           Leicester Risk Assessment (0–47 puan, ≥16 yüksek risk)
+  metrics.py              KM, Harrell C, IPCW zaman-bağımlı AUROC, O:E, kalibrasyon, eşik metrikleri, bootstrap
+  recalibration.py        Kol 2: cinsiyete göre katmanlı baseline (+eğim) recalibration
+  kpi.py                  KPI tablosu + graduation ön değerlendirmesi
   audit.py                audit trail (run log, kod/veri hash) — KPI: Audit Trail %100
   sdc.py                  küçük hücre bastırma
 notebooks/                .py (percent format) — Jupyter/VS Code'da hücre hücre açılır
-tools/                    build_synthetic_cohorts.py, py2ipynb.py
+tools/                    build_synthetic_cohorts.py, kpi_report.py, build_evidence_package.py,
+                          positive_control.py, py2ipynb.py
+docs/evidence_package/    model card, validasyon, veri kalite, kohort türetme şablonları
 tests/                    unittest (pytest gerekmez)
 outputs/                  <run_id>/... + audit/audit_log.jsonl (git dışı)
 archive/                  önceki prototip notebook ve raporlar
@@ -34,7 +41,30 @@ archive/                  önceki prototip notebook ve raporlar
 | 0 | `00_data_profile.py` | C1, C2, C3 | şema doğrulama, tamlık, istenen-vs-gelen kod eşlemesi · *Data Completeness, Framework Match* |
 | 1 | `01_c1_c2_feasibility.py` | C1, C2 | birlikte tamlık, C1–C2 seçilim etkisi, skor hesaplanabilirliği (kesitsel) |
 | 2 | `02_c3_benchmark.py` | C3 | QDiabetes + LRS: C-index, AUROC, kalibrasyon, eşik metrikleri, recalibration · *klinik/teknik KPI'lar* |
-| 3 | `03_uae_model.py` | C3 | koşullu — yalnızca recalibration yetersizse |
+| 3 | `03_uae_model.py` | C3 | koşullu — yalnızca recalibration yetersizse (henüz yok) |
+| — | `tools/kpi_report.py` | — | KPI tablosu + iki haftalık rapor (`outputs/<run_id>/kpi/kpi_report.md`) |
+| — | `tools/build_evidence_package.py` | — | evidence package klasörü + hash listesi + kontrol listesi |
+| — | `tools/positive_control.py` | C3 | bilinen etnisite etkisi enjekte → NB2 alt-grup O:E yakalıyor mu? |
+
+Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (synthetic / nabidh / synthetic_pc),
+`SANDBOX_PARAMS` (JSON, config override — duyarlılık analizleri), `SANDBOX_BOOTSTRAP_REPS`.
+
+## Karar bekleyen parametreler (`src/sandbox/config.py`)
+
+| Parametre | Varsayılan | Konu |
+|---|---|---|
+| `outcome_washout_days` | 0 | index'e yakın olay = prevalent (öneri 90) |
+| `horizon_years` / `_fallback` | 5 / 3 | birincil horizon |
+| `predictor_lookback_days` | 365 | prediktör penceresi (v2 sürümleri 12 vs 24 ay) |
+| `qd_force_reduced_model` | True | 7 Model A prediktörü = 0 (revize MVP) |
+| `qd_townsend` | 0.0 | UAE'de deprivation proxy yok |
+| `qd_smoking_current_category` | 3 (moderate) | yoğunluksuz "current" sigara |
+| `qd_missing_smoking_as_non` | False | sigara kaydı yoksa non-smoker say |
+| `qd_baseline_time_scaling` | power | 10 y dışı horizon için S0(t)=S0(10)^(t/10) (Kol 1) |
+| `qd_risk_threshold_pct` | None | sens/spec/PPV/alert rate eşiği — None iken KPI'lar "Pending" |
+| `lrs_unknown_ethnicity_as_missing` | True | etnisite kayıtsızsa LRS hesaplanmaz |
+| `codelists.NABIDH_TO_QDIABETES` | Emirati/Gulf/Arab → Other | etnisite eşlemesi |
+| LRS madde puanları | Gray 2010 | birincil makaleden teyit |
 
 ## Kurulum ve çalıştırma
 
@@ -62,6 +92,9 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
    - `0 · Tests (unittest)` — kural testleri
    - `1 · Build synthetic C1-C2-C3` — `data/synthetic/raw` → `data/canonical/synthetic/`
    - `2 · NB0 Data profile` — çıktılar `outputs/<run_id>/nb00/`
+   - `3 · NB1 C1-C2 feasibility`, `4 · NB2 C3 benchmark` (`4b` = washout 90 gün duyarlılığı)
+   - `5 · KPI report`, `6 · Evidence package`
+   - `7 · Positive control`, `7b · NB2 on positive-control data`
    - `9 · Generate .ipynb from notebooks` — `notebooks/00_data_profile.ipynb` üretir; IntelliJ'de Jupyter olarak açılır
      (kernel: `.venv`). Kaynak her zaman `.py` dosyasıdır; `.ipynb` git'e girmez.
 

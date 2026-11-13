@@ -45,7 +45,7 @@ from sandbox.scores import lrs, qdiabetes2018a as qd
 SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
 P = dict(PARAMS)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))   # duyarlılık çalıştırmaları (audit'e yazılır)
-run = Run("nb01_c1_c2_feasibility", params=P)
+run = Run("nb01_c1_c2_feasibility", params=P, source=SOURCE)
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in ("c1", "c2")])
 data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in ("c1", "c2")}
 run.log("datasets loaded", source=SOURCE, n={c: d.n_patients for c, d in data.items()})

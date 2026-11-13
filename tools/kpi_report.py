@@ -21,9 +21,10 @@ from sandbox.config import OUTPUT_DIR  # noqa: E402
 
 def main() -> None:
     audit = kpi.audit_completeness()          # bu run'dan önce
-    run = Run("kpi_report")
-    runs = {"nb00": kpi.latest_run("nb00_data_profile"), "nb01": kpi.latest_run("nb01_c1_c2_feasibility"),
-            "nb02": kpi.latest_run("nb02_c3_benchmark")}
+    source = os.environ.get("SANDBOX_SOURCE", "synthetic")
+    run = Run("kpi_report", source=source)
+    runs = {"nb00": kpi.latest_run("nb00_data_profile", source), "nb01": kpi.latest_run("nb01_c1_c2_feasibility", source),
+            "nb02": kpi.latest_run("nb02_c3_benchmark", source)}
     ev_dirs = sorted(OUTPUT_DIR.glob("evidence_package_*/checklist.json"))
     evidence = json.loads(ev_dirs[-1].read_text(encoding="utf-8")) if ev_dirs else {}
     for name, d in runs.items():
@@ -34,7 +35,7 @@ def main() -> None:
                       kpi._load(runs["nb02"], "nb02/kpi_values.json"), evidence, audit)
     grad = kpi.graduation(table)
     meta = {"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-            "source": os.environ.get("SANDBOX_SOURCE", "synthetic"),
+            "source": source,
             "runs": {k: (v.name if v else None) for k, v in runs.items()}}
     run.save_table(table, "kpi/kpi_table.csv", "KPI tablosu (Target vs Actual)")
     md = run.path("kpi/kpi_report.md")

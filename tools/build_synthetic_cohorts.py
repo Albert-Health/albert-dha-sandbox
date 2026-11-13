@@ -24,7 +24,7 @@ from sandbox.io.adapters import synthetic  # noqa: E402
 
 
 def main() -> None:
-    run = Run("build_synthetic_cohorts")
+    run = Run("build_synthetic_cohorts", source="synthetic")
     run.add_inputs([RAW_DIR["synthetic"]])
 
     full = synthetic.load(RAW_DIR["synthetic"])
