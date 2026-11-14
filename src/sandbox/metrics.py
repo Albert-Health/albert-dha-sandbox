@@ -216,6 +216,38 @@ def threshold_metrics(time, event, score, threshold: float, horizon: float) -> d
             "n": int(len(t))}
 
 
+def wilson_ci(k: int, n: int, z: float = 1.959964) -> tuple[float, float]:
+    """Binom oranı için Wilson skor aralığı (varsayılan %95). n = 0 → (nan, nan)."""
+    if n <= 0:
+        return float("nan"), float("nan")
+    p = k / n
+    den = 1 + z ** 2 / n
+    centre = (p + z ** 2 / (2 * n)) / den
+    half = z * np.sqrt(p * (1 - p) / n + z ** 2 / (4 * n ** 2)) / den
+    return float(centre - half), float(centre + half)
+
+
+def detection_rate(flag) -> dict:
+    """Yalnızca pozitif vakadan oluşan kohortta (C1/C2) skorun yakalama oranı = duyarlılık.
+
+    flag: hasta başı True (yüksek risk) / False / NA (skor hesaplanamadı).
+    sens_computable: yakalanan / skoru hesaplanabilen (+ Wilson %95 GA).
+    sens_all: yakalanan / tüm hastalar — hesaplanamayan "yakalanmadı" sayılır (tarama pratiği).
+      Hiç hesaplanabilen yoksa (ör. bel çevresi teslim edilmediği için LRS) nan: "%0 duyarlılık"
+      okunmasın.
+    Negatif vaka olmadığı için özgüllük, PPV, AUROC buradan çıkmaz.
+    """
+    f = pd.Series(flag, dtype="boolean")
+    n = int(len(f))
+    n_comp = int(f.notna().sum())
+    k = int(f.fillna(False).sum())
+    lo, hi = wilson_ci(k, n_comp)
+    return {"n": n, "n_computable": n_comp, "n_flagged": k,
+            "sens_computable": k / n_comp if n_comp else float("nan"),
+            "ci_low": lo, "ci_high": hi,
+            "sens_all": k / n if n_comp else float("nan")}
+
+
 # --------------------------------------------------------------------------
 # Bootstrap
 # --------------------------------------------------------------------------

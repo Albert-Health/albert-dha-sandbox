@@ -41,12 +41,14 @@ archive/                  önceki prototip notebook ve raporlar
 |---|---|---|---|
 | — | `tools/ingest_nabidh.py` | C1, C2, C3 | NABIDH ham → kanonik şema, şema kontrolü, kaynak değer dağılımları (eşleme sözlükleri için) |
 | 0 | `00_data_profile.py` | C1, C2, C3 | şema doğrulama, tamlık, istenen-vs-gelen kod eşlemesi · *Data Completeness, Framework Match* |
-| 1 | `01_c1_c2_feasibility.py` | C1, C2 | birlikte tamlık, C1–C2 seçilim etkisi, skor hesaplanabilirliği (kesitsel) |
+| 1 | `01_c1_c2_feasibility.py` | C1, C2 | C1: bilinen pozitiflerde yakalama oranı (duyarlılık; `nb01/c1_detection_rate.csv`) · C2: tamlık · C1–C2 seçilim etkisi, skor hesaplanabilirliği (kesitsel) |
 | 2 | `02_c3_benchmark.py` | C3 | QDiabetes + LRS: C-index, AUROC, kalibrasyon, eşik metrikleri, recalibration · *klinik/teknik KPI'lar* |
-| 3 | `03_uae_model.py` | C3 | koşullu — yalnızca recalibration yetersizse (henüz yok) |
+| 3 | `03_uae_model.py` | yeni NABIDH teslimi | UAE'ye özgü, lab'sız model — koşullu, yalnızca recalibration yetersizse; yürütülürse NABIDH'ten yeni veri istenir (henüz yok) |
 | — | `tools/kpi_report.py` | — | KPI tablosu + iki haftalık rapor (`outputs/<run_id>/kpi/kpi_report.md`) |
 | — | `tools/build_evidence_package.py` | — | evidence package klasörü + hash listesi + kontrol listesi |
 | — | `tools/positive_control.py` | C3 | bilinen etnisite etkisi enjekte → NB2 alt-grup O:E yakalıyor mu? |
+
+Study Flow eşlemesi: 1. basamak = C1, 2. = C2 (ikisi de Adım 1 / NB1), 3. = C3 (Adım 2 / NB2), 4. = UAE modeli (Adım 3).
 
 Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (synthetic / nabidh / synthetic_pc),
 `SANDBOX_PARAMS` (JSON, config override — duyarlılık analizleri), `SANDBOX_BOOTSTRAP_REPS`.
@@ -63,7 +65,7 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 | `qd_smoking_current_category` | 3 (moderate) | yoğunluksuz "current" sigara [karar bekliyor] |
 | `qd_missing_smoking_as_non` | False **[KARAR]** | sigara kaydı yok = bilinmiyor |
 | `qd_baseline_time_scaling` | power | 10 y dışı horizon için S0(t)=S0(10)^(t/10) (Kol 1) [karar bekliyor] |
-| `qd_risk_threshold_pct` | None **[KARAR — şimdilik]** | sens/spec/PPV/alert rate eşiği; KPI'lar "Pending" |
+| `qd_risk_threshold_pct` | None **[KARAR — şimdilik]** | sens/spec/PPV/alert rate eşiği; KPI'lar ve C1 QDiabetes duyarlılığı "Pending" |
 | `lrs_unknown_ethnicity_as_missing` | True | etnisite kayıtsızsa LRS hesaplanmaz |
 | `ethnicity_source` | nationality | **[KARAR: 2026-11-13]** etnik grup uyruktan türetilir |
 | `codelists.NATIONALITY_COUNTRIES` → `NABIDH_TO_QDIABETES` | BAE/Körfez/Arap → Other | uyruk → etnik grup → QDiabetes eşlemesi |
@@ -102,7 +104,7 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
    - `0 · Tests (unittest)` — kural testleri
    - `1 · Build synthetic C1-C2-C3` — `data/synthetic/raw` → `data/canonical/synthetic/`
    - `2 · NB0 Data profile` — çıktılar `outputs/<run_id>/nb00/`
-   - `3 · NB1 C1-C2 feasibility`, `4 · NB2 C3 benchmark` (`4b` = washout 90 gün duyarlılığı)
+   - `3 · NB1 C1-C2 feasibility`, `4 · NB2 C3 benchmark` (`4b` = washout 0 gün (v2), `4c` = lookback 730 gün duyarlılığı)
    - `5 · KPI report`, `6 · Evidence package`
    - `7 · Positive control`, `7b · NB2 on positive-control data`
    - `9 · Generate .ipynb from notebooks` — `notebooks/00_data_profile.ipynb` üretir; IntelliJ'de Jupyter olarak açılır

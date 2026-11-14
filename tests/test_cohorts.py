@@ -103,6 +103,33 @@ class TestPositivePool(unittest.TestCase):
         self.assertIn("P09", sel["c2_ids"])
 
 
+class TestPositiveReference(unittest.TestCase):
+    def test_first_evidence_dates(self):
+        ds = tiny_dataset()
+        pool = cohorts.positive_pool(ds)
+        ref = cohorts.positive_reference_dates(ds, pool, "first_evidence")
+        self.assertEqual(ref["P08"], pd.Timestamp("2020-01-01"))   # E11.9 tanısı
+        self.assertEqual(ref["P09"], pd.Timestamp("2021-01-01"))   # prediyabet HbA1c
+        end = cohorts.positive_reference_dates(ds, pool, "data_end")
+        self.assertTrue((end == cohorts.data_end_date(ds)).all())
+        with self.assertRaises(ValueError):
+            cohorts.positive_reference_dates(ds, pool, "index")
+
+    def test_post_diagnosis_values_excluded(self):
+        # P08: tanı günü BMI 31; tanıdan 2 yıl sonra BMI 40 → ilk kanıt referansında 31, veri sonunda 40
+        ds = tiny_dataset()
+        extra = schema.coerce(pd.DataFrame([("P08", "bmi", "LOINC", "39156-5", "40.0", "kg/m2", "2022-01-01")],
+                                           columns=["patient_id", "concept", "code_system", "code", "value",
+                                                    "unit", "date"]), "observations")
+        ds.tables["observations"] = pd.concat([ds["observations"], extra], ignore_index=True)
+        pool = cohorts.positive_pool(ds)
+        bmi = {how: phenotype.core_snapshot(ds, cohorts.positive_reference_dates(ds, pool, how),
+                                            lookback_days=None).loc["P08", "bmi"]
+               for how in cohorts.POSITIVE_REFERENCES}
+        self.assertAlmostEqual(bmi["first_evidence"], 31.0)
+        self.assertAlmostEqual(bmi["data_end"], 40.0)
+
+
 class TestSchema(unittest.TestCase):
     def test_roundtrip_and_validate(self):
         ds = tiny_dataset()
@@ -129,6 +156,12 @@ class TestSDC(unittest.TestCase):
         df = pd.DataFrame({"n": [0, 3, 10, 250]})
         out = sdc.suppress_small_counts(df, ["n"], threshold=10)
         self.assertEqual(list(out["n"]), [0, "<10", 10, 250])
+
+    def test_suppress_rates(self):
+        # pay küçük (3), tümleyen küçük (100-95=5) → oran bastırılır; 0 pay ve büyük hücreler kalır
+        df = pd.DataFrame({"k": [3, 95, 50, 0], "n": [100, 100, 100, 100], "pct": [3.0, 95.0, 50.0, 0.0]})
+        out = sdc.suppress_rates(df, "k", ["n"], ["pct"], threshold=10)
+        self.assertEqual(list(out["pct"]), ["suppressed (<10)", "suppressed (<10)", 50.0, 0.0])
 
 
 if __name__ == "__main__":

@@ -7,12 +7,12 @@ Bu dosya Claude Code (ve ekip) için projenin çalışma kurallarıdır. Her otu
 QDiabetes-2018 Model A ve Leicester Risk Score'un (LRS) UAE nüfusunda (NABIDH verisi, DHA Secure
 Data Enclave) değerlendirilmesi; gerekirse UAE'ye özgü invaziv olmayan model.
 
-| Adım | Kohort | Ne | Kod |
-|---|---|---|---|
-| 0 | C1, C2, C3 | Veri profili, şema doğrulama, tamlık, istenen-vs-gelen kodlar | `notebooks/00_data_profile.py` |
-| 1 | C1, C2 (yalnız T2DM + prediyabet) | Kesitsel fizibilite: tamlık, C1–C2 seçilim etkisi, skor hesaplanabilirliği. **Ayrım/kalibrasyon YOK** | `notebooks/01_c1_c2_feasibility.py` |
-| 2 | C3 (başlangıçta non-diyabetik) | Incident benchmark: QDiabetes + LRS, Kol 1 (olduğu gibi) vs Kol 2 (recalibration) | `notebooks/02_c3_benchmark.py` |
-| 3 | C3 | UAE modeli — **koşullu**, yalnızca önceden tanımlı performans eşiği tetiklerse | (yok) |
+| Adım | Study Flow | Kohort | Ne | Kod |
+|---|---|---|---|---|
+| 0 | — | C1, C2, C3 | Veri profili, şema doğrulama, tamlık, istenen-vs-gelen kodlar | `notebooks/00_data_profile.py` |
+| 1 | 1. ve 2. basamak | C1, C2 (yalnız T2DM + prediyabet) | **C1 birincil amaç:** bilinen pozitiflerde skorların yakalama oranı (duyarlılık). **C2:** tamlık. Ayrıca C1–C2 seçilim etkisi, skor hesaplanabilirliği. Negatif vaka yok → **yalnız duyarlılık; özgüllük/ayrım/kalibrasyon YOK** | `notebooks/01_c1_c2_feasibility.py` |
+| 2 | 3. basamak | C3 (başlangıçta non-diyabetik) | Incident benchmark: QDiabetes + LRS, Kol 1 (olduğu gibi) vs Kol 2 (recalibration) | `notebooks/02_c3_benchmark.py` |
+| 3 | 4. basamak | yeni NABIDH teslimi | UAE'ye özgü model (lab'sız) — **koşullu**, yalnızca önceden tanımlı performans eşiği tetiklerse; yürütülürse NABIDH'ten yeni veri istenir | (yok) |
 
 Kaynak spesifikasyonlar (Claude Project "Sandbox Experiment" içinde): MVP Dataset v1.0, Interim Data
 Assessment (C1/C2), Non-Diabetic Cohort Data Specification v2 (C3), Study Flow Overview,
@@ -52,7 +52,7 @@ src/sandbox/
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
   scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py
-  metrics.py           C-index, zaman-bağımlı AUROC (IPCW), KM, kalibrasyon, eşik metrikleri, bootstrap
+  metrics.py           C-index, zaman-bağımlı AUROC (IPCW), KM, kalibrasyon, eşik metrikleri, C1 yakalama oranı (Wilson), bootstrap
   recalibration.py     Kol 2: baseline survival yeniden tahmini (cinsiyete göre)
   kpi.py               KPI Framework satırları + actual/met + markdown rapor
   audit.py, sdc.py

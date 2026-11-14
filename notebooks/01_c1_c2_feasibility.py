@@ -9,15 +9,20 @@
 #
 # **Kapsam:** Adım 1 — pozitif kohortlar (T2DM + prediyabet). Veri yapısı ve tamlık kontrolü.
 #
-# > **Bu kohortlarda ayrım gücü (C-index, AUROC) ve kalibrasyon HESAPLANMAZ** — tüm hastalar
-# > pozitif vakadır, negatif vaka yoktur. Skorlar yalnızca *hesaplanabilirlik* ve dağılım için
-# > raporlanır.
+# Study Flow 1. ve 2. basamak. **C1'in birincil amacı:** diyabetli / prediyabetli olduğu bilinen
+# hastaları QDiabetes ve LRS'in ne oranda "yüksek risk" diye yakaladığı (duyarlılık). **C2:** kayıt
+# tamlığı şartı olmadan değişkenlerin NABIDH'te ne kadar dolu olduğu (completeness).
+#
+# > Tüm hastalar pozitif vakadır, negatif vaka yoktur → yalnızca **duyarlılık** hesaplanır.
+# > Özgüllük, PPV, ayrım gücü (C-index, AUROC) ve kalibrasyon burada HESAPLANMAZ (C3 / NB2).
 #
 # - 8 çekirdek değişkenin tekil ve birlikte tamlığı (T2DM vs prediyabet)
 # - C1 (tam kayıt) vs C2 (rastgele) seçilim etkisi: standardize ortalama farkı (SMD)
 # - QDiabetes-2018 A ve LRS hesaplanabilirlik oranı, eksiklik nedenleri, skor dağılımları
+# - C1 (ve karşılaştırma için C2) yakalama oranı (duyarlılık) — §4
 #
-# Referans tarih: veri sonu ("as currently recorded"), tüm geçmiş.
+# Referans tarih: tamlık ve seçilim etkisi için veri sonu ("as currently recorded"), tüm geçmiş.
+# Duyarlılık iki referansla yan yana raporlanır (veri sonu / ilk kanıt günü) [KARAR BEKLİYOR — D22].
 
 # %%
 import json
@@ -36,7 +41,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from sandbox import codelists, cohorts, phenotype, sdc
+from sandbox import codelists, cohorts, metrics, phenotype, sdc
 from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
@@ -185,7 +190,62 @@ run.save_table(dist, "nb01/score_summary.csv", "Skor özetleri (betimleyici)")
 print(dist.to_string(index=False))
 
 # %% [markdown]
-# ## 4. Etnik grup eşlemesi kontrolü (uyruk / etnisite → grup → QDiabetes)
+# ## 4. C1 — bilinen pozitiflerde yakalama oranı (duyarlılık)
+# Study Flow 1. basamağın birincil sorusu: diyabetli / prediyabetli olduğu bilinen hastaların yüzde
+# kaçını skor "yüksek risk" buluyor? C2 karşılaştırma için (tamlık şartı olmayan pozitif örneklem).
+# - LRS: puan ≥ `lrs_high_risk_threshold`. QDiabetes: `horizon_years` riski ≥ `qd_risk_threshold_pct`
+#   (NB2 ile aynı eşik; D5: şimdilik eşik yok → "Pending").
+# - Referans tarihi [KARAR BEKLİYOR — D22]: `data_end` (veri sonu; tamlıkla aynı) ve `first_evidence`
+#   (statüyü belirleyen ilk kanıt günü, o gün dahil; tanı sonrası kayıtlar girmez).
+# - `sens_computable`: yakalanan / skoru hesaplanabilen (Wilson %95 GA). `sens_all`: yakalanan / tüm
+#   hastalar (hesaplanamayan = yakalanmadı).
+# - Kısıt: prevalan vakalar (prospektif değil); C1 tam kayıtlı hastalardır (seçilim etkisi §2).
+
+# %%
+h = P["horizon_years"]
+qd_col = f"qd_risk_{h:g}y"
+qd_thr = None if P["qd_risk_threshold_pct"] is None else P["qd_risk_threshold_pct"] / 100
+thr_text = {"lrs": f"score >= {P['lrs_high_risk_threshold']}",
+            "qdiabetes": "Pending (D5: no threshold)" if qd_thr is None
+            else f"{h:g}y risk >= {P['qd_risk_threshold_pct']}%"}
+rate_cols = ["sens_computable", "ci_low", "ci_high", "sens_all"]
+
+det_rows = []
+for c, d in data.items():
+    pool = cohorts.positive_pool(d)
+    for how in cohorts.POSITIVE_REFERENCES:
+        ref = cohorts.positive_reference_dates(d, pool, how)
+        s = phenotype.core_snapshot(d, ref, lookback_days=None, p=P).join(pool[["status"]])
+        s = s.join(qd.score(s, years=h, p=P)[["qd_computable", qd_col]])
+        s = s.join(lrs.score(s, p=P)[["lrs_computable", "lrs_score"]])
+        flags = {"lrs": (s["lrs_score"] >= P["lrs_high_risk_threshold"]).astype("boolean")
+                        .mask(~s["lrs_computable"].astype(bool)),
+                 "qdiabetes": None if qd_thr is None else (s[qd_col] >= qd_thr).astype("boolean")
+                              .mask(~s["qd_computable"].astype(bool))}
+        groups = [("all", s.index)] + [(g, s.index[s["status"] == g]) for g in ("T2DM", "Prediabetes")]
+        for grp, idx in groups:
+            for score_name, f in flags.items():
+                row = {"cohort": c, "reference": how, "group": grp, "score": score_name,
+                       "threshold": thr_text[score_name]}
+                if f is None:
+                    comp_col = "qd_computable" if score_name == "qdiabetes" else "lrs_computable"
+                    row.update({"n": len(idx), "n_computable": int(s.loc[idx, comp_col].sum())})
+                else:
+                    r = metrics.detection_rate(f.reindex(idx))
+                    row.update({k: round(100 * v, 1) if k in rate_cols else v for k, v in r.items()})
+                det_rows.append(row)
+    run.log(f"{c} detection rate", references=list(cohorts.POSITIVE_REFERENCES))
+detection = pd.DataFrame(det_rows, columns=["cohort", "reference", "group", "score", "threshold", "n",
+                                            "n_computable", "n_flagged", *rate_cols])
+detection["n_flagged"] = detection["n_flagged"].astype("Int64")   # QDiabetes "Pending" satırlarında NA
+det_out =sdc.suppress_rates(detection, "n_flagged", ["n_computable", "n"], rate_cols)
+det_out = sdc.suppress_small_counts(det_out, ["n", "n_computable", "n_flagged"])
+run.save_table(det_out, "nb01/c1_detection_rate.csv",
+               "Bilinen pozitiflerde yakalama oranı (duyarlılık) — LRS / QDiabetes, iki referans tarihi")
+print(detection.to_string(index=False))
+
+# %% [markdown]
+# ## 5. Etnik grup eşlemesi kontrolü (uyruk / etnisite → grup → QDiabetes)
 # Kaynak: `PARAMS["ethnicity_source"]`. "Other (unmapped nationality)" satırları eşleme tablosuna
 # (codelists.NATIONALITY_COUNTRIES) eklenecek adaylardır [karar bekliyor — D6].
 
@@ -208,6 +268,10 @@ kpi_values = {
     "lrs_computable_pct": {r["cohort"]: r["lrs_computable_pct"] for _, r in computability[computability["group"] == "all"].iterrows()},
     "selection_effect_max_abs_smd": float(sel["smd"].abs().max()),
     "selection_effect_imbalanced_vars": sel.loc[sel["imbalance"], "variable"].tolist(),
+    # C1 birincil amaç: yakalama oranı (% skoru hesaplanabilenlerde); None = eşik yok / hesaplanamadı
+    "c1_detection_pct": {f"{r['reference']}|{r['score']}": None if pd.isna(r["sens_computable"])
+                         else float(r["sens_computable"])
+                         for _, r in detection[(detection["cohort"] == "c1") & (detection["group"] == "all")].iterrows()},
 }
 run.save_json(kpi_values, "nb01/kpi_values.json", "NB1 KPI girdileri")
 manifest = run.finish()

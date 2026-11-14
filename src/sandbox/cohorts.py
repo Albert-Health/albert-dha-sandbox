@@ -46,6 +46,24 @@ def positive_pool(ds: Dataset, ev: pd.DataFrame | None = None) -> pd.DataFrame:
     return out
 
 
+POSITIVE_REFERENCES = ("data_end", "first_evidence")
+
+
+def positive_reference_dates(ds: Dataset, pool: pd.DataFrame, how: str) -> pd.Series:
+    """C1/C2 snapshot'ı için hasta başı referans tarihi.
+
+    "data_end": veri sonu — C1 tanımı ("as currently recorded"); tamlık ve seçilim etkisi bununla.
+    "first_evidence": statüyü belirleyen ilk kanıt tarihi (T2DM → ilk T2DM, prediyabet → ilk
+      prediyabet kanıtı), o gün dahil. "Skor bu hastayı tanı anında yakalar mıydı" sorusu için;
+      tanı sonrası kayıtlar (ör. tedavi sonrası BMI) girmez.
+    """
+    if how == "data_end":
+        return pd.Series(data_end_date(ds), index=pool.index)
+    if how == "first_evidence":
+        return pool["first_t2dm_date"].where(pool["status"] == "T2DM", pool["first_prediabetes_date"])
+    raise ValueError(f"bilinmeyen referans: {how!r} (seçenekler: {POSITIVE_REFERENCES})")
+
+
 def build_c1_c2(ds: Dataset, p: dict = PARAMS) -> dict:
     """Pozitif havuzdan C1 (8 değişken tam, cap) ve C2 (rastgele, cap) seçer.
 

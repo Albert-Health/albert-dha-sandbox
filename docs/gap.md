@@ -1,6 +1,6 @@
 # Açık işler, kararlar ve bilinen kısıtlar
 
-Son güncelleme: 2026-11-13. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
+Son güncelleme: 2026-11-14. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
 danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** raporlanacak bilinen sınırlama.
 
 ## 1. Kod — kalan işler
@@ -12,7 +12,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | K4 | Offline kurulum paketi (wheel'ler) | [AÇIK] + [DIŞ] | VM OS / Python sürümü bilinmiyor |
 | K5 | LRS madde puanlarının Gray et al. 2010 birincil tablosuyla doğrulanması | [AÇIK] | Kategoriler NHS Health Check belgesiyle doğrulandı |
 | K6 | Evidence package şablonlarının doldurulması (`docs/evidence_package/filled/`) | [AÇIK] + [KARAR BEKLİYOR] | Doldurulana kadar KPI "Not Met" → graduation ön değerlendirmesi "Do Not Graduate" |
-| K7 | Adım 3 / UAE modeli (`notebooks/03_uae_model.py`) | Koşullu | Keşif–sınama ayrımı, tanı-öncesi tampon, girdi çiti (app'te sorulabilir, lab yok) |
+| K7 | Adım 3 / UAE modeli (`notebooks/03_uae_model.py`) = Study Flow 4. basamak | Koşullu | Yürütülürse NABIDH'ten yeni veri teslimi istenir. Keşif–sınama ayrımı, tanı-öncesi tampon, girdi çiti (app'te sorulabilir, lab yok); tüm popülasyona uygulanabilir olmalı |
 | K8 | Sentetik veri üreticisi repoda yok | [KISIT] | 100k sentetik veri ekip içinde ayrı paylaşılıyor |
 
 ## 2. Medikal ekipten kararlar (config parametresiyle)
@@ -22,7 +22,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D2 | Birincil horizon 5 y mı 3 y mı | `horizon_years`, `horizon_years_fallback` | **3 / 5 [KARAR — şimdilik]** | Ayrıntılı bakılacak. Sentetikte takip medyanı 2,35 y; ≥5 y %20 |
 | D3 | Prediktör penceresi (index öncesi; index sonrası ± gün) | `predictor_lookback_days` | **365 [KARAR]**; 730 duyarlılık | v2 iki sürüm: 12 vs 24 ay. Sentetikte index'te BMI %37, sigara %21 |
 | D4 | Eksik veri yaklaşımı | (K2 ile eklenecek) | complete-case | Parametre türüne göre değişecek [KARAR — ayrıntı açık] |
-| D5 | QDiabetes risk eşiği (sens/spec/PPV/alert rate) | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | İlgili KPI'lar "Pending" |
+| D5 | QDiabetes risk eşiği (sens/spec/PPV/alert rate) | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | İlgili KPI'lar "Pending". C1'in birincil sorusu (QDiabetes duyarlılığı, NB1 §4) da eşik seçilene kadar "Pending" |
 | D6 | Etnisite eşlemesi NABIDH → QDiabetes 9 kategori / LRS | `codelists` eşleme tabloları | Emirati, Gulf Arab, Arab → "Other" | Sentetikte "Other" eşlemesi tek başına ~2× düşük tahmin üretiyor |
 | D7 | Yoğunluksuz "current" sigara kategorisi | `qd_smoking_current_category` | 3 (moderate) | Midwakh / shisha nasıl ele alınacak |
 | D8 | Sigara kaydı yok = non-smoker mı | `qd_missing_smoking_as_non` | **False [KARAR]** | Kayıt yok = bilinmiyor |
@@ -39,9 +39,10 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D19 | Adım 3'ü tetikleyecek "yeterli performans" | (eklenecek) | — | Veriye bakmadan önce yazılmalı |
 | D20 | Fairness alt grupları ve kabul edilebilir fark | (eklenecek) | cinsiyet, yaş bandı, etnisite | — |
 | D21 | Kod listelerinin klinik onayı; model card klinik bölümleri | — | — | Evidence package (Critical KPI) için şart |
+| D22 | C1/C2 duyarlılığında referans tarihi: veri sonu mu, statüyü belirleyen ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; birincil seçilmeli | Veri sonu: tanı sonrası kayıtlar (tedavi sonrası BMI, ilaç) skora girer, yaş veri sonuna göre. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun ama o gün kayıtlar daha seyrek → hesaplanabilirlik düşer |
 
 ## 3. Dış taraflar
-**DHA / NABIDH [DIŞ]:** veri sözlüğü ve dosya formatı; etnisite/uyruk kategori listesi; birimler;
+**DHA / NABIDH [DIŞ]:** C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec'e göre evet; NB2'nin duyarlılık / AUROC / kalibrasyonu buna dayanır — yalnız "gelişmeyenler" teslim edildiyse C3'ten yalnız özgüllük çıkar); veri sözlüğü ve dosya formatı; etnisite/uyruk kategori listesi; birimler;
 C3'te cap/örneklem neden uygulandı ve tam eligible N; VM ortamı (OS, Python, pip, Jupyter);
 enclave'den çıktı çıkarma kuralları (küçük hücre eşiği, figür onayı).
 
@@ -76,14 +77,15 @@ Layer 2 koşullu).
 | 2026-11-13 | D10: Townsend kapsam dışı → 0 | ensargunesdogdu | `qd_townsend = 0.0` |
 | 2026-11-13 | D16: gebelik verisi yok → dışlama kuralı gerekmiyor | ensargunesdogdu | — |
 | 2026-11-13 | D18: KVH tanımı NABIDH Data availability listesindeki gibi (I20–I25, I50, I6x, G45) | ensargunesdogdu | `codelists.DX["cvd"]` (zaten aynı) |
-
+| 2026-11-14 | Çalışma çerçevesi (anlatım kaydı): Study Flow 1 = C1, birincil amaç bilinen pozitiflerde QDiabetes / LRS'in "yüksek risk" deme oranı (duyarlılık) · 2 = C2, tamlık şartı olmadan değişkenlerin NABIDH'te varlığı · 3 = C3, diyabet gelişmeyenlerde "diyabet değil" deme kapasitesi + parametre ayarıyla (recalibration) iyileştirme · 4 = UAE'ye özgü, lab'sız model; sonuçlar kötüyse NABIDH'ten yeni veri teslimiyle | ensargunesdogdu | NB1 §4 `nb01/c1_detection_rate.csv` (`metrics.detection_rate`); D22 |
+``
 D1 - 90 Gün
 D2 - 3 Yıl şimdilik ama bu konuya detaylı bir bakmak gerekiyor.
 D3 - Bizim için bir yıl öncelikli, iki yıl ek olarak kontrol edeceğimiz bir mekanizma olabilir.
 D4 - Her parametrenin türüne göre değişecek.
 D5 - default neyse odur şu an için
 D6 - Nationality kullanacağız.
-D7 - Sigara statüsü olmayan bilinmiyor olarak işaretlenecek. C2 ve C3 için C1 de hepsinde mevcut.
+D7 - Sigara statüsü olmayan bil``inmiyor olarak işaretlenecek. C2 ve C3 için C1 de hepsinde mevcut.
 D8
 D9 - Kapsam Dışı kalacak
 D10- Out of scope

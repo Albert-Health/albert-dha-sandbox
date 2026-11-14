@@ -98,6 +98,35 @@ class TestCalibration(unittest.TestCase):
         self.assertAlmostEqual(m["alert_rate_per_1000"], 400)
 
 
+class TestDetectionRate(unittest.TestCase):
+    def test_wilson_hand_example(self):
+        # 8/10: Wilson %95 GA = 0.4902 – 0.9433 (elle: merkez 0.7167, yarı genişlik 0.2266)
+        lo, hi = metrics.wilson_ci(8, 10)
+        self.assertAlmostEqual(lo, 0.4902, places=4)
+        self.assertAlmostEqual(hi, 0.9433, places=4)
+        self.assertTrue(np.isnan(metrics.wilson_ci(0, 0)[0]))
+
+    def test_detection_rate_with_missing(self):
+        # 12 pozitif: 8 yakalandı, 2 yakalanmadı, 2 hesaplanamadı (NA)
+        flag = [True] * 8 + [False] * 2 + [None] * 2
+        r = metrics.detection_rate(flag)
+        self.assertEqual((r["n"], r["n_computable"], r["n_flagged"]), (12, 10, 8))
+        self.assertAlmostEqual(r["sens_computable"], 0.8)
+        self.assertAlmostEqual(r["sens_all"], 8 / 12)
+        self.assertAlmostEqual(r["ci_low"], 0.4902, places=4)
+
+    def test_detection_rate_empty(self):
+        r = metrics.detection_rate([])
+        self.assertEqual(r["n"], 0)
+        self.assertTrue(np.isnan(r["sens_computable"]))
+
+    def test_detection_rate_none_computable(self):
+        # ör. LRS, bel çevresi yok: 5 hasta, hiçbiri hesaplanamadı → %0 değil, nan
+        r = metrics.detection_rate([None] * 5)
+        self.assertEqual((r["n"], r["n_computable"], r["n_flagged"]), (5, 0, 0))
+        self.assertTrue(np.isnan(r["sens_all"]))
+
+
 class TestRecalibration(unittest.TestCase):
     def test_baseline_recalibration_fixes_level(self):
         beta, lam, h = 0.8, 0.05, 5.0

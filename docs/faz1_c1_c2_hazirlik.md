@@ -1,6 +1,6 @@
 # Faz 1 — C1 / C2 hazırlık ve çalıştırma planı
 
-Hazırlanma: 2026-11-13 · Hedef: DHA ofisi, enclave'de veri erişimi **Pazartesi 2026-11-16**
+Hazırlanma: 2026-11-13, güncelleme 2026-11-14 · Hedef: DHA ofisi, enclave'de veri erişimi **Pazartesi 2026-11-16**
 
 **Esas liste:** NABIDH'in "Data availability" sayfası (aşağıda §2). Kapsam ve hazırlık kararları bu
 listeye göre verilir; sentetik veri yalnızca kodun uçtan uca çalıştığını göstermek içindir.
@@ -12,16 +12,24 @@ Etiketler: **[ENGEL]** Pazartesiden önce çözülmezse Faz 1 çalışmaz ya da 
 
 | Faz | Kohort | Ne | Kod |
 |---|---|---|---|
-| **Faz 1** | C1, C2 (T2DM + prediyabet) | Veri profili; QDiabetes-2018 A ve LRS'in hesaplanması | NB0, NB1, `kpi_report` (kısmi) |
+| **Faz 1** | C1, C2 (T2DM + prediyabet) | Veri profili · **C1:** QDiabetes-2018 A ve LRS'in bilinen pozitifleri "yüksek risk" deme oranı (duyarlılık) — birincil amaç · **C2:** tamlık | NB0, NB1, `kpi_report` (kısmi) |
 | **Faz 2** | C3 (başlangıçta non-diyabetik) | Incident benchmark: Kol 1 / 2a / 2b, alt gruplar | NB2, `positive_control`, evidence package |
-| Faz 3 | C3 | UAE modeli (koşullu) | — |
+| Faz 3 | yeni NABIDH teslimi | UAE'ye özgü, lab'sız model (koşullu; sonuçlar kötüyse) | — |
+
+Study Flow eşlemesi: 1. basamak = C1, 2. = C2, 3. = C3, 4. = UAE modeli. Kodda adım numaraları farklı:
+Adım 1 (NB1) = 1. + 2. basamak, Adım 2 (NB2) = 3. basamak, Adım 3 = 4. basamak.
 
 **Faz 1 neyi cevaplar, neyi cevaplamaz**
-- Cevaplar: NABIDH verisiyle iki skor hesaplanabiliyor mu, hangi oranda, hangi değişken yüzünden
-  hesaplanamıyor; tam kayıtlı hastalar (C1) rastgele hastalardan (C2) farklı mı; etnisite kategorileri
-  QDiabetes / LRS'e nasıl eşleniyor; skorların betimleyici dağılımı.
-- Cevaplamaz: skorlar UAE'de *doğru* mu. C1/C2'de herkes zaten pozitif vaka → ayrım gücü ve kalibrasyon
-  yok; bu Faz 2'nin (C3) işi.
+- Cevaplar: **C1'de skorlar diyabetli / prediyabetli olduğu bilinen hastaların yüzde kaçını "yüksek
+  risk" buluyor (duyarlılık, NB1 §4)**; NABIDH verisiyle iki skor hesaplanabiliyor mu, hangi oranda,
+  hangi değişken yüzünden hesaplanamıyor; tam kayıtlı hastalar (C1) rastgele hastalardan (C2) farklı mı;
+  etnisite kategorileri QDiabetes / LRS'e nasıl eşleniyor; skorların betimleyici dağılımı.
+- Duyarlılık için iki ön koşul: QDiabetes'te eşik (D5 — şimdilik yok → "Pending"); LRS'te bel çevresi
+  (teslim edilmiyor → hesaplanamaz, K-LRS). Referans tarihi (veri sonu / ilk kanıt günü) yan yana
+  raporlanır, birincil seçilmeli (D22).
+- Cevaplamaz: özgüllük, PPV, ayrım gücü (AUROC) ve kalibrasyon — C1/C2'de negatif vaka yok; bunlar
+  Faz 2'nin (C3) işi. C1 duyarlılığı prevalan vakalarda ölçülür (prospektif değil) ve C1 tam kayıtlı
+  hastalardan oluşur (seçilim etkisi).
 - C2 tamlık için temsilî örneklemdir; C1 seçim gereği tamdır. Tamlık KPI'larının Faz 1 değeri C2'den gelir.
 
 ## 2. Teslim edilecek veri — NABIDH Data availability
@@ -100,7 +108,7 @@ python tools/ingest_nabidh.py --cohorts c1 c2
 #    "unmapped" değer varsa (sigara, aile öyküsü, uyruk, kod|birim) adapter sözlüklerini genişlet, 3'ü tekrarla
 # 4. Veri profili
 SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
-# 5. Fizibilite + QDiabetes + LRS
+# 5. Fizibilite + QDiabetes + LRS + C1 duyarlılık (nb01/c1_detection_rate.csv)
 SANDBOX_SOURCE=nabidh python notebooks/01_c1_c2_feasibility.py
 # 6. KPI özeti (Faz 1'de kısmi)
 SANDBOX_SOURCE=nabidh python tools/kpi_report.py
@@ -120,7 +128,8 @@ SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py      # NB1, NB2
 Sonuç: tüm run'lar `success`, şema ERROR = 0, eşlenemeyen değer yok. C1/C2'de 8 çekirdek değişken
 sentetik veriyle hasta bazında birebir aynı (aile öyküsü Z83.3 olmadan yalnız FamilyHistory'den
 okunduğunda da). QDiabetes hesaplanabilirliği değişmedi (C1 %95,7, C2 %81,8); LRS %0 — teslimde bel
-çevresi olmadığı için beklenen. NB0 Framework Match "Eksik: waist_cm" (A5).
+çevresi olmadığı için beklenen. NB0 Framework Match "Eksik: waist_cm" (A5). NB1 C1 duyarlılık
+tablosu (2026-11-14): LRS satırları boş (hesaplanabilen yok), QDiabetes "Pending (D5)" — beklenen.
 
 ## 5. Kod — Pazartesiden önce
 
@@ -135,6 +144,7 @@ okunduğunda da). QDiabetes hesaplanabilirliği değişmedi (C1 %95,7, C2 %81,8)
 | A7 | LRS alternatifi — K-LRS kararına göre | [KARAR'a bağlı] | — |
 | A8 | NB1'e etnisiteye göre skor dağılımı (Emirati / Gulf Arab / Güney Asya / diğer) | [İYİ OLUR] | Ana hipotezin (Emirati'de düşük tahmin) Faz 1'deki ilk betimleyici sinyali |
 | A9 | ICD kodları kısaltılmış gelirse ("F17.2") sigara tanı eşlemesi | [İYİ OLUR] | Kod listesi tam kod bekliyor (F17210 …); etki küçük (~15 hasta) |
+| A11 | NB1 §4: C1 (ve karşılaştırma için C2) yakalama oranı — LRS ≥ 16, QDiabetes horizon riski ≥ `qd_risk_threshold_pct`; T2DM / prediyabet; Wilson %95 GA; iki referans tarihi; oranlarda küçük hücre bastırma (`sdc.suppress_rates`) | **[YAPILDI 2026-11-14]** | C1'in birincil amacı (anlatım kaydı). QDiabetes D5'e, LRS K-LRS'e bağlı |
 | A10 | NB0 `SANDBOX_PARAMS`'ı okusun; `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın; `claude.md` / `docs/gap.md` adları kurallarla eşleşsin | [İYİ OLUR] | Audit tutarlılığı; Linux VM'de `claude.md` ≠ `CLAUDE.md` |
 
 ## 6. Kararlar — Faz 1'i etkileyenler (kayıt: `docs/gap.md` §5)
@@ -155,8 +165,8 @@ parametrelerle, ön sonuç" olarak etiketlenmeli. Alternatifler duyarlılık ça
 | D12 | LRS'de etnisite kayıtsız → hesaplanmaz | `lrs_unknown_ethnicity_as_missing` | True | K-LRS'e bağlı |
 | K5 | LRS madde puanlarının birincil makaleden teyidi | `scores/lrs.py` | — | K-LRS'e bağlı |
 | Yeni-1 | Yalnızca Z68 bandından gelen BMI skor girdisi sayılsın mı | (eklenecek) | Skorda kullanılıyor, tamlıkta "eksik" | Boy/kilo kapsamı yüksek → etkisi küçük olmalı |
-| Yeni-2 | C1/C2 referans tarihi: veri sonu ("as currently recorded") mı, ilk tanı tarihi mi | (eklenecek) | veri sonu | Tanı sonrası kilo / tansiyon / ilaç değişimleri skorlara girer; yaş veri sonuna göre hesaplanır |
-| D5 | QDiabetes risk eşiği | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | Eşik KPI'ları "Pending" |
+| D22 | C1/C2 duyarlılığında referans tarihi: veri sonu ("as currently recorded") mı, ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; tamlık ve SMD veri sonuyla | Veri sonu: tanı sonrası kilo / tansiyon / ilaç değişimleri skora girer. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun; o gün kayıtlar seyrek → hesaplanabilirlik düşer (sentetikte C1 QDiabetes %96 → %54) |
+| D5 | QDiabetes risk eşiği | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | Eşik KPI'ları "Pending"; **C1'in birincil sorusu (QDiabetes duyarlılığı) da eşik seçilene kadar "Pending"** |
 
 Faz 2 kararları: D1 washout **90 gün [KARAR]** · D2 horizon **3 yıl birincil, 5 yıl ikincil [KARAR — şimdilik]**
 · D3 lookback **1 yıl, 2 yıl duyarlılık [KARAR]** · D16 **gerekmiyor [KARAR]**. Açık: D11 (3 yıl birincil
@@ -182,6 +192,10 @@ Data availability listesiyle cevaplananlar: teslim olay düzeyinde ve kaynak tip
 - [ ] C2 toplam N (2.600 mü), örnekleme yöntemi; C1 achievable N (cap öncesi); C1–C2 örtüşmesi
 - [ ] Veri çekim tarihi (referans tarih için)
 
+**C3 (Faz 2 — aynı ziyarette teyit)**
+- [ ] C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec: evet). Yalnız "gelişmeyenler"
+      teslim edildiyse C3'ten yalnız özgüllük çıkar; NB2'nin AUROC / kalibrasyon tasarımı değişir
+
 **Ortam**
 - [ ] VM işletim sistemi, Python sürümü (≥ 3.10 gerekli), pip / conda, Jupyter, git
 - [ ] Kod ve wheel'ler içeri nasıl giriyor (yükleme yolu, onay süreci); disk / RAM
@@ -205,6 +219,8 @@ Data availability listesiyle cevaplananlar: teslim olay düzeyinde ve kaynak tip
 - [ ] NB0 ve NB1 run'ları `status: success`, şema ERROR = 0, audit %100
 - [ ] C1 ve C2: 8 çekirdek değişkenin tamlığı, QDiabetes hesaplanabilirlik %, eksiklik nedenleri
 - [ ] LRS: K-LRS kararına göre ya hesaplanmış skor ya da gerekçeli "hesaplanamaz" satırı
+- [ ] C1 yakalama oranı (`nb01/c1_detection_rate.csv`): QDiabetes (D5 eşiğiyle ya da "Pending"), LRS
+      (K-LRS); T2DM / prediyabet; D22 referans tarihi seçimi
 - [ ] C1–C2 SMD tablosu (seçilim etkisi)
 - [ ] Uyruk → etnik grup eşleme tablosu (NB1 `ethnicity_mapping.csv`) → medikal ekibe (D6)
 - [ ] Ingest değer raporu (`ingest/<kohort>_value_counts.csv`) ve NB0 `unmapped_codes.csv` → eşleme
