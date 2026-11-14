@@ -51,7 +51,9 @@ src/sandbox/
                        FamilyHistory, Medication, Encounter → kanonik)
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
-  scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py
+  scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py (Leicester varyant
+                       seçici `lrs_variant` + LRA 2010), lprs.py (Leicester Practice Risk Score 2012,
+                       bel çevresiz — varsayılan, K-LRS)
   metrics.py           C-index, zaman-bağımlı AUROC (IPCW), KM, kalibrasyon, eşik metrikleri, C1 yakalama oranı (Wilson), bootstrap
   recalibration.py     Kol 2: baseline survival yeniden tahmini (cinsiyete göre)
   kpi.py               KPI Framework satırları + actual/met + markdown rapor

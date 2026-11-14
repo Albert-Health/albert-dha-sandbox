@@ -90,9 +90,19 @@ PARAMS = {
     # varsayılan (None) → eşik KPI'ları "Pending".
     "qd_risk_threshold_pct": None,
 
-    # Leicester Risk Assessment (scores/lrs.py)
-    "lrs_high_risk_threshold": 16,           # ≥16 yüksek risk (NHS Health Check pratik kılavuzu)
-    "lrs_unknown_ethnicity_as_missing": True,  # "Not recorded" → skor hesaplanmaz [KARAR BEKLİYOR]
+    # Leicester skoru (scores/lrs.py → varyant seçici). NABIDH teslim listesinde bel çevresi yok →
+    # LRA 2010 hesaplanamaz (K-LRS).
+    # [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat] K-LRS: seçenek (b) — bel çevresi
+    # istemeyen Leicester Practice Risk Score (Gray et al., Diabetologia 2012;55:959–966) kullanılır
+    # (Slack #sandboxteam, 2026-11-13). LRA 2010 karşılaştırma için kalır:
+    # SANDBOX_PARAMS='{"lrs_variant": "assessment_2010"}'.
+    "lrs_variant": "practice_2012",          # "practice_2012" (LPRS, bel yok) | "assessment_2010" (LRA, bel zorunlu)
+    # LPRS doğrusal öngörücüdür (sabit terimsiz, mutlak risk değil); yayımlanmış mutlak eşik yok —
+    # yazarlar sıralama kullandı (pratik başına en yüksek %10 / hedef duyarlılık). Eşik değeri
+    # (skor ≥ x → yüksek risk) seçilene kadar None → C1 yakalama oranı ve eşik metrikleri "Pending".
+    "lprs_high_risk_threshold": None,        # [KARAR BEKLİYOR] D23
+    "lrs_high_risk_threshold": 16,           # yalnız assessment_2010: ≥16 yüksek risk (NHS Health Check)
+    "lrs_unknown_ethnicity_as_missing": True,  # her iki varyant: "Not recorded" → skor hesaplanmaz [KARAR BEKLİYOR] D12
 
     # Recalibration (Kol 2)
     "recal_split": "temporal",               # "temporal" (index tarihine göre) | "random"

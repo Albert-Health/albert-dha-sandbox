@@ -15,6 +15,8 @@ import pandas as pd  # noqa: E402
 
 from fixtures import tiny_dataset  # noqa: E402
 from sandbox import cohorts, phenotype, sdc  # noqa: E402
+from sandbox.config import PARAMS  # noqa: E402
+from sandbox.scores import lrs  # noqa: E402
 from sandbox.io import schema  # noqa: E402
 
 
@@ -101,6 +103,25 @@ class TestPositivePool(unittest.TestCase):
         self.assertIn("P08", sel["c1_ids"])          # 8 değişken tam
         self.assertNotIn("P09", sel["c1_ids"])       # sigara yok
         self.assertIn("P09", sel["c2_ids"])
+
+
+class TestLeicesterCompleteness(unittest.TestCase):
+    def test_ok_lrs_waist_only_for_2010(self):
+        # P08: 8 değişken tam, bel çevresi kaydı yok (NABIDH teslimi gibi) → LPRS (varsayılan) için tam,
+        # LRA 2010 için eksik (K-LRS)
+        ds = tiny_dataset()
+        pool = cohorts.positive_pool(ds)
+        ref = pd.Series(cohorts.data_end_date(ds), index=pool.index)
+        s12 = phenotype.core_snapshot(ds, ref, lookback_days=None)
+        s10 = phenotype.core_snapshot(ds, ref, lookback_days=None, p=dict(PARAMS, lrs_variant="assessment_2010"))
+        self.assertTrue(pd.isna(s12.loc["P08", "waist_cm"]))
+        self.assertTrue(s12.loc["P08", "ok_lrs"])
+        self.assertFalse(s10.loc["P08", "ok_lrs"])
+        l12 = lrs.score(s12)
+        self.assertTrue(l12.loc["P08", "lrs_computable"])
+        self.assertTrue(s12.loc["P08", "htn_med"])          # enalapril → LPRS antihipertansif katkısı
+        self.assertAlmostEqual(l12.loc["P08", "lrs_htn"], 0.5498978, places=7)
+        self.assertFalse(lrs.score(s10, p=dict(PARAMS, lrs_variant="assessment_2010")).loc["P08", "lrs_computable"])
 
 
 class TestPositiveReference(unittest.TestCase):

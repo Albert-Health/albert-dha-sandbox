@@ -103,26 +103,29 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
         set_("Joint Completeness - QDiabetes",
              f"{nb2['joint_completeness_qdiabetes_pct']}% (N={nb2['joint_completeness_qdiabetes_n']}/{nb2['c3_eligible_n']})",
              "Reported", "NB2 (C3 tabanı)", f"Tanım: 8 çekirdek değişken ({nb2.get('qd_variant')}) [DFF ile teyit bekliyor]")
+        lname = nb2.get("lrs_label", "LRS")
         set_("Joint Completeness - LRS",
              f"{nb2['joint_completeness_lrs_pct']}% (N={nb2['joint_completeness_lrs_n']}/{nb2['c3_eligible_n']})",
-             "Reported", "NB2 (C3 tabanı)")
+             "Reported", "NB2 (C3 tabanı)",
+             f"Varyant: {lname} [K-LRS]" + ("" if nb2.get("lrs_variant") == "assessment_2010" else " — bel çevresi gerekmez"))
         auc, ci = nb2.get("auroc_qd"), nb2.get("auroc_qd_ci")
         if auc is not None:
             set_("AUROC", f"{auc:.3f}" + (f" (95% CI {ci[0]:.3f}–{ci[1]:.3f})" if ci else ""), "Met" if auc >= 0.75 else "Not Met",
-                 "NB2 Kol 1, test", f"Zaman-bağımlı AUROC @ {nb2['horizon_years']}y (IPCW). LRS: {_fmt(nb2.get('auroc_lrs'))}")
+                 "NB2 Kol 1, test", f"Zaman-bağımlı AUROC @ {nb2['horizon_years']}y (IPCW). {lname}: {_fmt(nb2.get('auroc_lrs'))}")
         c, cci = nb2.get("c_index_qd"), nb2.get("c_index_qd_ci")
         if c is not None:
             set_("C-Index", f"{c:.3f}" + (f" (95% CI {cci[0]:.3f}–{cci[1]:.3f})" if cci else ""),
-                 "Met" if 0.55 <= c <= 0.90 else "Not Met", "NB2 Kol 1, test", f"LRS: {_fmt(nb2.get('c_index_lrs'))}")
+                 "Met" if 0.55 <= c <= 0.90 else "Not Met", "NB2 Kol 1, test", f"{lname}: {_fmt(nb2.get('c_index_lrs'))}")
         set_("Recalibration Slope / O:E",
              f"Kol 1 O:E {_fmt(nb2.get('oe_qd_kol1'))}, slope {_fmt(nb2.get('cal_slope_qd_kol1'))}; "
              f"Kol 2a O:E {_fmt(nb2.get('oe_qd_kol2a'))}, slope {_fmt(nb2.get('cal_slope_qd_kol2a'))}",
              "Reported", "NB2")
         thr = nb2.get("qd_threshold", {})
         lthr = nb2.get("lrs_threshold", {})
-        lrs_note = (f"LRS ≥{_fmt(lthr.get('threshold'))}: sens {_fmt(lthr.get('sensitivity'))}, "
+        lrs_note = (f"{lname} ≥{_fmt(lthr.get('threshold'))}: sens {_fmt(lthr.get('sensitivity'))}, "
                     f"spec {_fmt(lthr.get('specificity'))}, PPV {_fmt(lthr.get('ppv'))}, NPV {_fmt(lthr.get('npv'))}, "
-                    f"alert/1000 {_fmt(lthr.get('alert_rate_per_1000'), 1)}") if lthr.get("threshold") is not None else ""
+                    f"alert/1000 {_fmt(lthr.get('alert_rate_per_1000'), 1)}") if lthr.get("threshold") is not None \
+            else f"{lname}: eşik seçilmedi [karar bekliyor]"
         if "sensitivity" in thr:
             set_("Sensitivity (Recall, positive class)", f"{thr['sensitivity']:.3f}", "Met" if thr["sensitivity"] >= 0.70 else "Not Met", "NB2", lrs_note)
             set_("Specificity", f"{thr['specificity']:.3f}", "Met" if thr["specificity"] >= 0.70 else "Not Met", "NB2", lrs_note)

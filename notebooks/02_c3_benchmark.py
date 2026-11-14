@@ -19,9 +19,12 @@
 # - Recalibration parametreleri eğitim parçasında (temporal split) kestirilir, tüm kollar test
 #   parçasında karşılaştırılır.
 #
-# > **LRS notu:** LRS, mevcut (tanı konmamış) IGR/T2D tespiti için geliştirilmiş kesitsel bir
-# > skordur. Burada incident diyabet için değerlendirilmesi *dış kullanım (off-label)* olarak
-# > raporlanır; mutlak risk vermediği için O:E/kalibrasyon hesaplanmaz.
+# > **Leicester notu:** Varyant `PARAMS["lrs_variant"]` — varsayılan LPRS (Gray 2012, bel çevresi
+# > yok; [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat — K-LRS]), LRA 2010 duyarlılık için.
+# > İkisi de mevcut (tanı konmamış) IGR/T2D tespiti için geliştirilmiş kesitsel skorlardır. Burada
+# > incident diyabet için değerlendirilmesi *dış kullanım (off-label)* olarak raporlanır; mutlak risk
+# > vermedikleri için (LPRS sabit terimsiz doğrusal öngörücü, LRA puan) O:E/kalibrasyon hesaplanmaz.
+# > LPRS eşiği seçilmediyse (D23) eşik metrikleri "Pending".
 # >
 # > **QDiabetes notu:** Kaynak kod yalnızca 10 yıllık baseline survival içerir; Kol 1'de diğer
 # > horizon'lar `S0(t)=S0(10)^(t/10)` varsayımıyla türetilir [karar bekliyor]. Kol 2 bu varsayıma bağlı değildir.
@@ -66,6 +69,7 @@ q = qd.score(c3, years=10, p=P)
 l = lrs.score(c3, p=P)
 df = c3.join(q[["qd_lp", "qd_computable", "qd_missing", "qd_variant", "ethn_qd"]]).join(
     l[["lrs_score", "lrs_computable", "lrs_missing"]])
+LRS_ARM = f"{lrs.label(P)} (off-label)"
 df["T"] = df["followup_years"]
 df["E"] = df["incident_diabetes"].astype(bool)
 df["age_band"] = pd.cut(df["age"], P["age_band_edges"], right=False, labels=P["age_band_labels"])
@@ -76,6 +80,7 @@ coverage = pd.DataFrame([{
     "lrs_computable_n": int(df["lrs_computable"].sum()), "lrs_computable_pct": round(100 * df["lrs_computable"].mean(), 1),
     "joint_core8_pct": round(100 * df["ok_core8"].mean(), 1), "joint_lrs_pct": round(100 * df["ok_lrs"].mean(), 1),
     "qd_variant": df["qd_variant"].iloc[0] if len(df) else None,
+    "lrs_variant": lrs.label(P),
     "washout_days": P["outcome_washout_days"],
 }])
 run.save_table(coverage, "nb02/coverage.csv", "Skor kapsama ve birlikte tamlık (C3)")
@@ -98,7 +103,7 @@ run.save_table(split_tbl, "nb02/recal_split.csv", "Recalibration eğitim/test ay
 print(split_tbl)
 
 # %% [markdown]
-# ## 2. Kol 1 / 2a / 2b ve LRS — horizon bazında metrikler
+# ## 2. Kol 1 / 2a / 2b ve Leicester skoru — horizon bazında metrikler
 
 # %%
 def evaluate(d: pd.DataFrame, p_h: np.ndarray, h: float, label: str, threshold=None, absolute=True,
@@ -141,11 +146,11 @@ for h in [P["horizon_years"], P["horizon_years_fallback"]]:
         cal_tables[(h, name)] = metrics.calibration_table(test["T"], test["E"], p2, h)
     cal_tables[(h, "Kol 1 — QDiabetes (published)")] = metrics.calibration_table(test["T"], test["E"], p1_test, h)
     if len(lrs_set):
-        results.append(evaluate(lrs_set, lrs_set["lrs_score"].to_numpy(dtype=float), h, "LRS (off-label, points)",
-                                P["lrs_high_risk_threshold"], absolute=False, with_ci=primary))
+        results.append(evaluate(lrs_set, lrs_set["lrs_score"].to_numpy(dtype=float), h, LRS_ARM,
+                                lrs.threshold(P), absolute=False, with_ci=primary))
 
 res = pd.DataFrame(results)
-run.save_table(res, "nb02/performance.csv", "Kol 1/2a/2b ve LRS performansı (test parçası)")
+run.save_table(res, "nb02/performance.csv", f"Kol 1/2a/2b ve {lrs.label(P)} performansı (test parçası)")
 run.save_json(recal_models, "nb02/recalibration_models.json", "Recalibration parametreleri (eğitim parçası)")
 show = ["arm", "horizon", "n", "events_by_h", "c_index", "c_index_ci", "auroc_h", "oe_ratio", "calibration_slope"]
 print(res[[c for c in show if c in res]].to_string(index=False))
@@ -223,7 +228,7 @@ def first(arm, horizon):
 
 k1 = first("Kol 1 — QDiabetes (published)", h)
 k2 = first("Kol 2a — baseline recal", h)
-kl = first("LRS (off-label, points)", h)
+kl = first(LRS_ARM, h)
 kpi_values = {
     "horizon_years": h,
     "c3_eligible_n": len(df),
@@ -237,6 +242,7 @@ kpi_values = {
     "oe_qd_kol1": k1.get("oe_ratio"), "cal_slope_qd_kol1": k1.get("calibration_slope"),
     "oe_qd_kol2a": k2.get("oe_ratio"), "cal_slope_qd_kol2a": k2.get("calibration_slope"),
     "qd_threshold": {k[4:]: v for k, v in k1.items() if k.startswith("thr_") and v == v},
+    "lrs_variant": P["lrs_variant"], "lrs_label": lrs.label(P),
     "auroc_lrs": kl.get("auroc_h"), "c_index_lrs": kl.get("c_index"),
     "lrs_threshold": {k[4:]: v for k, v in kl.items() if k.startswith("thr_") and v == v},
     "subgroups_insufficient_events": int((sub["note"] == "insufficient events").sum()),

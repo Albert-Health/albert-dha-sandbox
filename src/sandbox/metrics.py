@@ -233,7 +233,7 @@ def detection_rate(flag) -> dict:
     flag: hasta başı True (yüksek risk) / False / NA (skor hesaplanamadı).
     sens_computable: yakalanan / skoru hesaplanabilen (+ Wilson %95 GA).
     sens_all: yakalanan / tüm hastalar — hesaplanamayan "yakalanmadı" sayılır (tarama pratiği).
-      Hiç hesaplanabilen yoksa (ör. bel çevresi teslim edilmediği için LRS) nan: "%0 duyarlılık"
+      Hiç hesaplanabilen yoksa (ör. LRA 2010 ve bel çevresi teslim edilmemiş) nan: "%0 duyarlılık"
       okunmasın.
     Negatif vaka olmadığı için özgüllük, PPV, AUROC buradan çıkmaz.
     """

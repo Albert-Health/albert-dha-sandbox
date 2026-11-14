@@ -19,7 +19,8 @@ src/sandbox/
   phenotype.py            glisemik ölçümler, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py              pozitif havuz (C1/C2), C3 (v2 incident kuralları, washout)
   scores/qdiabetes2018a.py  QDiabetes-2018 Model A (CRAN QDiabetes 1.0-2 katsayıları; referans testli)
-  scores/lrs.py           Leicester Risk Assessment (0–47 puan, ≥16 yüksek risk)
+  scores/lrs.py           Leicester varyant seçici (`lrs_variant`) + Leicester Risk Assessment 2010 (0–47 puan, ≥16; bel çevresi zorunlu)
+  scores/lprs.py          Leicester Practice Risk Score (Gray 2012; bel çevresiz, rutin EHR) — varsayılan (K-LRS)
   metrics.py              KM, Harrell C, IPCW zaman-bağımlı AUROC, O:E, kalibrasyon, eşik metrikleri, bootstrap
   recalibration.py        Kol 2: cinsiyete göre katmanlı baseline (+eğim) recalibration
   kpi.py                  KPI tablosu + graduation ön değerlendirmesi
@@ -42,7 +43,7 @@ archive/                  önceki prototip notebook ve raporlar
 | — | `tools/ingest_nabidh.py` | C1, C2, C3 | NABIDH ham → kanonik şema, şema kontrolü, kaynak değer dağılımları (eşleme sözlükleri için) |
 | 0 | `00_data_profile.py` | C1, C2, C3 | şema doğrulama, tamlık, istenen-vs-gelen kod eşlemesi · *Data Completeness, Framework Match* |
 | 1 | `01_c1_c2_feasibility.py` | C1, C2 | C1: bilinen pozitiflerde yakalama oranı (duyarlılık; `nb01/c1_detection_rate.csv`) · C2: tamlık · C1–C2 seçilim etkisi, skor hesaplanabilirliği (kesitsel) |
-| 2 | `02_c3_benchmark.py` | C3 | QDiabetes + LRS: C-index, AUROC, kalibrasyon, eşik metrikleri, recalibration · *klinik/teknik KPI'lar* |
+| 2 | `02_c3_benchmark.py` | C3 | QDiabetes + Leicester (LPRS): C-index, AUROC, kalibrasyon, eşik metrikleri, recalibration · *klinik/teknik KPI'lar* |
 | 3 | `03_uae_model.py` | yeni NABIDH teslimi | UAE'ye özgü, lab'sız model — koşullu, yalnızca recalibration yetersizse; yürütülürse NABIDH'ten yeni veri istenir (henüz yok) |
 | — | `tools/kpi_report.py` | — | KPI tablosu + iki haftalık rapor (`outputs/<run_id>/kpi/kpi_report.md`) |
 | — | `tools/build_evidence_package.py` | — | evidence package klasörü + hash listesi + kontrol listesi |
@@ -66,10 +67,14 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 | `qd_missing_smoking_as_non` | False **[KARAR]** | sigara kaydı yok = bilinmiyor |
 | `qd_baseline_time_scaling` | power | 10 y dışı horizon için S0(t)=S0(10)^(t/10) (Kol 1) [karar bekliyor] |
 | `qd_risk_threshold_pct` | None **[KARAR — şimdilik]** | sens/spec/PPV/alert rate eşiği; KPI'lar ve C1 QDiabetes duyarlılığı "Pending" |
-| `lrs_unknown_ethnicity_as_missing` | True | etnisite kayıtsızsa LRS hesaplanmaz |
+| `lrs_variant` | practice_2012 **[KARAR: 2026-11-14]** | K-LRS: bel çevresi teslim edilmiyor → Leicester Practice Risk Score (Gray 2012, bel çevresiz). `assessment_2010` = LRA 2010 (bel zorunlu), karşılaştırma için |
+| `lprs_high_risk_threshold` | None | LPRS yüksek risk eşiği — yayımlanmış mutlak eşik yok; seçilene kadar C1 Leicester duyarlılığı ve eşik metrikleri "Pending" [karar bekliyor — D23] |
+| `lrs_high_risk_threshold` | 16 | yalnız LRA 2010 |
+| `lrs_unknown_ethnicity_as_missing` | True | etnisite kayıtsızsa Leicester skoru hesaplanmaz (iki varyant) |
 | `ethnicity_source` | nationality | **[KARAR: 2026-11-13]** etnik grup uyruktan türetilir |
 | `codelists.NATIONALITY_COUNTRIES` → `NABIDH_TO_QDIABETES` | BAE/Körfez/Arap → Other | uyruk → etnik grup → QDiabetes eşlemesi |
-| LRS madde puanları | Gray 2010 | birincil makaleden teyit |
+| LPRS katsayıları | Gray 2012 | ilk yazarın sunumundan (makaleye atıflı); tam metinle teyit bekliyor (K5) |
+| LRA madde puanları | Gray 2010 | birincil makaleden teyit (K5) |
 
 ## Kurulum ve çalıştırma
 

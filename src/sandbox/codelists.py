@@ -133,7 +133,7 @@ NABIDH_TO_QDIABETES = {
 }
 QDIABETES_ETHNICITIES = ["WhiteNA", "Indian", "Pakistani", "Bangladeshi", "OtherAsian",
                          "BlackCaribbean", "BlackAfrican", "Chinese", "Other"]
-# LRS: beyaz = 0 puan, diğer tüm gruplar = 6 puan
+# Leicester: beyaz = 0, diğer tüm gruplar beyaz-dışı (LRA 2010: 6 puan; LPRS 2012: BME = 1)
 LRS_WHITE = {"western", "white", "european"}
 ETHNICITY_UNKNOWN = {"not recorded", "unknown", "", "not stated", "na", "n/a"}
 
@@ -260,7 +260,7 @@ def map_ethnicity_qdiabetes(raw: pd.Series) -> pd.Series:
 
 
 # --------------------------------------------------------------------------
-# 8 çekirdek değişken (revize MVP) + LRS ek değişkeni
+# 8 çekirdek değişken (revize MVP) + LRA 2010 ek değişkeni (LPRS 2012 bel istemez — K-LRS)
 # --------------------------------------------------------------------------
 CORE_VARIABLES = [
     "sex", "age", "ethnicity", "bmi", "smoking", "family_history", "cvd", "hypertension",

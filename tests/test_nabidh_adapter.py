@@ -185,9 +185,11 @@ class TestNationality(unittest.TestCase):
         self.assertEqual(list(codelists.map_ethnicity_qdiabetes(g)),
                          ["Other", "Indian", "Other", "WhiteNA", "WhiteNA"])
         snap = pd.DataFrame({"sex": "Male", "age": 45, "ethnicity": g, "family_history": False,
-                             "waist_cm": 95, "bmi": 27, "htn_lrs": False})
-        pts = lrs.score(snap)["lrs_ethnicity"]
+                             "waist_cm": 95, "bmi": 27, "htn_lrs": False, "htn_med": False})
+        pts = lrs.score_assessment_2010(snap)["lrs_ethnicity"]
         self.assertEqual(list(pts.fillna(-1)), [6, 6, 6, 0, -1])     # kayıtsız → LRS hesaplanmaz
+        bme = lrs.score(snap)["lrs_ethnicity"]                         # varsayılan LPRS: BME katsayısı
+        self.assertEqual(list(bme.fillna(-1).round(7)), [0.7565977] * 3 + [0.0, -1])
 
     def test_qd_unchanged_for_group_labels(self):
         # Aynı etnik grup etiketi → aynı QDiabetes riski (uyruk yolu skoru değiştirmez)

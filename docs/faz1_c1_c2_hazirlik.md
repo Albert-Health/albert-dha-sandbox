@@ -12,7 +12,7 @@ Etiketler: **[ENGEL]** Pazartesiden önce çözülmezse Faz 1 çalışmaz ya da 
 
 | Faz | Kohort | Ne | Kod |
 |---|---|---|---|
-| **Faz 1** | C1, C2 (T2DM + prediyabet) | Veri profili · **C1:** QDiabetes-2018 A ve LRS'in bilinen pozitifleri "yüksek risk" deme oranı (duyarlılık) — birincil amaç · **C2:** tamlık | NB0, NB1, `kpi_report` (kısmi) |
+| **Faz 1** | C1, C2 (T2DM + prediyabet) | Veri profili · **C1:** QDiabetes-2018 A ve Leicester skorunun (LPRS) bilinen pozitifleri "yüksek risk" deme oranı (duyarlılık) — birincil amaç · **C2:** tamlık | NB0, NB1, `kpi_report` (kısmi) |
 | **Faz 2** | C3 (başlangıçta non-diyabetik) | Incident benchmark: Kol 1 / 2a / 2b, alt gruplar | NB2, `positive_control`, evidence package |
 | Faz 3 | yeni NABIDH teslimi | UAE'ye özgü, lab'sız model (koşullu; sonuçlar kötüyse) | — |
 
@@ -24,9 +24,10 @@ Adım 1 (NB1) = 1. + 2. basamak, Adım 2 (NB2) = 3. basamak, Adım 3 = 4. basama
   risk" buluyor (duyarlılık, NB1 §4)**; NABIDH verisiyle iki skor hesaplanabiliyor mu, hangi oranda,
   hangi değişken yüzünden hesaplanamıyor; tam kayıtlı hastalar (C1) rastgele hastalardan (C2) farklı mı;
   etnisite kategorileri QDiabetes / LRS'e nasıl eşleniyor; skorların betimleyici dağılımı.
-- Duyarlılık için iki ön koşul: QDiabetes'te eşik (D5 — şimdilik yok → "Pending"); LRS'te bel çevresi
-  (teslim edilmiyor → hesaplanamaz, K-LRS). Referans tarihi (veri sonu / ilk kanıt günü) yan yana
-  raporlanır, birincil seçilmeli (D22).
+- Duyarlılık için ön koşul: her iki skorda eşik. QDiabetes: D5 — şimdilik yok → "Pending". Leicester:
+  bel çevresi teslim edilmediği için bel çevresiz **LPRS (Gray 2012)** kullanılıyor [KARAR: 2026-11-14,
+  K-LRS]; LPRS'in yayımlanmış mutlak eşiği yok → eşik seçilene kadar "Pending" (D23). Referans tarihi
+  (veri sonu / ilk kanıt günü) yan yana raporlanır, birincil seçilmeli (D22).
 - Cevaplamaz: özgüllük, PPV, ayrım gücü (AUROC) ve kalibrasyon — C1/C2'de negatif vaka yok; bunlar
   Faz 2'nin (C3) işi. C1 duyarlılığı prevalan vakalarda ölçülür (prospektif değil) ve C1 tam kayıtlı
   hastalardan oluşur (seçilim etkisi).
@@ -62,28 +63,30 @@ edilecek), C3 = 1.000. Satır sayıları buraya alınmadı; < 10 hücreler bast�
 | İlaç order'ları (çalışma ilaçları) | Medication | 1.557 (%59,9) | 1.513 (%58,2) | 496 (%49,6) |
 | Encounter | Encounter | — | — | 1.000 (%100) |
 
-**Listede olmayanlar:** bel çevresi · demografi ve uyruk (muhtemelen "Patient profile" sekmesinde —
+**Listede olmayanlar:** bel çevresi (LPRS kullanıldığı için artık gerekmiyor — K-LRS) · demografi ve uyruk (muhtemelen "Patient profile" sekmesinde —
 teyit; etnik grup uyruktan türetilecek) · random glukoz, IFCC HbA1c · QDiabetes'in ek 7 prediktörü (statin "çalışma
 ilaçları" içinde olabilir) · Townsend.
 
 ## 3. Skor girdileri → teslim kaynağı → durum
 
-| Girdi | QDiabetes | LRS | Teslim kaynağı | C1 | C2 | Kod hazır mı |
+| Girdi | QDiabetes | LPRS (Leicester, varsayılan) | Teslim kaynağı | C1 | C2 | Kod hazır mı |
 |---|---|---|---|---|---|---|
 | Cinsiyet, yaş | ✓ | ✓ | Patient profile | — | — | Evet |
-| Etnik grup | ✓ | ✓ | Patient profile → **uyruk** (nationality) [KARAR: 2026-11-13] | ? | ? | Evet — uyruk → etnik grup → QDiabetes / LRS (`codelists.NATIONALITY_COUNTRIES`); eşleme içeriği D6 |
+| Etnik grup | ✓ | ✓ (beyaz / BME, ikili) | Patient profile → **uyruk** (nationality) [KARAR: 2026-11-13] | ? | ? | Evet — uyruk → etnik grup → QDiabetes / LRS (`codelists.NATIONALITY_COUNTRIES`); eşleme içeriği D6 |
 | BMI | ✓ | ✓ | BMI 39156-5 → yoksa boy + kilo → yoksa Z68 | %100 | doğrudan %12,9; boy/kilo ~%95 | Evet; birim kontrolü yok (A3) |
 | Sigara | ✓ | — | SocialHistory'den çıkarılır (+ F17.2 / Z72.0 / Z87.891) | %100 | %57,0 | Evet — adapter SocialHistory'den çıkarıyor (A2) |
 | Aile öyküsü | ✓ | ✓ | FamilyHistory'den çıkarılır (+ Z83.3) | %100 kayıt | %16,1 kayıt | Evet — adapter FamilyHistory'den çıkarıyor; pozitif = birinci derece akraba (A2) |
 | KVH | ✓ | — | I20–I25, I50, I6x, G45 | %19,5 | %17,2 | Evet (kod listesi aynı) |
-| Hipertansiyon | tanı **ve** ilaç | tanı **veya** ilaç | I10–I16 + Medication | %39,0 / %59,9 | %46,1 / %58,2 | Tanı evet; ilaç kodlaması bilinmiyor (A4) |
-| Bel çevresi | — | ✓ | **Listede yok** | — | — | **LRS hesaplanamaz** (K-LRS) |
+| Hipertansiyon | tanı **ve** ilaç | yalnız **antihipertansif ilaç** (LRA 2010: tanı veya ilaç) | I10–I16 + Medication | %39,0 / %59,9 | %46,1 / %58,2 | Tanı evet; ilaç kodlaması bilinmiyor (A4) |
+| Bel çevresi | — | — (yalnız LRA 2010 ister) | **Listede yok** | — | — | **Gerekmiyor** — LPRS [KARAR: 2026-11-14, K-LRS] |
 | Ek 7 prediktör | ✓ | — | Listede yok | — | — | İndirgenmiş model zaten varsayılan (D9) |
 | Townsend | ✓ | — | Yok | — | — | 0 (D10) |
 
 **Sonuçlar**
-1. **LRS (Gray 2010) bu veriyle hesaplanamaz** — bel çevresi teslim edilmiyor. Faz 1'in en büyük
-   açığı; K-LRS kararı gerekiyor.
+1. **K-LRS çözüldü (2026-11-14):** LRA (Gray 2010) bel çevresi istediği için bu veriyle hesaplanamıyordu.
+   Bel çevresi istemeyen **Leicester Practice Risk Score** (Gray 2012; yaş, cinsiyet, etnik grup, BMI,
+   aile öyküsü, antihipertansif ilaç) varsayılan oldu — girdilerinin hepsi teslim listesinde var. Açık:
+   yüksek risk eşiği (D23) → C1 Leicester duyarlılığı o zamana kadar "Pending".
 2. **QDiabetes C1'de** (uyruk kayıtlıysa ve yaş 25–84 ise) neredeyse tüm hastalarda hesaplanabilir olmalı.
 3. **QDiabetes C2'de** sigara kaydı %57. D8 kararıyla (kayıt yok = bilinmiyor) hesaplanabilirlik en fazla
    ~%57; kalanlar "smoking_missing" nedeniyle raporlanır.
@@ -131,6 +134,13 @@ okunduğunda da). QDiabetes hesaplanabilirliği değişmedi (C1 %95,7, C2 %81,8)
 çevresi olmadığı için beklenen. NB0 Framework Match "Eksik: waist_cm" (A5). NB1 C1 duyarlılık
 tablosu (2026-11-14): LRS satırları boş (hesaplanabilen yok), QDiabetes "Pending (D5)" — beklenen.
 
+**Prova tekrarı — LPRS ile (2026-11-14, K-LRS sonrası):** tüm run'lar `success`, şema ERROR = 0.
+Leicester skoru artık LPRS (bel çevresiz): hesaplanabilirlik C1 %100, C2 %93,8 (tek eksiklik nedeni
+kayıtsız etnisite, D12). NB0 Framework Match "Match" (bel çevresi gerekli listeden çıktı). NB1 C1
+yakalama tablosunda Leicester satırları `variant = LPRS (Gray 2012 — bel çevresiz)` ile dolu; oran eşik
+seçilene kadar "Pending (D23)". Karşılaştırma yolu `SANDBOX_PARAMS='{"lrs_variant": "assessment_2010"}'`
+eski davranışı veriyor (LRA %0, Framework Match "Eksik: waist_cm"). Sentetik sayılar sonuç değildir.
+
 ## 5. Kod — Pazartesiden önce
 
 | # | İş | Etiket | Neden |
@@ -139,12 +149,12 @@ tablosu (2026-11-14): LRS satırları boş (hesaplanabilen yok), QDiabetes "Pend
 | A2 | Adapter teslim yapısına göre (`SOURCES`): Patient, tanı, Observation (lab + vital), SocialHistory → sigara, FamilyHistory → aile öyküsü (yalnız diyabet, birinci derece), Medication, Encounter (yalnız C3); kod sistemi (HL7 `I10`, `LN`, `SCT` …), BOM, gün-önce tarih desteği; `tools/make_nabidh_dryrun.py` ile prova; `tests/test_nabidh_adapter.py` | **[YAPILDI 2026-11-13]** | Enclave'de yalnızca `SOURCES`'taki dosya/sütun adları ve gerekirse değer sözlükleri güncellenecek |
 | A3 | Boy / kilo birim kontrolü (m → cm, lb → kg) + NB0'a BMI / boy / kilo dağılımı ve birim tablosu | [ÖNEMLİ] | C2'de doğrudan BMI yalnız %12,9; geri kalanı boy/kilodan hesaplanacak. Boy metre gelirse 120–230 cm filtresi hepsini atar |
 | A4 | Medication kodlaması: ATC değilse ilaç adı / yerel kod → ATC eşleme tablosu | [ÖNEMLİ] | Hipertansiyon tedavisi (QDiabetes) ve A10 bayrağı buna bağlı |
-| A5 | NB0 Framework Match'in gerekli grup listesi NABIDH'e iletilen talep listesiyle eşleşmeli | [ÖNEMLİ] | Liste şu an bel çevresini de istiyor → otomatik "Not Met". Bel talep edildiyse bu doğru; edilmediyse listeden çıkmalı |
+| A5 | NB0 Framework Match'in gerekli grup listesi NABIDH'e iletilen talep listesiyle eşleşmeli | **[YAPILDI 2026-11-14 — bel çevresi]** | Bel çevresi artık yalnız `lrs_variant = "assessment_2010"` seçiliyse gerekli (LPRS istemez). Listenin geri kalanının talep listesiyle karşılaştırması açık |
 | A6 | `kpi.build` NB1 değerlerini kullansın (`nb1` parametresi gövdede yok) | [ÖNEMLİ] | Faz 1 KPI raporunda tamlık satırları boş kalır |
-| A7 | LRS alternatifi — K-LRS kararına göre | [KARAR'a bağlı] | — |
+| A7 | LRS alternatifi — K-LRS kararına göre | **[YAPILDI 2026-11-14]** | `scores/lprs.py` (LPRS, Gray 2012), `lrs_variant` seçici; `ok_lrs`, NB0/NB1/NB2, KPI notları varyanta göre; testler elle hesaplanmış referanslarla |
 | A8 | NB1'e etnisiteye göre skor dağılımı (Emirati / Gulf Arab / Güney Asya / diğer) | [İYİ OLUR] | Ana hipotezin (Emirati'de düşük tahmin) Faz 1'deki ilk betimleyici sinyali |
 | A9 | ICD kodları kısaltılmış gelirse ("F17.2") sigara tanı eşlemesi | [İYİ OLUR] | Kod listesi tam kod bekliyor (F17210 …); etki küçük (~15 hasta) |
-| A11 | NB1 §4: C1 (ve karşılaştırma için C2) yakalama oranı — LRS ≥ 16, QDiabetes horizon riski ≥ `qd_risk_threshold_pct`; T2DM / prediyabet; Wilson %95 GA; iki referans tarihi; oranlarda küçük hücre bastırma (`sdc.suppress_rates`) | **[YAPILDI 2026-11-14]** | C1'in birincil amacı (anlatım kaydı). QDiabetes D5'e, LRS K-LRS'e bağlı |
+| A11 | NB1 §4: C1 (ve karşılaştırma için C2) yakalama oranı — Leicester skor ≥ etkin varyant eşiği (`variant` sütunu), QDiabetes horizon riski ≥ `qd_risk_threshold_pct`; T2DM / prediyabet; Wilson %95 GA; iki referans tarihi; oranlarda küçük hücre bastırma (`sdc.suppress_rates`) | **[YAPILDI 2026-11-14]** | C1'in birincil amacı (anlatım kaydı). QDiabetes D5'e, Leicester (LPRS) D23 eşiğine bağlı |
 | A10 | NB0 `SANDBOX_PARAMS`'ı okusun; `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın; `claude.md` / `docs/gap.md` adları kurallarla eşleşsin | [İYİ OLUR] | Audit tutarlılığı; Linux VM'de `claude.md` ≠ `CLAUDE.md` |
 
 ## 6. Kararlar — Faz 1'i etkileyenler (kayıt: `docs/gap.md` §5)
@@ -154,7 +164,8 @@ parametrelerle, ön sonuç" olarak etiketlenmeli. Alternatifler duyarlılık ça
 
 | # | Karar | Parametre | Varsayılan | Faz 1 etkisi |
 |---|---|---|---|---|
-| **K-LRS** | Bel çevresi teslim edilmiyor → LRS ne olacak | (eklenecek) | — | (a) Faz 1'de "LRS hesaplanamaz" diye raporla · (b) bel gerektirmeyen Leicester varyantı: Leicester Practice Risk Score (Gray et al., Diabetologia 2012; rutin EHR verisi için geliştirildi — değişkenler ve katsayılar birincil makaleden doğrulanmalı) · (c) bel puanını 0 saymak / BMI'den türetmek — valide değil, önerilmez |
+| **K-LRS** | Bel çevresi teslim edilmiyor → LRS ne olacak | `lrs_variant` | **"practice_2012" [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat]** | (b) seçildi: bel gerektirmeyen Leicester Practice Risk Score (Gray et al., Diabetologia 2012;55:959–966; rutin EHR verisi için). Katsayılar ilk yazarın sunumundan (makaleye atıflı), tam metinle teyit K5. LRA 2010 `"assessment_2010"` ile karşılaştırma için. (a) ve (c) seçilmedi |
+| D23 | LPRS yüksek risk eşiği | `lprs_high_risk_threshold` | None [KARAR BEKLİYOR] | Yayımlanmış mutlak eşik yok (yazarlar pratik başına en yüksek %10 / hedef duyarlılık kullandı). Seçilene kadar C1 Leicester duyarlılığı "Pending"; NB1 `score_summary.csv` dağılımı (medyan, IQR) karar için |
 | D8 | Sigara kaydı yok = içmiyor mu | `qd_missing_smoking_as_non` | **False [KARAR]** — kayıt yok = bilinmiyor | C2'de QDiabetes en fazla ~%57 |
 | D17 | Aile öyküsü kaydı yok = negatif mi | `c1_require_fh_record` | False — **enclave'de netleşecek** | C2'de yalnız %16 kayıt |
 | D7 | Yoğunluksuz "current" sigara | `qd_smoking_current_category` | 3 (moderate) — açık | SocialHistory değerlerine bağlı |
@@ -162,8 +173,8 @@ parametrelerle, ön sonuç" olarak etiketlenmeli. Alternatifler duyarlılık ça
 | D9 | İndirgenmiş Model A (7 prediktör = 0) | `qd_force_reduced_model` | **True [KARAR]** | Kapsam dışı kalacak |
 | D10 | Townsend = 0 | `qd_townsend` | **0.0 [KARAR]** | Kapsam dışı |
 | D18 | KVH tanımı | `codelists.DX["cvd"]` | **NABIDH listesi [KARAR]** | I20–I25, I50, I6x, G45 (kod listesi zaten aynı) |
-| D12 | LRS'de etnisite kayıtsız → hesaplanmaz | `lrs_unknown_ethnicity_as_missing` | True | K-LRS'e bağlı |
-| K5 | LRS madde puanlarının birincil makaleden teyidi | `scores/lrs.py` | — | K-LRS'e bağlı |
+| D12 | Leicester skorunda etnisite kayıtsız → hesaplanmaz | `lrs_unknown_ethnicity_as_missing` | True | LPRS'te tek eksiklik nedeni olabilir (C2'de uyruk kaydı) |
+| K5 | Leicester katsayılarının birincil makaleden teyidi | `scores/lprs.py`, `scores/lrs.py` | — | LPRS katsayıları sunumdan; makale tam metni paywall'da |
 | Yeni-1 | Yalnızca Z68 bandından gelen BMI skor girdisi sayılsın mı | (eklenecek) | Skorda kullanılıyor, tamlıkta "eksik" | Boy/kilo kapsamı yüksek → etkisi küçük olmalı |
 | D22 | C1/C2 duyarlılığında referans tarihi: veri sonu ("as currently recorded") mı, ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; tamlık ve SMD veri sonuyla | Veri sonu: tanı sonrası kilo / tansiyon / ilaç değişimleri skora girer. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun; o gün kayıtlar seyrek → hesaplanabilirlik düşer (sentetikte C1 QDiabetes %96 → %54) |
 | D5 | QDiabetes risk eşiği | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | Eşik KPI'ları "Pending"; **C1'in birincil sorusu (QDiabetes duyarlılığı) da eşik seçilene kadar "Pending"** |
@@ -180,7 +191,8 @@ Data availability listesiyle cevaplananlar: teslim olay düzeyinde ve kaynak tip
 **Skor girdileri**
 - [ ] Patient profile: cinsiyet, doğum tarihi ve **uyruk** alanı — biçimi (ülke adı / ISO kodu /
       "UAE National"), kategori listesi, eksiklik oranı
-- [ ] **Bel çevresi gerçekten yok mu?** Vital'ler içinde başka kodla olabilir (LOINC 8280-0 / 56086-2)
+- [ ] Bel çevresi gerçekten yok mu? (LPRS için gerekmiyor; varsa LRA 2010 karşılaştırması yapılabilir —
+      LOINC 8280-0 / 56086-2)
 - [ ] SocialHistory: sigara değer sözlüğü (metin / kod; yoğunluk; midwakh, shisha)
 - [ ] FamilyHistory: hangi hastalık (yalnız diyabet mi), akrabalık derecesi, negatif kayıt var mı
 - [ ] Medication: kodlama (ATC / ilaç adı / yerel kod), "çalışma ilaçları" listesi, order mı dispense mi
@@ -218,9 +230,10 @@ Data availability listesiyle cevaplananlar: teslim olay düzeyinde ve kaynak tip
 
 - [ ] NB0 ve NB1 run'ları `status: success`, şema ERROR = 0, audit %100
 - [ ] C1 ve C2: 8 çekirdek değişkenin tamlığı, QDiabetes hesaplanabilirlik %, eksiklik nedenleri
-- [ ] LRS: K-LRS kararına göre ya hesaplanmış skor ya da gerekçeli "hesaplanamaz" satırı
-- [ ] C1 yakalama oranı (`nb01/c1_detection_rate.csv`): QDiabetes (D5 eşiğiyle ya da "Pending"), LRS
-      (K-LRS); T2DM / prediyabet; D22 referans tarihi seçimi
+- [ ] Leicester (LPRS — K-LRS): hesaplanabilirlik, eksiklik nedenleri, dağılım (medyan, IQR), 40–75 yaş
+      dışı oranı
+- [ ] C1 yakalama oranı (`nb01/c1_detection_rate.csv`): QDiabetes (D5 eşiğiyle ya da "Pending"), LPRS
+      (D23 eşiğiyle ya da "Pending"); T2DM / prediyabet; D22 referans tarihi seçimi
 - [ ] C1–C2 SMD tablosu (seçilim etkisi)
 - [ ] Uyruk → etnik grup eşleme tablosu (NB1 `ethnicity_mapping.csv`) → medikal ekibe (D6)
 - [ ] Ingest değer raporu (`ingest/<kohort>_value_counts.csv`) ve NB0 `unmapped_codes.csv` → eşleme

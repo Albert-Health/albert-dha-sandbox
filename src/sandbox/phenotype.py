@@ -11,6 +11,7 @@ import pandas as pd
 from . import codelists
 from .config import PARAMS
 from .io.schema import Dataset
+from .scores import lrs
 
 # Aynı gün birden çok kanıt varsa öncelik (küçük = önce)
 EVIDENCE_PRIORITY = {"lab_hba1c": 0, "lab_fpg": 1, "lab_ogtt": 2, "lab_random_glucose": 3,
@@ -221,7 +222,8 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
         out[col] = out.index.isin(ids)
 
     out["htn_treated_qd"] = out["htn_dx"] & out["htn_med"]      # QDiabetes: tanı VE ilaç
-    out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRS: tanı VEYA ilaç
+    out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRA 2010: tanı VEYA ilaç
+    # LPRS (Gray 2012) yalnız ilacı kullanır: htn_med
 
     # Tamlık bayrakları (C1 tanımı + KPI'lar)
     out["ok_sex"] = out["sex"].isin(["Male", "Female"])
@@ -234,7 +236,10 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out["ok_hypertension"] = True   # tanı ve ilaç ayrı alanlar; var/yok
     ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
     out["ok_core8"] = out[ok_cols].all(axis=1)
+    # Leicester skoru birlikte tamlığı: bel çevresi yalnız LRA 2010 varyantında gerekir (K-LRS)
     out["ok_lrs"] = out[["ok_sex", "ok_age", "ok_ethnicity", "ok_bmi", "ok_family_history",
-                         "ok_hypertension"]].all(axis=1) & out["waist_cm"].notna()
+                         "ok_hypertension"]].all(axis=1)
+    if lrs.needs_waist(p):
+        out["ok_lrs"] &= out["waist_cm"].notna()
     out["ref_date"] = ref
     return out

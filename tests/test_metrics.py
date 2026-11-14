@@ -121,7 +121,7 @@ class TestDetectionRate(unittest.TestCase):
         self.assertTrue(np.isnan(r["sens_computable"]))
 
     def test_detection_rate_none_computable(self):
-        # ör. LRS, bel çevresi yok: 5 hasta, hiçbiri hesaplanamadı → %0 değil, nan
+        # ör. LRA 2010, bel çevresi yok: 5 hasta, hiçbiri hesaplanamadı → %0 değil, nan
         r = metrics.detection_rate([None] * 5)
         self.assertEqual((r["n"], r["n_computable"], r["n_flagged"]), (5, 0, 0))
         self.assertTrue(np.isnan(r["sens_all"]))

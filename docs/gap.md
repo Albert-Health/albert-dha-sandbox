@@ -10,7 +10,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | K2 | Eksik veri stratejisi: complete-case (mevcut) vs multiple imputation (QDiabetes orijinal yöntemi) | [AÇIK] + [KARAR BEKLİYOR] | Mini veride QDiabetes yalnızca %3 hastada hesaplanabiliyor; parametreli yapılmalı |
 | K3 | NABIDH adapter MAPPING (`io/adapters/nabidh.py`) | [AÇIK] | Enclave'de dosya/sütun adları görülünce |
 | K4 | Offline kurulum paketi (wheel'ler) | [AÇIK] + [DIŞ] | VM OS / Python sürümü bilinmiyor |
-| K5 | LRS madde puanlarının Gray et al. 2010 birincil tablosuyla doğrulanması | [AÇIK] | Kategoriler NHS Health Check belgesiyle doğrulandı |
+| K5 | Leicester katsayı / puanlarının birincil makalelerle teyidi | [AÇIK] | **LPRS (varsayılan, K-LRS):** katsayılar ilk yazarın (L. J. Gray) Leicester Diabetes Centre sunumundaki formülden alındı (Diabetologia 2012;55(4):959–66'ya atıflı); makale tam metni paywall'da — tablo/ekle karşılaştırılmalı. **LRA 2010** (artık yalnız karşılaştırma): madde puanları birincil tablodan teyit; kategoriler NHS Health Check belgesiyle doğrulandı |
 | K6 | Evidence package şablonlarının doldurulması (`docs/evidence_package/filled/`) | [AÇIK] + [KARAR BEKLİYOR] | Doldurulana kadar KPI "Not Met" → graduation ön değerlendirmesi "Do Not Graduate" |
 | K7 | Adım 3 / UAE modeli (`notebooks/03_uae_model.py`) = Study Flow 4. basamak | Koşullu | Yürütülürse NABIDH'ten yeni veri teslimi istenir. Keşif–sınama ayrımı, tanı-öncesi tampon, girdi çiti (app'te sorulabilir, lab yok); tüm popülasyona uygulanabilir olmalı |
 | K8 | Sentetik veri üreticisi repoda yok | [KISIT] | 100k sentetik veri ekip içinde ayrı paylaşılıyor |
@@ -29,7 +29,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D9 | Kapsam dışı 7 Model A prediktörü = 0 (indirgenmiş model) | `qd_force_reduced_model` | **True [KARAR]** | Statin, steroid, atipik antipsikotik, şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS |
 | D10 | Townsend = 0 | `qd_townsend` | **0.0 [KARAR]** | UAE'de karşılığı yok |
 | D11 | 5 y risk için baseline ölçekleme S0(t) = S0(10)^(t/10) | `qd_baseline_time_scaling` | "power" | Yayınlanmış kodda yalnız 10 y baseline var — ayrıca [KISIT] |
-| D12 | LRS'de etnisite "Not recorded" → skor hesaplanmaz | `lrs_unknown_ethnicity_as_missing` | True | — |
+| D12 | Leicester skorunda etnisite "Not recorded" → skor hesaplanmaz (LPRS ve LRA) | `lrs_unknown_ethnicity_as_missing` | True | — |
 | D13 | Recalibration bölme yöntemi | `recal_split` | "temporal" | Temporal test parçasında 5 y AUROC hesaplanamıyor (≥5 y takipli kontrol yok) |
 | D14 | Başlangıçta prediyabet: hariç (v2) / duyarlılıkta dahil | (eklenecek) | hariç | QDiabetes geliştirme popülasyonuyla uyum |
 | D15 | Outcome için doğrulayıcı ikinci test; random glukoz ≥200 ve yalnız E11 tanısı olay mı | (eklenecek) | tek test; ikisi de olay | ADA ikinci test ister |
@@ -39,6 +39,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D19 | Adım 3'ü tetikleyecek "yeterli performans" | (eklenecek) | — | Veriye bakmadan önce yazılmalı |
 | D20 | Fairness alt grupları ve kabul edilebilir fark | (eklenecek) | cinsiyet, yaş bandı, etnisite | — |
 | D21 | Kod listelerinin klinik onayı; model card klinik bölümleri | — | — | Evidence package (Critical KPI) için şart |
+| D23 | LPRS "yüksek risk" eşiği (skor ≥ x) | `lprs_high_risk_threshold` | **None** [KARAR BEKLİYOR] | LPRS sabit terimsiz doğrusal öngörücü; yayımlanmış mutlak eşik bulunamadı. Yazarlar sıralama kullandı: pratik başına en yüksek %10 (Let's Prevent / Walking Away) ya da hedef duyarlılık (ör. %80). Seçilene kadar C1 Leicester yakalama oranı ve C3 eşik metrikleri "Pending". Dağılım NB1 `score_summary.csv`'de (medyan, IQR) |
 | D22 | C1/C2 duyarlılığında referans tarihi: veri sonu mu, statüyü belirleyen ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; birincil seçilmeli | Veri sonu: tanı sonrası kayıtlar (tedavi sonrası BMI, ilaç) skora girer, yaş veri sonuna göre. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun ama o gün kayıtlar daha seyrek → hesaplanabilirlik düşer |
 
 ## 3. Dış taraflar
@@ -56,7 +57,11 @@ evidence package kontrol listesi; iki haftalık rapor formatı.
 Layer 2 koşullu).
 
 ## 4. Bilinen kısıtlar [KISIT]
-- LRS kesitsel tespit skoru; C3'te incident benchmark'ı dış kullanımdır.
+- Leicester skorları (LPRS, LRA) kesitsel tespit skorlarıdır; C3'te incident benchmark'ı dış kullanımdır.
+- LPRS (varsayılan, K-LRS) Leicester'da (UK, çok etnili) 40–75 yaşta geliştirildi: etnisite ikili (beyaz /
+  BME) — UAE'de Emirati, Arap ve Güney Asyalı aynı katsayıyı alır; antihipertansif yalnız ilaç kaydından
+  (HT tanısı girdi değil); sabit terimsiz doğrusal öngörücü → mutlak risk ve kalibrasyon yok; 40–75 dışı
+  ekstrapolasyon (NB1 `lrs_outside_dev_age_pct`).
 - C1/C2 yalnızca pozitif vaka içerir; buradan performans metriği çıkmaz.
 - QDiabetes 5 y riski 10 y baseline'dan varsayımla türetiliyor (D11).
 - İndirgenmiş Model A (D9) ve Townsend = 0 (D10) karşılaştırılabilirliği sınırlar.
@@ -77,6 +82,7 @@ Layer 2 koşullu).
 | 2026-11-13 | D10: Townsend kapsam dışı → 0 | ensargunesdogdu | `qd_townsend = 0.0` |
 | 2026-11-13 | D16: gebelik verisi yok → dışlama kuralı gerekmiyor | ensargunesdogdu | — |
 | 2026-11-13 | D18: KVH tanımı NABIDH Data availability listesindeki gibi (I20–I25, I50, I6x, G45) | ensargunesdogdu | `codelists.DX["cvd"]` (zaten aynı) |
+| 2026-11-14 | K-LRS: NABIDH teslim listesinde bel çevresi yok → seçenek **(b)**: bel çevresi istemeyen **Leicester Practice Risk Score** (Gray LJ et al., Diabetologia 2012;55(4):959–966; yaş, cinsiyet, BME, BMI, aile öyküsü, antihipertansif ilaç) varsayılan. LRA 2010 (bel zorunlu) karşılaştırma için kalır; (c) bel puanı = 0 / BMI'den türetme valide değil, kullanılmaz. Eşik ayrı karar (D23). Kaynak: Slack #sandboxteam 2026-11-13 — ensargunesdogdu: "b seçeceği ile hazırlatıyorum kodu" (sic); Zeynep Pelin Polat 🙏 tepkisiyle onayladı | ensargunesdogdu + Zeynep Pelin Polat | `lrs_variant = "practice_2012"`, `scores/lprs.py`; NB0 Framework Match bel çevresini artık istemiyor (A5) |
 | 2026-11-14 | Çalışma çerçevesi (anlatım kaydı): Study Flow 1 = C1, birincil amaç bilinen pozitiflerde QDiabetes / LRS'in "yüksek risk" deme oranı (duyarlılık) · 2 = C2, tamlık şartı olmadan değişkenlerin NABIDH'te varlığı · 3 = C3, diyabet gelişmeyenlerde "diyabet değil" deme kapasitesi + parametre ayarıyla (recalibration) iyileştirme · 4 = UAE'ye özgü, lab'sız model; sonuçlar kötüyse NABIDH'ten yeni veri teslimiyle | ensargunesdogdu | NB1 §4 `nb01/c1_detection_rate.csv` (`metrics.detection_rate`); D22 |
 ``
 D1 - 90 Gün

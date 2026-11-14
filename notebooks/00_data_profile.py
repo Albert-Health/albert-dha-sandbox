@@ -38,6 +38,7 @@ from sandbox import codelists, cohorts, phenotype, sdc
 from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
+from sandbox.scores import lrs
 
 SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
 pd.set_option("display.width", 160)
@@ -171,10 +172,13 @@ print(unmapped if len(unmapped) else "Eşlenemeyen kod yok")
 #
 # C1/C2: veri sonu itibarıyla tüm geçmiş ("as currently recorded").
 # C3: index tarihinde, prediktör lookback = `P["predictor_lookback_days"]`.
+# Bel çevresi yalnız etkin Leicester varyantı isterse (`lrs_variant = "assessment_2010"`) raporlanır;
+# varsayılan LPRS (Gray 2012) bel istemez (K-LRS).
 
 # %%
 comp_rows, joint_rows, snaps = [], [], {}
 ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
+extra_cols = ["waist_cm"] if lrs.needs_waist(P) else []
 for c, d in data.items():
     if c == "c3":
         snap = cohorts.build_c3(d, P)["cohort"]
@@ -185,7 +189,7 @@ for c, d in data.items():
         snap = phenotype.core_snapshot(d, ref, lookback_days=None, p=P).join(pool["status"].rename("group"))
     snaps[c] = snap
     for grp, s in [("all", snap), *snap.groupby("group")]:
-        for col in ok_cols + ["waist_cm"]:
+        for col in ok_cols + extra_cols:
             ok = s[col].notna() if col == "waist_cm" else s[col].astype(bool)
             comp_rows.append({"cohort": c, "group": grp, "variable": col.replace("ok_", ""),
                               "n": len(s), "complete_pct": round(100 * ok.mean(), 1)})
@@ -198,7 +202,7 @@ comp = pd.DataFrame(comp_rows)
 joint = pd.DataFrame(joint_rows)
 run.save_table(comp, "nb00/core_variable_completeness.csv", "Değişken bazında tamlık")
 run.save_table(sdc.suppress_small_counts(joint, ["joint_core8_n", "joint_lrs_n"]),
-               "nb00/joint_completeness.csv", "Birlikte tamlık (8 çekirdek, LRS)")
+               "nb00/joint_completeness.csv", f"Birlikte tamlık (8 çekirdek, {lrs.label(P)})")
 print(comp[comp["group"] == "all"].pivot(index="variable", columns="cohort", values="complete_pct").to_string())
 print(joint.to_string(index=False))
 
@@ -291,9 +295,12 @@ for c in data:
                 "target": ">= 90%", "actual": f"{sub['complete_pct'].min():.1f}%",
                 "met": bool(sub["complete_pct"].min() >= 90),
                 "weakest_variable": sub.sort_values("complete_pct").iloc[0]["variable"]})
-not_received = fm[(~fm["received"]) & fm["group"].isin(
-    ["t2d", "prediabetes", "hypertension", "cvd", "family_history_dm", "antihypertensive",
-     "antidiabetic", "hba1c (4548-4)", "fpg (1558-6)", "bmi", "height_cm", "weight_kg", "waist_cm", "smoking_status"])]
+# Gerekli gruplar: 8 çekirdek değişken + statü/outcome kodları + etkin Leicester varyantının ek girdisi
+# (bel çevresi yalnız assessment_2010'da; LPRS istemez — K-LRS, A5).
+required_groups = ["t2d", "prediabetes", "hypertension", "cvd", "family_history_dm", "antihypertensive",
+                   "antidiabetic", "hba1c (4548-4)", "fpg (1558-6)", "bmi", "height_cm", "weight_kg",
+                   "smoking_status"] + (["waist_cm"] if lrs.needs_waist(P) else [])
+not_received = fm[(~fm["received"]) & fm["group"].isin(required_groups)]
 kpi.append({"kpi": "Applicant Data Requirement Framework Match", "cohort": "all", "target": "Match",
             "actual": "Match" if not_received.empty else f"{not_received['group'].nunique()} grup eksik",
             "met": not_received.empty,
@@ -306,6 +313,8 @@ run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
                                              kpi[kpi["cohort"] != "all"].set_index("cohort").iterrows()},
                "framework_match": bool(not_received.empty),
                "framework_missing_groups": sorted(not_received["group"].unique().tolist()),
+               "framework_required_groups": required_groups,
+               "lrs_variant": P["lrs_variant"],
                "schema_errors": int((val["severity"] == "ERROR").sum()),
                "schema_warnings": int((val["severity"] == "WARN").sum())},
               "nb00/kpi_values.json", "NB0 KPI girdileri")

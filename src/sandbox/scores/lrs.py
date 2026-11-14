@@ -1,4 +1,13 @@
-"""Leicester Risk Assessment (LRA / Diabetes UK risk score) — puan tablosu.
+"""Leicester skorları — varyant seçici + Leicester Risk Assessment (LRA, 2010) puan tablosu.
+
+`score(snap, p)` `p["lrs_variant"]`e göre çalışır:
+- "practice_2012": Leicester Practice Risk Score (Gray 2012, bel çevresi YOK) → `scores/lprs.py`.
+  [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat] K-LRS (b) — varsayılan.
+- "assessment_2010": Leicester Risk Assessment (Gray 2010, 0–47 puan, bel çevresi zorunlu) → aşağıda.
+Çıktı sütunları her iki varyantta aynıdır (`lrs_score`, `lrs_computable`, `lrs_missing`, …) +
+`lrs_variant`.
+
+--- Leicester Risk Assessment (LRA / Diabetes UK risk score) ---
 
 Kaynak: Gray LJ et al., Diabet Med 2010;27:887–895 (Leicester Risk Assessment score).
 Toplam 0–47; kategoriler NHS Health Check raporuyla doğrulandı (düşük 0–6, artmış 7–15,
@@ -16,6 +25,14 @@ import pandas as pd
 
 from .. import codelists
 from ..config import PARAMS
+from . import lprs
+
+VARIANTS = {
+    "practice_2012": {"label": "LPRS (Gray 2012 — bel çevresiz)", "needs_waist": False,
+                      "threshold_param": "lprs_high_risk_threshold", "points": False},
+    "assessment_2010": {"label": "LRA (Gray 2010 — 0–47 puan)", "needs_waist": True,
+                        "threshold_param": "lrs_high_risk_threshold", "points": True},
+}
 
 POINTS = {
     "age": [(0, 50, 0), (50, 60, 5), (60, 70, 9), (70, 200, 13)],      # [alt, üst)
@@ -37,8 +54,37 @@ def _band(x: pd.Series, bands) -> pd.Series:
     return out
 
 
+def variant(p: dict = PARAMS) -> str:
+    v = p["lrs_variant"]
+    if v not in VARIANTS:
+        raise ValueError(f"lrs_variant {v!r} bilinmiyor; seçenekler: {sorted(VARIANTS)}")
+    return v
+
+
+def label(p: dict = PARAMS) -> str:
+    """Tablolarda görünen ad, ör. "LPRS (Gray 2012 — bel çevresiz)"."""
+    return VARIANTS[variant(p)]["label"]
+
+
+def needs_waist(p: dict = PARAMS) -> bool:
+    return VARIANTS[variant(p)]["needs_waist"]
+
+
+def threshold(p: dict = PARAMS):
+    """Etkin varyantın yüksek risk eşiği; None = karar yok → eşik metrikleri "Pending"."""
+    return p[VARIANTS[variant(p)]["threshold_param"]]
+
+
 def score(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
-    """phenotype.core_snapshot → LRS puanı. Eksik girdi → NaN + lrs_missing nedeni."""
+    """phenotype.core_snapshot → etkin Leicester varyantının skoru (+ `lrs_variant`)."""
+    v = variant(p)
+    x = lprs.score(snap, p) if v == "practice_2012" else score_assessment_2010(snap, p)
+    x["lrs_variant"] = v
+    return x
+
+
+def score_assessment_2010(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
+    """phenotype.core_snapshot → LRA 2010 puanı. Eksik girdi → NaN + lrs_missing nedeni."""
     eth = snap["ethnicity"].astype("string").str.strip().str.lower()
     unknown = eth.isna() | eth.isin(codelists.ETHNICITY_UNKNOWN)
     eth_pts = pd.Series(np.where(eth.isin(codelists.LRS_WHITE).fillna(False), 0, POINTS["non_white"]),
