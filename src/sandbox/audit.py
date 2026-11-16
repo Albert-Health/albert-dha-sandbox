@@ -58,6 +58,13 @@ def _versions() -> dict:
             out[mod] = __import__(mod).__version__
         except Exception:
             out[mod] = None
+    # Opsiyonel IRIS sürücüleri (io/iris.py): yalnızca kuruluysa, import etmeden
+    from importlib import metadata
+    for dist in ("intersystems-irispython", "pyodbc"):
+        try:
+            out[dist] = metadata.version(dist)
+        except metadata.PackageNotFoundError:
+            pass
     return out
 
 
@@ -109,6 +116,13 @@ class Run:
                     "bytes": p.stat().st_size, "sha256": sha256_file(p)}
             self.record["inputs"].append(item)
             self._append({"event": "input", "run_id": self.run_id, **item})
+
+    def add_query_input(self, target: str, query: str, rows: int, sha256: str, label: str = "") -> None:
+        """Dosya olmayan girdi (IRIS sorgusu): hedef (host:port/NAMESPACE — şifre / parametre yok),
+        çalıştırılan SELECT, satır sayısı ve sonucun (CSV metni) SHA-256'sı."""
+        item = {"query": query, "target": target, "rows": int(rows), "sha256": sha256, "label": label}
+        self.record["inputs"].append(item)
+        self._append({"event": "input", "run_id": self.run_id, **item})
 
     def path(self, relname: str) -> Path:
         p = self.dir / relname

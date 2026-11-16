@@ -1,6 +1,8 @@
 # --- Veri: hiçbir hasta verisi (gerçek veya sentetik) repoya girmez ---
 data/**/raw/
+data/**/iris/
 data/canonical/
+*.sqlite
 !data/**/.gitkeep
 
 # --- Çalıştırma çıktıları (enclave'de üretilir) ---

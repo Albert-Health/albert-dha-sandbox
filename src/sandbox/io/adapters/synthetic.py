@@ -5,6 +5,7 @@ medications, observations, labs. İlk satırda "# SYNTHETIC ..." bandı olabilir
 """
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -34,6 +35,11 @@ def read_raw_csv(path: Path, sep: str = ",", encoding: str = "utf-8-sig") -> pd.
                 break
     return pd.read_csv(path, skiprows=skip, dtype=str, keep_default_na=False,
                        na_values=[""], encoding=encoding, sep=sep)
+
+
+def read_raw_csv_text(text: str, sep: str = ",") -> pd.DataFrame:
+    """read_raw_csv ile aynı kurallar, bellekteki CSV metni için (IRIS sorgu sonucu, io/iris.py)."""
+    return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False, na_values=[""], sep=sep)
 
 
 def load(raw_dir: Path) -> Dataset:

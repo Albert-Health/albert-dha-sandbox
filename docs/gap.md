@@ -1,6 +1,6 @@
 # Açık işler, kararlar ve bilinen kısıtlar
 
-Son güncelleme: 2026-11-14. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
+Son güncelleme: 2026-11-16. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
 danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** raporlanacak bilinen sınırlama.
 
 ## 1. Kod — kalan işler
@@ -8,12 +8,13 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 |---|---|---|---|
 | K1 | 100k sentetik veride uçtan uca çalıştırma (build → NB0 → NB1 → NB2 → KPI) | [AÇIK] | Mini veride geçti; 44k C3'te bootstrap süresi/bellek görülmedi |
 | K2 | Eksik veri stratejisi: complete-case (mevcut) vs multiple imputation (QDiabetes orijinal yöntemi) | [AÇIK] + [KARAR BEKLİYOR] | Mini veride QDiabetes yalnızca %3 hastada hesaplanabiliyor; parametreli yapılmalı |
-| K3 | NABIDH adapter MAPPING (`io/adapters/nabidh.py`) | [AÇIK] | Enclave'de dosya/sütun adları görülünce |
-| K4 | Offline kurulum paketi (wheel'ler) | [AÇIK] + [DIŞ] | VM OS / Python sürümü bilinmiyor |
+| K3 | NABIDH adapter MAPPING (`io/adapters/nabidh.py`) | [AÇIK] | Enclave'de IRIS şeması / dosya ve sütun adları görülünce: SOURCES (`table` / `file`, `columns`), IRIS_COHORTS (namespace / şema), tarih biçimi |
+| K4 | VM ortamı (masaüstü, IntelliJ, Python paketleri, IRIS sürücüleri, GitHub erişimi) | [DIŞ] — DHA çözüyor | Bizde iş yok; yalnız not. Gereksinimler DHA'ya iletildi (Claude Docs: "Data Exploration Environment – VM Requirements"). Offline wheel paketi gerekmiyor |
 | K5 | Leicester katsayı / puanlarının birincil makalelerle teyidi | [AÇIK] | **LPRS (varsayılan, K-LRS):** katsayılar ilk yazarın (L. J. Gray) Leicester Diabetes Centre sunumundaki formülden alındı (Diabetologia 2012;55(4):959–66'ya atıflı); makale tam metni paywall'da — tablo/ekle karşılaştırılmalı. **LRA 2010** (artık yalnız karşılaştırma): madde puanları birincil tablodan teyit; kategoriler NHS Health Check belgesiyle doğrulandı |
 | K6 | Evidence package şablonlarının doldurulması (`docs/evidence_package/filled/`) | [AÇIK] + [KARAR BEKLİYOR] | Doldurulana kadar KPI "Not Met" → graduation ön değerlendirmesi "Do Not Graduate" |
 | K7 | Adım 3 / UAE modeli (`notebooks/03_uae_model.py`) = Study Flow 4. basamak | Koşullu | Yürütülürse NABIDH'ten yeni veri teslimi istenir. Keşif–sınama ayrımı, tanı-öncesi tampon, girdi çiti (app'te sorulabilir, lab yok); tüm popülasyona uygulanabilir olmalı |
 | K8 | Sentetik veri üreticisi repoda yok | [KISIT] | 100k sentetik veri ekip içinde ayrı paylaşılıyor |
+| K9 | IRIS girdisi (`io/iris.py`, `nabidh.load_iris`, `ingest_nabidh --input iris`) | Yapıldı (2026-11-16) | NABIDH verisi DHA'da InterSystems IRIS'te (`jdbc:IRIS://…`). Ham dosya ve IRIS aynı eşlemeden geçer; IRIS sonucu `data/nabidh_iris/raw/` altına snapshot. SQLite ile prova edildi; gerçek IRIS'e bağlantı enclave'de denenecek (sürücü: `intersystems-irispython`) |
 
 ## 2. Medikal ekipten kararlar (config parametresiyle)
 | # | Karar | Parametre | Varsayılan | Bağlam |
@@ -43,8 +44,8 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D22 | C1/C2 duyarlılığında referans tarihi: veri sonu mu, statüyü belirleyen ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; birincil seçilmeli | Veri sonu: tanı sonrası kayıtlar (tedavi sonrası BMI, ilaç) skora girer, yaş veri sonuna göre. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun ama o gün kayıtlar daha seyrek → hesaplanabilirlik düşer |
 
 ## 3. Dış taraflar
-**DHA / NABIDH [DIŞ]:** C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec'e göre evet; NB2'nin duyarlılık / AUROC / kalibrasyonu buna dayanır — yalnız "gelişmeyenler" teslim edildiyse C3'ten yalnız özgüllük çıkar); veri sözlüğü ve dosya formatı; etnisite/uyruk kategori listesi; birimler;
-C3'te cap/örneklem neden uygulandı ve tam eligible N; VM ortamı (OS, Python, pip, Jupyter);
+**DHA / NABIDH [DIŞ]:** C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec'e göre evet; NB2'nin duyarlılık / AUROC / kalibrasyonu buna dayanır — yalnız "gelişmeyenler" teslim edildiyse C3'ten yalnız özgüllük çıkar); veri sözlüğü; IRIS namespace adı, NABIDH verisinin hangi şema / tablolarda olduğu, kohortların nasıl ayrıldığı (şema başına mı, kohort tablosu mu); etnisite/uyruk kategori listesi; birimler;
+C3'te cap/örneklem neden uygulandı ve tam eligible N; VM ortamı (K4 — DHA çözüyor);
 enclave'den çıktı çıkarma kuralları (küçük hücre eşiği, figür onayı).
 
 **DFF / Precoh [DIŞ]:** "Joint Completeness — QDiabetes"nin 8 çekirdek değişkenle yeniden tanımı;

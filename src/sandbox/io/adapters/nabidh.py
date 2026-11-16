@@ -5,11 +5,24 @@ Patient profile · tanı (ICD-10) · Observation (lab + vital, LOINC) · SocialH
 FamilyHistory (diyabet aile öyküsü) · Medication (çalışma ilaçları) · Encounter (yalnız C3).
 Ham dosyalar: data/nabidh/raw/<c1|c2|c3>/ (DHA'nın verdiği hâliyle; dokunulmaz).
 
+İki girdi yolu, aynı eşleme:
+- ham dosya  `load(raw_dir, kohort)`            her kaynağın `file`'ı okunur (data/nabidh/raw/<kohort>/)
+- IRIS       `load_iris(conn, kohort)`          DHA'daki InterSystems IRIS'ten (io/iris.py) her kaynağın
+             `table`'ı (ya da `query`'si) okunur; sonuç ham dosyadaki gibi metne çevrilir ve
+             `snapshot_dir` verilirse aynı `file` adlarıyla CSV olarak yazılır → o klasör sonra
+             ham dosya yolu ile birebir tekrar okunabilir (tekrarlanabilirlik, audit hash'i).
+Sütun eşlemesi, filtre, tarih, değer sözlükleri ve işleyiciler iki yolda ortaktır.
+
 Enclave'de yapılacak iş (kod değişikliği gerekmemeli):
-1. SOURCES'taki dosya ve sütun adlarını gerçek adlarla değiştir. Aşağıdakiler örnek adlardır;
-   tools/make_nabidh_dryrun.py prova verisini bu adlarla üretir.
-2. Tarih biçimi ISO değilse DATE_FORMAT'ı ayarla (ör. "%d/%m/%Y"); ayraç / kodlama CSV_OPTIONS'ta.
-3. tools/ingest_nabidh.py'yi çalıştır. outputs/<run_id>/ingest/<kohort>_value_counts.csv'de
+1. SOURCES'taki dosya / tablo ve sütun adlarını gerçek adlarla değiştir. Aşağıdakiler örnek adlardır;
+   tools/make_nabidh_dryrun.py prova verisini (CSV + IRIS yerine SQLite) bu adlarla üretir.
+   IRIS: IntelliJ Database aracında şemaya bak; `table` = "<ŞEMA>.<Tablo>" ({schema} ve {cohort}
+   yer tutucuları IRIS_COHORTS'tan doldurulur). Sütun adları büyük/küçük harf duyarsız eşlenir ve
+   yalnızca eşlemede geçen sütunlar çekilir (kimlik bilgisi gibi fazlası gelmez). Birleştirme / filtre
+   gerekirse kaynağa tam `query` yaz (yalnız SELECT; sütunları AS ile `columns` adlarına çevir).
+2. Tarih biçimi ISO değilse DATE_FORMAT'ı ayarla (ör. "%d/%m/%Y"; IRIS iç tarih sayısı için
+   "horolog" = 1840-12-31'den gün, "gün,saniye" de olur); ayraç / kodlama CSV_OPTIONS'ta.
+3. tools/ingest_nabidh.py'yi çalıştır (IRIS için --input iris). outputs/<run_id>/ingest/<kohort>_value_counts.csv'de
    "unmapped" görünen değerler için SMOKING_VALUES, FH_STATUS_VALUES, FH_RELATION_DEGREE ve
    codelists.NATIONALITY_COUNTRIES'i genişlet; tekrar çalıştır.
 
@@ -31,59 +44,74 @@ from pathlib import Path
 import pandas as pd
 
 from ... import codelists
+from .. import iris
 from ..schema import SCHEMA, TABLES, Dataset, coerce
 from .synthetic import read_raw_csv
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
-DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"
+DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"; "horolog" (IRIS)
+HOROLOG_EPOCH = pd.Timestamp("1840-12-31")   # IRIS $HOROLOG: gün 0
+
+# IRIS'te kohort başına yer tutucular: `table` / `query` içindeki {schema} vb. buradan, {cohort} kohort adından.
+# ÖRNEK değerler — enclave'de IntelliJ'de görülen namespace / şema adlarıyla değiştir. DHA kohortları tek
+# şemada bir kohort tablosuyla veriyorsa: kaynaklara JOIN'li `query` yaz, buraya da o tablonun adını koy.
+IRIS_COHORTS: dict[str, dict[str, str]] = {
+    "c1": {"schema": "NABIDH_C1"},
+    "c2": {"schema": "NABIDH_C2"},
+    "c3": {"schema": "NABIDH_C3"},
+}
 
 # Kaynak tanımı:
-#   file              kohort klasöründeki dosya adı
+#   file              kohort klasöründeki dosya adı (IRIS'te: snapshot dosyasının adı)
+#   table             IRIS tablosu, ör. "{schema}.Patient" (IRIS_COHORTS yer tutucuları)
+#   query             (isteğe bağlı) table yerine tam SELECT; sütunları `columns` adlarıyla döndürmeli
 #   kind              yukarıdaki kaynak türlerinden biri
 #   columns           {kanonik_ad: kaynak_sütun} — zorunlu; yoksa KeyError
 #   optional_columns  {kanonik_ad: kaynak_sütun} — varsa alınır
 #   constants         {kanonik_ad: değer} — sütun yoksa veya boşsa bu değer
 #   filter            {kaynak_sütun: [izinli değerler]} — büyük/küçük harf duyarsız satır seçimi
-#   optional          True → dosya yoksa atlanır (ör. encounter yalnız C3'te)
+#   optional          True → dosya / tablo yoksa atlanır (ör. encounter yalnız C3'te)
 #   date_format       bu kaynak için DATE_FORMAT'ı ezer
 SOURCES: dict[str, dict] = {
     "patient_profile": {
-        "file": "patients.csv", "kind": "patients",
+        "file": "patients.csv", "table": "{schema}.Patient", "kind": "patients",
         "columns": {"patient_id": "patient_id", "sex": "sex", "date_of_birth": "date_of_birth",
                     "nationality": "nationality"},
         "optional_columns": {"ethnicity_raw": "ethnicity", "facility_id": "facility_id"},
     },
     "diagnoses": {
-        "file": "diagnoses.csv", "kind": "conditions",
+        "file": "diagnoses.csv", "table": "{schema}.Diagnosis", "kind": "conditions",
         "columns": {"patient_id": "patient_id", "code": "code", "date": "diagnosis_date"},
         "optional_columns": {"code_system": "code_system", "description": "description"},
         "constants": {"code_system": "ICD-10"},
     },
     "observations": {
-        "file": "observations.csv", "kind": "measurements",
+        "file": "observations.csv", "table": "{schema}.Observation", "kind": "measurements",
         "columns": {"patient_id": "patient_id", "code": "loinc", "value": "value", "date": "date"},
         "optional_columns": {"test_name": "name", "unit": "unit", "code_system": "code_system"},
         "constants": {"code_system": "LOINC"},
     },
     "social_history": {
-        "file": "social_history.csv", "kind": "smoking",
+        "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
         "columns": {"patient_id": "patient_id", "value": "value", "date": "date"},
         "optional_columns": {"code": "code", "item": "item"},
         # SocialHistory sigara dışı kalemler de içeriyorsa: {"item": ["Tobacco smoking status"]}
         "filter": None,
     },
     "family_history": {
-        "file": "family_history.csv", "kind": "family_history",
+        "file": "family_history.csv", "table": "{schema}.FamilyHistory",
+        "kind": "family_history",
         "columns": {"patient_id": "patient_id", "date": "date"},
         "optional_columns": {"condition": "condition", "status": "status", "relation": "relation"},
     },
     "medications": {
-        "file": "medications.csv", "kind": "medications",
+        "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
         "columns": {"patient_id": "patient_id", "atc_code": "atc_code", "date": "prescription_date"},
         "optional_columns": {"drug_name": "drug_name", "route": "route"},
     },
     "encounters": {
-        "file": "encounters.csv", "kind": "encounters", "optional": True,
+        "file": "encounters.csv", "table": "{schema}.Encounter", "kind": "encounters",
+        "optional": True,
         "columns": {"patient_id": "patient_id", "date": "encounter_date"},
         "optional_columns": {"encounter_id": "encounter_id", "facility_id": "facility_id",
                              "encounter_type": "encounter_type"},
@@ -158,11 +186,11 @@ def _value_counts(source: str, field: str, s: pd.Series, top: int = 50) -> list[
     return [{"source": source, "field": field, "value": str(k), "n_rows": int(v)} for k, v in vc.items()]
 
 
-def _select(df: pd.DataFrame, spec: dict, name: str) -> tuple[pd.DataFrame, dict]:
+def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -> tuple[pd.DataFrame, dict]:
     cols, opt = spec["columns"], spec.get("optional_columns", {})
     missing = [src for src in cols.values() if src not in df.columns]
     if missing:
-        raise KeyError(f"{name} ({spec['file']}): kaynakta bulunmayan zorunlu sütunlar: {missing}. "
+        raise KeyError(f"{name} ({where or spec.get('file')}): kaynakta bulunmayan zorunlu sütunlar: {missing}. "
                        f"Mevcut: {list(df.columns)}")
     info = {"rows_read": int(len(df))}
     for src, allowed in (spec.get("filter") or {}).items():
@@ -187,10 +215,25 @@ def _parse_dates(df: pd.DataFrame, spec: dict, info: dict) -> pd.DataFrame:
         if col not in df:
             continue
         raw = df[col].astype("string").str.strip()
-        parsed = pd.to_datetime(raw, format=fmt, errors="coerce") if fmt else pd.to_datetime(raw, errors="coerce")
+        if fmt == "horolog":
+            parsed = parse_horolog(raw)
+        elif fmt:
+            parsed = pd.to_datetime(raw, format=fmt, errors="coerce")
+        else:
+            parsed = pd.to_datetime(raw, errors="coerce")
         info[f"unparseable_{col}"] = int((parsed.isna() & raw.notna() & (raw != "")).sum())
         df[col] = parsed
     return df
+
+
+def parse_horolog(raw: pd.Series) -> pd.Series:
+    """IRIS iç tarihi ($HOROLOG): "gün" ya da "gün,saniye" (gün 0 = 1840-12-31) → datetime."""
+    parts = raw.astype("string").str.strip().str.split(",", n=1)
+    day = pd.to_numeric(parts.str[0], errors="coerce")
+    sec = pd.to_numeric(parts.str[1], errors="coerce").fillna(0)
+    day = day.where(day.isna() | (day == day.round()))          # kesirli gün = geçersiz
+    out = HOROLOG_EPOCH + pd.to_timedelta(day, unit="D") + pd.to_timedelta(sec, unit="s")
+    return pd.Series(out, index=raw.index)
 
 
 def _is_diabetes_condition(cond: pd.Series) -> pd.Series:
@@ -315,27 +358,94 @@ HANDLERS = {
 # Yükleme
 # --------------------------------------------------------------------------
 def load(raw_dir: Path, cohort: str, sources: dict | None = None) -> tuple[Dataset, dict]:
-    """Bir kohort klasörünü okur. Dönüş: (kanonik Dataset, rapor).
+    """Ham dosya yolu: bir kohort klasörünü okur. Dönüş: (kanonik Dataset, rapor).
 
-    Rapor: {"sources": {ad: {file, rows_read, rows_out, unparseable_*, absent_optional_columns, ...}},
-            "value_counts": [{source, field, value, n_rows}, ...]} — eşleme sözlüklerini genişletmek için.
+    Rapor: {"input": "files", "sources": {ad: {file, rows_read, rows_out, unparseable_*,
+            absent_optional_columns, ...}}, "value_counts": [{source, field, value, n_rows}, ...]}
+            — eşleme sözlüklerini genişletmek için.
     """
-    sources = sources or SOURCES
     raw_dir = Path(raw_dir)
-    parts: dict[str, list[pd.DataFrame]] = {t: [] for t in TABLES}
-    report: dict = {"cohort": cohort, "sources": {}, "value_counts": []}
-    for name, spec in sources.items():
+
+    def read(name: str, spec: dict):
         p = raw_dir / spec["file"]
         if not p.exists():
             if spec.get("optional"):
-                report["sources"][name] = {"file": spec["file"], "status": "absent (optional)"}
-                continue
+                return None, {"file": spec["file"], "status": "absent (optional)"}
             raise FileNotFoundError(f"{name}: {p}")
-        df, info = _select(read_raw_csv(p, **CSV_OPTIONS), spec, name)
+        return read_raw_csv(p, **CSV_OPTIONS), {"file": spec["file"]}
+
+    return _load(cohort, sources or SOURCES, read, "files")
+
+
+def iris_query(conn, spec: dict, name: str, params: dict) -> str:
+    """Kaynağın IRIS sorgusu: tam `query`, ya da `table`'dan yalnızca eşlemede geçen sütunları
+    (büyük/küçük harf duyarsız) `columns` adlarıyla çeken SELECT."""
+    try:
+        if spec.get("query"):
+            return spec["query"].format(**params)
+        table = spec["table"].format(**params)
+    except KeyError as e:
+        raise KeyError(f"{name}: yer tutucu {e} IRIS_COHORTS'ta yok (mevcut: {sorted(params)})") from None
+    have = iris.column_names(conn, table)
+    by_lower = {c.lower(): c for c in have}
+    missing = [c for c in spec["columns"].values() if c.lower() not in by_lower]
+    if missing:
+        raise KeyError(f"{name} ({table}): tabloda bulunmayan zorunlu sütunlar: {missing}. Mevcut: {have}")
+    wanted = [*spec["columns"].values(), *spec.get("optional_columns", {}).values(), *(spec.get("filter") or {})]
+    select = [f"{iris.quote_ident(by_lower[c.lower()])} AS {iris.quote_ident(c)}"
+              for c in dict.fromkeys(wanted) if c.lower() in by_lower]
+    return f"SELECT {', '.join(select)} FROM {table}"
+
+
+def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dict | None = None,
+              snapshot_dir: Path | None = None) -> tuple[Dataset, dict]:
+    """IRIS yolu: DB-API bağlantısından (io/iris.connect) bir kohortu okur. Dönüş `load` ile aynı;
+    rapordaki her kaynakta ayrıca çalıştırılan `query` ve sonucun `sha256`'sı (audit girdisi) bulunur.
+
+    snapshot_dir: her kaynağın sonucu `file` adıyla CSV olarak yazılır — `load(snapshot_dir, kohort)`
+    aynı Dataset'i verir. Eşleme sözlükleri değişince IRIS'e yeniden gitmeden tekrar ingest edilebilir.
+    """
+    params = {"cohort": cohort, **(IRIS_COHORTS.get(cohort, {}) if cohort_params is None else cohort_params)}
+    snap = Path(snapshot_dir) if snapshot_dir else None
+    if snap:
+        snap.mkdir(parents=True, exist_ok=True)
+
+    def read(name: str, spec: dict):
+        try:
+            sql = iris_query(conn, spec, name, params)
+            df, text = iris.fetch(conn, sql)
+        except (KeyError, ValueError):
+            raise                                   # eşleme / sorgu hatası: opsiyonel kaynakta da sessiz geçme
+        except Exception as e:                      # sürücü hatası (ör. tablo yok)
+            if not spec.get("optional"):
+                raise
+            if snap and (snap / spec["file"]).exists():
+                (snap / spec["file"]).unlink()      # önceki snapshot'tan kalan dosya karışmasın
+            return None, {"status": "absent (optional)", "error": f"{type(e).__name__}: {str(e)[:300]}"}
+        info = {"query": sql, "sha256": iris.sha256_text(text)}
+        if snap:
+            p = snap / spec["file"]
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(text)
+            info["snapshot"] = str(p)
+        return df, info
+
+    return _load(cohort, sources or SOURCES, read, "iris")
+
+
+def _load(cohort: str, sources: dict, read, input_kind: str) -> tuple[Dataset, dict]:
+    parts: dict[str, list[pd.DataFrame]] = {t: [] for t in TABLES}
+    report: dict = {"cohort": cohort, "input": input_kind, "sources": {}, "value_counts": []}
+    for name, spec in sources.items():
+        raw, got = read(name, spec)
+        if raw is None:
+            report["sources"][name] = got
+            continue
+        df, info = _select(raw, spec, name, got.get("file") or "IRIS query")
         df = _parse_dates(df, spec, info)
         produced = HANDLERS[spec["kind"]](df, name, report["value_counts"])
-        info.update(file=spec["file"], status="read",
-                    rows_out={t: int(len(d)) for t, d in produced.items()})
+        info.update(got)
+        info.update(status="read", rows_out={t: int(len(d)) for t, d in produced.items()})
         report["sources"][name] = info
         for t, d in produced.items():
             parts[t].append(d)

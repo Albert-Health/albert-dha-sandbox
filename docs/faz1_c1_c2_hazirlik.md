@@ -99,15 +99,19 @@ ilaçları" içinde olabilir) · Townsend.
 ## 4. Enclave'de çalıştırma akışı
 
 ```bash
-# 0. Kurulum ve duman testi
-python -m pip install --no-index --find-links wheels/ -r requirements.txt
+# 0. Kurulum (VM'i DHA hazırlıyor — K4) ve duman testi
 python -m unittest discover -s tests -v
 
-# 1. Ham veri: data/nabidh/raw/c1/, data/nabidh/raw/c2/ (DHA'nın verdiği dosyalar; dokunulmaz)
-# 2. src/sandbox/io/adapters/nabidh.py → SOURCES'taki dosya/sütun adlarını gerçek adlarla değiştir
-#    (tarih ISO değilse DATE_FORMAT, ayraç/kodlama CSV_OPTIONS)
-# 3. Ham → kanonik + değer dağılımı raporu (outputs/<run_id>/ingest/<kohort>_value_counts.csv)
-python tools/ingest_nabidh.py --cohorts c1 c2
+# 1. Veri: DHA InterSystems IRIS'te (jdbc:IRIS://host:port/NAMESPACE). Bağlantı ayarları repo DIŞINDA,
+#    ~/.nabidh_iris (chmod 600): NABIDH_IRIS_URL=…, NABIDH_IRIS_USER=…, NABIDH_IRIS_PASSWORD=…
+#    (ayrıntı: src/sandbox/io/iris.py). Ham dosya teslim edilirse: data/nabidh/raw/<c1|c2>/ (dokunulmaz)
+# 2. IntelliJ Database aracında şemaya bak; src/sandbox/io/adapters/nabidh.py → SOURCES'ta `table`
+#    (IRIS) / `file` ve sütun adlarını, IRIS_COHORTS'ta namespace içindeki şema adlarını gerçek adlarla değiştir
+#    (tarih ISO değilse DATE_FORMAT; IRIS iç tarih sayısı gelirse "horolog")
+# 3. → kanonik + değer dağılımı raporu (outputs/<run_id>/ingest/<kohort>_value_counts.csv)
+python tools/ingest_nabidh.py --input iris --cohorts c1 c2     # snapshot: data/nabidh_iris/raw/<kohort>/
+#    ya da ham dosyadan:  python tools/ingest_nabidh.py --cohorts c1 c2
+#    sözlük değişikliğinden sonra IRIS'e gitmeden:  python tools/ingest_nabidh.py --raw-root data/nabidh_iris/raw
 #    "unmapped" değer varsa (sigara, aile öyküsü, uyruk, kod|birim) adapter sözlüklerini genişlet, 3'ü tekrarla
 # 4. Veri profili
 SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
@@ -123,8 +127,9 @@ Her adımdan sonra `outputs/<run_id>/run_manifest.json` → `"status": "success"
 
 ```bash
 python tools/build_synthetic_cohorts.py
-python tools/make_nabidh_dryrun.py        # → data/nabidh_dryrun/raw/<c1|c2|c3>/ (teslim listesine uygun dosyalar)
+python tools/make_nabidh_dryrun.py        # → data/nabidh_dryrun/raw/<c1|c2|c3>/ + data/nabidh_dryrun/iris/<kohort>.sqlite
 python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
+python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris   # IRIS yolu
 SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py      # NB1, NB2, kpi_report aynı
 ```
 

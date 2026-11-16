@@ -10,9 +10,14 @@ SENTETİK — gerçek hasta verisi değildir. Dosyaların ilk satırı bunu beli
 
 Kullanım:
   python tools/build_synthetic_cohorts.py        # önce (data/canonical/synthetic)
-  python tools/make_nabidh_dryrun.py             # → data/nabidh_dryrun/raw/<c1|c2|c3>/
+  python tools/make_nabidh_dryrun.py             # → data/nabidh_dryrun/raw/<c1|c2|c3>/ (CSV)
+                                                 #   + data/nabidh_dryrun/iris/<c1|c2|c3>.sqlite (IRIS yerine)
   python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
   SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py   (NB1, NB2 aynı)
+
+IRIS yolunun provası (adapter'daki `table` adları, IRIS_COHORTS şemaları; sürücü yerine SQLite):
+  python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
+  → kanonik çıktı, dosya yolundakiyle aynı olmalı (data/canonical/nabidh_dryrun vs nabidh_dryrun_iris)
 """
 from __future__ import annotations
 
@@ -26,9 +31,11 @@ import pandas as pd  # noqa: E402
 from sandbox import codelists  # noqa: E402
 from sandbox.audit import Run  # noqa: E402
 from sandbox.config import CANONICAL_DIR, COHORTS, DATA_DIR  # noqa: E402
-from sandbox.io import schema  # noqa: E402
+from sandbox.io import iris, schema  # noqa: E402
+from sandbox.io.adapters import nabidh  # noqa: E402
 
 OUT_ROOT = DATA_DIR / "nabidh_dryrun" / "raw"
+IRIS_ROOT = DATA_DIR / "nabidh_dryrun" / "iris"
 BANNER = "# SYNTHETIC DRY RUN — NOT REAL PATIENT DATA\n"
 DELIVERED_LABS = ["4548-4", "1558-6", "1521-4"]
 VITAL_LOINC = {"bmi": "39156-5", "height_cm": "8302-2", "weight_kg": "3141-9"}
@@ -100,10 +107,14 @@ def main() -> None:
             old.unlink()
         for fname, df in files.items():
             run.register_output(_write(df, OUT_ROOT / c / fname), f"dry run {c} {fname}")
+        # Aynı tablolar, IRIS'teki adlarıyla (SOURCES[...]["table"], şema öneki olmadan) tek SQLite dosyasında
+        table_of = {spec["file"]: spec["table"].split(".", 1)[-1] for spec in nabidh.SOURCES.values()}
+        db = iris.write_sqlite_standin(IRIS_ROOT / f"{c}.sqlite", {table_of[f]: df for f, df in files.items()})
+        run.register_output(db, f"dry run {c} IRIS stand-in (SQLite)")
         run.log(f"{c} written", files={k: len(v) for k, v in files.items()})
         print(c, {k: len(v) for k, v in files.items()})
     run.finish()
-    print("run:", run.run_id, "→", OUT_ROOT)
+    print("run:", run.run_id, "→", OUT_ROOT, "ve", IRIS_ROOT)
 
 
 if __name__ == "__main__":

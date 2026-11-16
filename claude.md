@@ -23,6 +23,9 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    hasta düzeyi tablo, ekran görüntüsü commit'lenmez. Commit öncesi `git status` kontrol et.
 2. **Enclave = offline.** Bağımlılıklar yalnızca `numpy`, `pandas`, `matplotlib` (Python ≥ 3.10).
    scipy / sklearn / lifelines / statsmodels EKLEME. Ağ çağrısı (HTTP, telemetri, indirme) yazma.
+   Tek istisna: `src/sandbox/io/iris.py` DHA içindeki InterSystems IRIS'e yalnızca SELECT için bağlanır;
+   sürücü (`intersystems-irispython`, yedek `pyodbc`) yalnızca orada ve tembel import edilir — testler ve
+   analiz kodu sürücüsüz çalışır. Bağlantı şifresi repoya, run configuration'a, audit'e girmez.
    Kod hem pandas 2.x hem 3.x ile çalışmalı (ör. `Series.reset_index(names=)` pandas 2'de yok).
 3. **Lab değerleri asla model girdisi değildir.** Yalnızca uygunluk / outcome tanımında kullanılır.
 4. **Her çalıştırma audit'lenir** (KPI: Audit Trail %100, Critical). Notebook/araçlar `audit.Run`
@@ -35,8 +38,8 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    varsayılanını medikal ekip onayı olmadan değiştirme. Karar gelince: config'i güncelle, yorumdaki
    işareti `[KARAR: <tarih>, <kim>]` yap, `docs/OPEN_ITEMS.md`'de "Kararlar" bölümüne işle.
 7. **Kaynak formatı yalnızca adapter'da.** Analiz kodu sadece kanonik şemayı okur
-   (`src/sandbox/io/schema.py`). NABIDH formatı değişirse yalnızca `io/adapters/nabidh.py` (SOURCES ve
-   değer sözlükleri) değişir.
+   (`src/sandbox/io/schema.py`). NABIDH formatı / IRIS şeması değişirse yalnızca `io/adapters/nabidh.py`
+   (SOURCES, IRIS_COHORTS ve değer sözlükleri) değişir. Ham dosya ve IRIS aynı SOURCES eşlemesinden geçer.
 8. **Çıktı ifşa kontrolü:** enclave'den çıkacak tablolarda sayımlar `sdc.suppress_small_counts`
    ile (<10 → "<10"). Hasta kimliği içeren dosya enclave dışına çıkmaz.
 9. **Push yok:** commit serbest, `git push` yalnızca kullanıcı isteyince.
@@ -48,7 +51,9 @@ src/sandbox/
   codelists.py         ICD-10 / SNOMED / ATC / LOINC + uyruk → etnik grup → QDiabetes / LRS eşlemeleri
   io/schema.py         kanonik şema (6 tablo), okuma/yazma, validate()
   io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, SocialHistory,
-                       FamilyHistory, Medication, Encounter → kanonik)
+                       FamilyHistory, Medication, Encounter → kanonik; load = ham dosya, load_iris = IRIS)
+  io/iris.py           IRIS bağlantısı (jdbc:IRIS:// dizesi, ~/.nabidh_iris), SELECT koruması, sorgu → metin
+                       tablosu; prova için SQLite stand-in
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
   scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py (Leicester varyant
@@ -79,7 +84,9 @@ Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
 .venv/bin/python tools/build_evidence_package.py
 # NABIDH adapter provası: make_nabidh_dryrun → ingest_nabidh --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
 #   → SANDBOX_SOURCE=nabidh_dryrun ile NB0/NB1/NB2
-# Enclave: tools/ingest_nabidh.py (data/nabidh/raw/<kohort> → data/canonical/nabidh/), sonra SANDBOX_SOURCE=nabidh
+#   IRIS yolu provası: ingest_nabidh --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
+# Enclave: tools/ingest_nabidh.py --input iris (IRIS → data/nabidh_iris/raw/<kohort> snapshot → data/canonical/nabidh/)
+#   ya da ham dosyadan (data/nabidh/raw/<kohort>); sonra SANDBOX_SOURCE=nabidh
 ```
 
 ## Değişiklik yaparken

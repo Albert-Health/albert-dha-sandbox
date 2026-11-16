@@ -79,7 +79,7 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 ## Kurulum ve çalıştırma
 
 ```bash
-python -m pip install -r requirements.txt        # enclave'de offline wheel ile
+python -m pip install -r requirements.txt        # enclave VM'inde DHA kurar
 python -m unittest discover -s tests -v          # kural testleri
 
 # Sentetik test verisiyle uçtan uca:
@@ -91,9 +91,14 @@ python tools/make_nabidh_dryrun.py
 python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
 SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py
 
-# Enclave'de: ham dosyalar data/nabidh/raw/<c1|c2|c3>/ altına; src/sandbox/io/adapters/nabidh.py içindeki
-# SOURCES'ta dosya/sütun adlarını gerçek adlarla değiştir, sonra:
-python tools/ingest_nabidh.py                    # → data/canonical/nabidh/ + outputs/<run_id>/ingest/
+# IRIS yolunun provası (IRIS yerine SQLite; make_nabidh_dryrun üretir):
+python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
+
+# Enclave'de: veri DHA'nın InterSystems IRIS'inde. Bağlantı ayarları repo dışında ~/.nabidh_iris
+# (NABIDH_IRIS_URL=jdbc:IRIS://host:port/NAMESPACE, NABIDH_IRIS_USER, NABIDH_IRIS_PASSWORD; src/sandbox/io/iris.py).
+# src/sandbox/io/adapters/nabidh.py: SOURCES'ta tablo/sütun adlarını, IRIS_COHORTS'ta şema adlarını gerçek adlarla değiştir:
+python tools/ingest_nabidh.py --input iris       # → data/nabidh_iris/raw/ (snapshot) + data/canonical/nabidh/
+python tools/ingest_nabidh.py                    # ya da ham dosyadan: data/nabidh/raw/<c1|c2|c3>/
 SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
 python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üretir
 ```
@@ -124,7 +129,8 @@ Uzun format, kohort başına 6 tablo, UTF-8 CSV, ISO-8601 tarih, kodlar text:
 
 ## İlkeler
 
-- **Offline:** yalnızca numpy, pandas, matplotlib. Ağ çağrısı yok.
+- **Offline:** yalnızca numpy, pandas, matplotlib. Ağ çağrısı yok. Tek istisna: `src/sandbox/io/iris.py`
+  DHA içindeki IRIS'e yalnızca SELECT için bağlanır (sürücü `intersystems-irispython`, tembel import).
 - **Audit:** her çalıştırma `outputs/audit/audit_log.jsonl`'a ve `outputs/<run_id>/run_manifest.json`'a kod hash'i, girdi hash'leri, parametreler ve tüm çıktıların hash'iyle yazılır.
 - **Lab değerleri yalnızca outcome / uygunluk tanımında** kullanılır, asla model girdisi değildir.
 - Parametreler tek yerde: `src/sandbox/config.py`.

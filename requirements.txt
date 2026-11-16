@@ -3,3 +3,5 @@ numpy>=1.24,<3
 pandas>=2.0,<4
 matplotlib>=3.7
 # Opsiyonel (yoksa kod çalışır): jupyter, ipykernel — notebook arayüzü için
+# Opsiyonel, yalnız IRIS girdisi (src/sandbox/io/iris.py; enclave VM'inde DHA kurar):
+#   intersystems-irispython  — ya da yedek: pyodbc + InterSystems IRIS ODBC sürücüsü

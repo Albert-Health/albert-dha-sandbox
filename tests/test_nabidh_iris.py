@@ -1,0 +1,213 @@
+"""NABIDH IRIS girdisi (io/iris.py + nabidh.load_iris). IRIS yerine SQLite kullanılır: kohort dosyası IRIS
+şeması adıyla bağlanır, böylece adapter'daki `{schema}.Tablo` sorguları olduğu gibi çalışır.
+Ana iddia: aynı ham veri dosyadan da IRIS'ten de okunsa kanonik çıktı birebir aynıdır."""
+import copy
+import datetime as dt
+import decimal
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pandas as pd  # noqa: E402
+
+from sandbox.audit import sha256_file  # noqa: E402
+from sandbox.io import iris  # noqa: E402
+from sandbox.io.adapters import nabidh  # noqa: E402
+from sandbox.io.adapters.synthetic import read_raw_csv  # noqa: E402
+from test_nabidh_adapter import write_raw  # noqa: E402
+
+SCHEMA = "NABIDH_C1"
+
+
+def raw_tables(raw_dir: Path, rename=None, extra=None) -> dict[str, pd.DataFrame]:
+    """Ham dosyalar → {IRIS tablo adı: df}. rename: {tablo: {sütun: yeni ad}}, extra: {tablo: {sütun: değer}}."""
+    out = {}
+    for spec in nabidh.SOURCES.values():
+        p = raw_dir / spec["file"]
+        if p.exists():
+            t = spec["table"].split(".", 1)[-1]
+            df = read_raw_csv(p).rename(columns=(rename or {}).get(t, {}))
+            for col, val in (extra or {}).get(t, {}).items():
+                df[col] = val
+            out[t] = df
+    return out
+
+
+def standin(tmp: Path, tables: dict) -> object:
+    return iris.sqlite_standin({SCHEMA: iris.write_sqlite_standin(tmp / "c1.sqlite", tables)})
+
+
+class TestFilesVsIris(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        t = Path(cls.tmp.name)
+        (t / "raw").mkdir()
+        write_raw(t / "raw")
+        cls.ds_file, cls.rep_file = nabidh.load(t / "raw", "c1")
+        # IRIS tarafında sütun adları büyük harf ve fazladan bir kimlik sütunu: eşleme yine tutmalı,
+        # kimlik sütunu çekilmemeli
+        tables = raw_tables(t / "raw", rename={"Patient": {"patient_id": "PATIENT_ID", "sex": "Sex"}},
+                            extra={"Patient": {"full_name": "SHOULD NOT LEAVE IRIS"}})
+        cls.conn = standin(t, tables)
+        cls.snap = t / "snap"
+        cls.ds_iris, cls.rep_iris = nabidh.load_iris(cls.conn, "c1", snapshot_dir=cls.snap)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        cls.tmp.cleanup()
+
+    def test_same_canonical_tables(self):
+        for t, df in self.ds_file.tables.items():
+            pd.testing.assert_frame_equal(df, self.ds_iris.tables[t], obj=t)
+
+    def test_report(self):
+        self.assertEqual(self.rep_iris["input"], "iris")
+        self.assertEqual(self.rep_file["input"], "files")
+        s = self.rep_iris["sources"]["patient_profile"]
+        self.assertEqual(s["status"], "read")
+        self.assertEqual(s["rows_read"], self.rep_file["sources"]["patient_profile"]["rows_read"])
+        self.assertIn(f"FROM {SCHEMA}.Patient", s["query"])
+        self.assertIn('"PATIENT_ID" AS "patient_id"', s["query"])
+        self.assertNotIn("full_name", s["query"])               # yalnız eşlemedeki sütunlar
+        self.assertEqual(len(s["sha256"]), 64)
+
+    def test_optional_absent_table(self):
+        s = self.rep_iris["sources"]["encounters"]
+        self.assertEqual(s["status"], "absent (optional)")
+        self.assertIn("no such table", s["error"])
+
+    def test_snapshot_reingests_identically(self):
+        ds_snap, _ = nabidh.load(self.snap, "c1")
+        for t, df in self.ds_iris.tables.items():
+            pd.testing.assert_frame_equal(df, ds_snap.tables[t], obj=t)
+        s = self.rep_iris["sources"]["patient_profile"]
+        self.assertEqual(sha256_file(Path(s["snapshot"])), s["sha256"])
+        self.assertNotIn("full_name", (self.snap / "patients.csv").read_text(encoding="utf-8"))
+        self.assertFalse((self.snap / "encounters.csv").exists())
+
+
+class TestIrisSources(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.t = Path(self.tmp.name)
+        (self.t / "raw").mkdir()
+        write_raw(self.t / "raw")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_missing_required_column(self):
+        conn = standin(self.t, raw_tables(self.t / "raw", rename={"Diagnosis": {"code": "dx"}}))
+        with self.assertRaisesRegex(KeyError, r"diagnoses .*bulunmayan zorunlu.*'code'"):
+            nabidh.load_iris(conn, "c1")
+        conn.close()
+
+    def test_explicit_query_and_placeholders(self):
+        tables = raw_tables(self.t / "raw", rename={"Patient": {"patient_id": "PID"}})
+        conn = standin(self.t, tables)
+        src = copy.deepcopy(nabidh.SOURCES)
+        src["patient_profile"]["query"] = ("SELECT PID AS patient_id, sex, date_of_birth, nationality "
+                                           "FROM {schema}.Patient WHERE '{cohort}' = 'c1'")
+        ds, rep = nabidh.load_iris(conn, "c1", sources=src)
+        self.assertEqual(sorted(ds["patients"]["patient_id"]), ["A1", "A2", "A3", "A4"])
+        self.assertIn("'c1' = 'c1'", rep["sources"]["patient_profile"]["query"])
+        src["patient_profile"]["query"] = "SELECT * FROM {nope}.Patient"
+        with self.assertRaisesRegex(KeyError, "yer tutucu"):
+            nabidh.load_iris(conn, "c1", sources=src)
+        conn.close()
+
+    def test_non_select_query_refused(self):
+        conn = standin(self.t, raw_tables(self.t / "raw"))
+        src = copy.deepcopy(nabidh.SOURCES)
+        src["patient_profile"]["query"] = "DELETE FROM {schema}.Patient"
+        with self.assertRaisesRegex(ValueError, "SELECT"):
+            nabidh.load_iris(conn, "c1", sources=src)
+        n = conn.execute(f"SELECT COUNT(*) FROM {SCHEMA}.Patient").fetchone()[0]
+        self.assertEqual(n, 4)
+        conn.close()
+
+    def test_horolog_dates(self):
+        tables = raw_tables(self.t / "raw")
+        dx = tables["Diagnosis"]
+        dx["diagnosis_date"] = ["66839", "65743,3600", "", "not-a-date"]   # 2023-12-31, 2020-12-30 01:00
+        conn = standin(self.t, tables)
+        src = copy.deepcopy(nabidh.SOURCES)
+        src["diagnoses"]["date_format"] = "horolog"
+        ds, rep = nabidh.load_iris(conn, "c1", sources=src)
+        got = ds["conditions"].set_index("patient_id")["date"]
+        self.assertEqual(got["A1"], pd.Timestamp("2023-12-31"))
+        self.assertEqual(got["A2"], pd.Timestamp("2020-12-30 01:00"))
+        self.assertTrue(pd.isna(got["A3"]))
+        self.assertEqual(rep["sources"]["diagnoses"]["unparseable_date"], 1)
+        conn.close()
+
+
+class TestIrisHelpers(unittest.TestCase):
+    def test_parse_url(self):
+        t = iris.parse_url("jdbc:IRIS://dhasbx.example:51772/NABIDH")
+        self.assertEqual((t.host, t.port, t.namespace), ("dhasbx.example", 51772, "NABIDH"))
+        t = iris.parse_url("jdbc:IRIS://10.0.0.5:51772/NABIDH/logfile;user=x;password=secret?ssl=1")
+        self.assertEqual(str(t), "10.0.0.5:51772/NABIDH")            # parametreler (şifre) atılır
+        self.assertEqual(iris.parse_url("host/NS").port, iris.DEFAULT_PORT)
+        with self.assertRaises(ValueError):
+            iris.parse_url("jdbc:sqlserver://host:1433")
+
+    def test_assert_select(self):
+        for ok in ["SELECT 1", "  select a FROM b;", "-- not\nSELECT 1", "WITH x AS (SELECT 1) SELECT * FROM x"]:
+            iris.assert_select(ok)
+        for bad in ["DELETE FROM t", "SELECT 1; DROP TABLE t", "UPDATE t SET a=1", "/* SELECT */ DROP TABLE t"]:
+            with self.assertRaises(ValueError, msg=bad):
+                iris.assert_select(bad)
+
+    def test_as_text_table(self):
+        df = pd.DataFrame([(8517006, dt.date(2021, 1, 2), dt.datetime(2021, 1, 2, 10, 30),
+                            decimal.Decimal("6.80"), 6.8, "x"),
+                           (None, None, None, None, None, "")],
+                          columns=list("abcdef"), dtype=object)
+        out, text = iris.as_text_table(df)
+        self.assertEqual(out.iloc[0].tolist(), ["8517006", "2021-01-02", "2021-01-02 10:30:00", "6.80", "6.8", "x"])
+        self.assertTrue(out.iloc[1].isna().all())                    # NULL ve boş metin → eksik
+        self.assertEqual(len(iris.sha256_text(text)), 64)
+
+    def test_parse_horolog(self):
+        got = nabidh.parse_horolog(pd.Series(["0", "1", "67000,3600", "1.5", "x", None]))
+        self.assertEqual(got[0], pd.Timestamp("1840-12-31"))
+        self.assertEqual(got[1], pd.Timestamp("1841-01-01"))
+        self.assertEqual(got[2], pd.Timestamp("1840-12-31") + pd.Timedelta(days=67000, hours=1))
+        self.assertTrue(got[3:].isna().all())
+
+    def test_settings_from_env_and_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            cred = Path(d) / "cred"
+            cred.write_text("# yorum\nNABIDH_IRIS_URL=jdbc:IRIS://h:51772/NS\nNABIDH_IRIS_USER='reader'\n"
+                            "NABIDH_IRIS_PASSWORD=pw\n", encoding="utf-8")
+            env = {"NABIDH_IRIS_CREDENTIALS": str(cred)}
+            with mock.patch.dict(os.environ, env):
+                for k in (iris.ENV_URL, iris.ENV_USER, iris.ENV_PASSWORD, iris.ENV_ODBC):
+                    os.environ.pop(k, None)
+                s = iris.connection_settings()
+                self.assertEqual((s["target"], s["user"]), ("h:51772/NS", "reader"))
+                self.assertNotIn("pw", str({k: v for k, v in s.items() if k != "_url"}))
+                os.environ[iris.ENV_USER] = "other"                     # ortam değişkeni dosyayı ezer
+                self.assertEqual(iris.connection_settings()["user"], "other")
+                with mock.patch.dict(sys.modules, {"iris": None}):      # sürücü kurulu değil
+                    with self.assertRaisesRegex(RuntimeError, "intersystems-irispython"):
+                        iris.connect()
+            with mock.patch.dict(os.environ, {"NABIDH_IRIS_CREDENTIALS": str(Path(d) / "none")}):
+                for k in (iris.ENV_URL, iris.ENV_ODBC):
+                    os.environ.pop(k, None)
+                with self.assertRaisesRegex(RuntimeError, "bağlantı dizesi yok"):
+                    iris.connection_settings()
+
+
+if __name__ == "__main__":
+    unittest.main()
