@@ -137,7 +137,8 @@ def prepare_inputs(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
     x["bmi"] = snap["bmi"]
     x["ethn_qd"] = codelists.map_ethnicity_qdiabetes(snap["ethnicity"])
     sm = snap["smoking_cat"].astype("float")
-    current = snap["smoking_raw"].astype("string").str.lower().eq("current").fillna(False).to_numpy()
+    # dtype=bool: pandas 2'de boolean → object dizisi olur ve ~ onu -1/-2 tamsayısına çevirir
+    current = snap["smoking_raw"].astype("string").str.lower().eq("current").fillna(False).to_numpy(dtype=bool)
     sm = sm.where(~current, p["qd_smoking_current_category"])
     if p["qd_missing_smoking_as_non"]:
         sm = sm.fillna(0)
