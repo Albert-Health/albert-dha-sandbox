@@ -62,12 +62,44 @@ class TestRunChecks(unittest.TestCase):
     def test_this_environment_without_iris(self):
         with no_iris_settings():
             res = ce.run_checks(quick=True)
-        # Testler çalışıyorsa Python sürümü ve çekirdek paketler yeterlidir; pip vb. ortama göre değişir
-        self.assertEqual(by(res, "python")["Python sürümü"].status, ce.PASS)
-        self.assertEqual([r for r in res if r.group == "core" and r.status == ce.FAIL], [])
+        # Ortamın kendisi hakkında iddia yok (testler yanlış Python'la da koşabilir): yalnız yapı
+        self.assertEqual(set(by(res, "core")), {"numpy", "pandas", "matplotlib", "Proje modülleri (src/sandbox)"})
+        self.assertIn("Sanal ortam", by(res, "python"))
         self.assertEqual(by(res, "iris")["Bağlantı ayarları"].status, ce.SKIP)
         self.assertEqual(by(res, "mapping")["Adapter eşlemesi (IRIS)"].status, ce.SKIP)
         self.assertEqual(by(res, "tests")["Unit testler + pip check"].status, ce.SKIP)
+
+    def test_core_versions_judged(self):
+        fake = {"numpy": "1.26.4", "pandas": "1.5.0", "matplotlib": None}
+        with mock.patch.object(ce, "_dist_version", side_effect=lambda d: fake.get(d, "1.0")):
+            res = by(ce.check_core(), "core")
+        self.assertEqual(res["numpy"].status, ce.PASS)
+        self.assertEqual(res["pandas"].status, ce.FAIL)
+        self.assertIn("1.5.0 kurulu, gerekli >=2.0,<4", res["pandas"].detail)
+        self.assertEqual(res["matplotlib"].status, ce.FAIL)
+        self.assertIn("kurulu değil", res["matplotlib"].detail)
+
+    def test_wrong_interpreter_hint(self):
+        with mock.patch.object(ce.sys, "prefix", "/somewhere/else"):
+            self.assertTrue(ce.wrong_interpreter() or not ce.VENV.is_dir())
+            res = by(ce.check_python(), "python")
+        if ce.VENV.is_dir():
+            self.assertEqual(res["Sanal ortam"].status, ce.WARN)
+            self.assertIn(ce.VENV_HINT, res["Sanal ortam"].detail)
+
+    def test_pip_check_split(self):
+        lines = ["grpcio-tools 1.76.0 has requirement protobuf<7.0.0,>=6.31.1, but you have protobuf 4.25.8.",
+                 "pandas 2.1.4 has requirement numpy>=1.23.2, but you have numpy 1.20.0.",
+                 "foo 1.0 requires python-dateutil, which is not installed."]
+        ours, other = ce.split_pip_check(lines, {"pandas", "numpy", "python-dateutil"})
+        self.assertEqual(ours, lines[1:])
+        self.assertEqual(other, lines[:1])
+
+    def test_dependency_closure_includes_transitive(self):
+        deps = ce.project_dependencies()
+        self.assertIn("pandas", deps)
+        if ce._dist_version("pandas") and ce.version_ok(ce._dist_version("pandas"), ">=2.0"):
+            self.assertIn("python-dateutil", deps)                       # pandas → python-dateutil
 
     def test_iris_required_without_settings_fails(self):
         with no_iris_settings():

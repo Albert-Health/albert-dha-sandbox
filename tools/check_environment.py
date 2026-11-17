@@ -122,6 +122,61 @@ def _gb(n_bytes: float) -> float:
     return n_bytes / 2**30
 
 
+VENV = REPO_ROOT / ".venv"
+VENV_HINT = ".venv/bin/python tools/check_environment.py"
+
+
+def wrong_interpreter() -> bool:
+    """Projenin .venv'i var ama betik başka bir Python'la çalışıyor (ör. terminaldeki global python3)."""
+    return VENV.is_dir() and Path(sys.prefix).resolve() != VENV.resolve()
+
+
+def _norm(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def dependency_closure(roots: list[str]) -> set[str]:
+    """Kök paketler + kurulu metadata'ya göre tüm alt bağımlılıkları (ad, normalize). 'extra' ile gelen
+    isteğe bağlı ekler atlanır; ortam işaretli (python_version …) olanlar ihtiyaten dahil edilir."""
+    seen: set[str] = set()
+    stack = [_norm(x) for x in roots]
+    while stack:
+        n = stack.pop()
+        if n in seen:
+            continue
+        seen.add(n)
+        try:
+            reqs = metadata.requires(n) or []
+        except metadata.PackageNotFoundError:
+            continue
+        for req in reqs:
+            if re.search(r"extra\s*==", req):
+                continue
+            m = re.match(r"[A-Za-z0-9_.\-]+", req)
+            if m:
+                stack.append(_norm(m.group()))
+    return seen
+
+
+def project_dependencies() -> set[str]:
+    """requirements.txt + IRIS sürücüleri (io/iris.py) ve hepsinin alt bağımlılıkları."""
+    roots = [d for d, _ in parse_requirements(REPO_ROOT / "requirements.txt")] + ["intersystems-irispython", "pyodbc"]
+    return dependency_closure(roots)
+
+
+def split_pip_check(lines: list[str], project: set[str]) -> tuple[list[str], list[str]]:
+    """pip check satırları → (projenin bağımlılığına dokunanlar, diğerleri).
+    Biçimler: 'A 1.0 has requirement B<2, but you have B 3.0.' · 'A 1.0 requires B, which is not installed.'"""
+    ours, other = [], []
+    for ln in lines:
+        names = [ln.split()[0]] if ln.split() else []
+        m = re.search(r"(?:has requirement|requires)\s+([A-Za-z0-9_.\-]+)", ln)
+        if m:
+            names.append(m.group(1))
+        (ours if any(_norm(n) in project for n in names) else other).append(ln)
+    return ours, other
+
+
 # --------------------------------------------------------------------------
 # Kontroller
 # --------------------------------------------------------------------------
@@ -130,6 +185,13 @@ def check_python() -> list[Result]:
     v = sys.version_info
     r.append(Result(g, "Python sürümü", PASS if v[:2] >= MIN_PYTHON else FAIL,
                     f"{platform.python_version()} ({sys.executable}); gerekli ≥ {'.'.join(map(str, MIN_PYTHON))}"))
+    if wrong_interpreter():
+        r.append(Result(g, "Sanal ortam", WARN, f"projenin .venv'i var ama bu Python onu kullanmıyor ({sys.prefix}) "
+                                                f"→ {VENV_HINT}"))
+    else:
+        in_venv = sys.prefix != sys.base_prefix
+        r.append(Result(g, "Sanal ortam", PASS if in_venv else INFO,
+                        sys.prefix if in_venv else f"sanal ortam değil ({sys.prefix})"))
     pip_v = _dist_version("pip")
     r.append(Result(g, "pip", PASS if pip_v else FAIL, pip_v or "pip yok (python -m pip çalışmaz)"))
     has_venv = importlib.util.find_spec("venv") is not None and importlib.util.find_spec("ensurepip") is not None
@@ -379,14 +441,30 @@ def check_tests() -> list[Result]:
     g, r = "tests", []
     try:
         t = _run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], timeout=900)
-        tail = [ln for ln in (t.stderr + t.stdout).splitlines() if ln.startswith(("Ran ", "OK", "FAILED"))]
-        r.append(Result(g, "Unit testler", PASS if t.returncode == 0 else FAIL, " · ".join(tail) or t.stderr[-300:]))
+        lines = (t.stderr + t.stdout).splitlines()
+        tail = [ln for ln in lines if ln.startswith(("Ran ", "OK", "FAILED"))]
+        failed = [ln.split(":", 1)[1].strip().split(" ")[0] for ln in lines if ln.startswith(("FAIL:", "ERROR:"))]
+        detail = " · ".join(tail) or t.stderr[-300:]
+        if failed:
+            detail += " — " + ", ".join(failed[:5]) + (f" (+{len(failed) - 5})" if len(failed) > 5 else "")
+        r.append(Result(g, "Unit testler", PASS if t.returncode == 0 else FAIL, detail))
     except subprocess.TimeoutExpired:
         r.append(Result(g, "Unit testler", FAIL, "15 dk'da bitmedi"))
+
     p = _run([sys.executable, "-m", "pip", "check"], timeout=120)
-    out = (p.stdout + p.stderr).strip().splitlines()
-    r.append(Result(g, "pip check", PASS if p.returncode == 0 else FAIL,
-                    out[0] if p.returncode == 0 and out else " | ".join(out[:5]) or "pip çalışmadı"))
+    out = [ln for ln in (p.stdout + p.stderr).strip().splitlines() if ln.strip()]
+    if p.returncode == 0:
+        r.append(Result(g, "pip check", PASS, out[0] if out else "sorun yok"))
+    elif _dist_version("pip") is None or not out:
+        r.append(Result(g, "pip check", FAIL, "pip yok" if _dist_version("pip") is None else "çıktısız başarısız"))
+    else:
+        ours, other = split_pip_check(out, project_dependencies())
+        if ours:
+            r.append(Result(g, "pip check", FAIL, "projenin bağımlılıklarında uyumsuzluk: " + " | ".join(ours[:5])))
+        if other:
+            r.append(Result(g, "pip check (diğer paketler)", WARN,
+                            f"{len(other)} uyumsuzluk, hiçbiri projenin bağımlılığı değil (VM kabulü temiz pip check "
+                            f"ister): " + " | ".join(other[:3])))
     return r
 
 
@@ -426,6 +504,8 @@ def print_report(results: list[Result]) -> None:
     fails = [x for x in results if x.status == FAIL]
     if fails:
         print("Ortam hazır DEĞİL — FAIL olanlar: " + "; ".join(f"{x.group}/{x.check}" for x in fails))
+        if wrong_interpreter():
+            print(f"Muhtemel neden: projenin .venv'i dışında bir Python ({sys.executable}). Şunu dene:  {VENV_HINT}")
     else:
         print("Ortam hazır (FAIL yok)." + (" WARN'lara bak." if counts[WARN] else ""))
 
