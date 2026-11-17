@@ -1,7 +1,10 @@
-# Çekirdek (enclave'de offline kurulabilir olmalı). Python >= 3.10.
+# Projenin çalışması için gerekenler. Python >= 3.10; kod pandas 2.x ve 3.x ile çalışır.
+# Tek kurulum, projenin çalıştırılacağı Python'a (VM'de DHA kurar; proje kendi venv'ini kurmaz):
+#   python -m pip install -r requirements.txt -r requirements-explore.txt
+#   python tools/check_environment.py
 numpy>=1.24,<3
 pandas>=2.0,<4
 matplotlib>=3.7
-# Opsiyonel (yoksa kod çalışır): jupyter, ipykernel — notebook arayüzü için
-# Opsiyonel, yalnız IRIS girdisi (src/sandbox/io/iris.py; enclave VM'inde DHA kurar):
-#   intersystems-irispython  — ya da yedek: pyodbc + InterSystems IRIS ODBC sürücüsü
+# IRIS girdisi (src/sandbox/io/iris.py; tembel import — testler ve analiz kodu sürücüsüz çalışır).
+# Yedek: pyodbc + InterSystems IRIS ODBC sürücüsü (NABIDH_IRIS_ODBC).
+intersystems-irispython>=5.0

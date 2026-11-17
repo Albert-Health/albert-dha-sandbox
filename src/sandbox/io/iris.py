@@ -106,18 +106,34 @@ def connect(url: str | None = None, user: str | None = None, password: str | Non
             raise RuntimeError(f"IRIS şifresi yok: {ENV_PASSWORD} ya da {DEFAULT_CREDENTIALS}")
         password = getpass.getpass(f"IRIS şifresi ({s['user']}@{t}): ")
     try:
-        import iris  # noqa: PLC0415 — intersystems-irispython
+        fn = _driver_connect()
     except ImportError as e:
         raise RuntimeError("IRIS sürücüsü yok: `pip install intersystems-irispython` "
                            "(ya da NABIDH_IRIS_ODBC ile pyodbc yedeği)") from e
-    fn = getattr(iris, "connect", None) or getattr(getattr(iris, "dbapi", None), "connect", None)
     if fn is None:
         raise RuntimeError("Kurulu `iris` modülünde connect() yok; intersystems-irispython sürümünü kontrol et")
     return fn(t.host, t.port, t.namespace, s["user"], password)
 
 
+# Aynı `iris/__init__.py`'yi yazan, resmi sürücünün yerine geçen paketler (kurulum sırasına göre biri ezer).
+# sqlalchemy-iris, iris-embedded-python-wrapper'ı çeker: bu yüzden keşif listesinde yok.
+CONFLICTING_DISTS = ("iris-embedded-python-wrapper", "scitools-iris")
+
+
+def _driver_connect():
+    """intersystems-irispython'ın DB-API 2.0 connect'i (`iris.dbapi`, apilevel 2.0); yoksa `iris.connect`."""
+    import iris  # noqa: PLC0415 — intersystems-irispython (ImportError çağırana)
+
+    try:
+        import iris.dbapi as dbapi  # noqa: PLC0415
+        fn = getattr(dbapi, "connect", None)
+    except ImportError:
+        fn = None
+    return fn or getattr(iris, "connect", None)
+
+
 def driver_status() -> list[dict]:
-    """Kurulu IRIS sürücüleri, bağlanmadan: [{name, version, ok, detail}] (tools/check_environment.py)."""
+    """Kurulu IRIS sürücüleri, bağlanmadan: [{name, version, ok, detail, conflict}] (tools/check_environment.py)."""
     from importlib import metadata  # noqa: PLC0415
 
     def version(dist):
@@ -127,21 +143,25 @@ def driver_status() -> list[dict]:
             return None
 
     out = []
+    conflicts = [d for d in CONFLICTING_DISTS if version(d)]
     try:
-        import iris  # noqa: PLC0415 — intersystems-irispython
-        fn = getattr(iris, "connect", None) or getattr(getattr(iris, "dbapi", None), "connect", None)
-        detail = "" if callable(fn) else "`iris` modülünde connect() yok (başka bir `iris` paketi mi, ör. scitools-iris?)"
+        fn = _driver_connect()
+        detail = "" if callable(fn) else "`iris` modülünde connect() yok (başka bir `iris` paketi mi?)"
+        if conflicts:
+            detail = (f"{', '.join(conflicts)} de kurulu: iris/__init__.py'yi ezer, resmi sürücü yerine o çalışabilir "
+                      f"→ kaldır ve `pip install --force-reinstall --no-deps intersystems-irispython`. " + detail)
         out.append({"name": "intersystems-irispython", "version": version("intersystems-irispython"),
-                    "ok": callable(fn), "detail": detail})
+                    "ok": callable(fn), "detail": detail.strip(), "conflict": bool(conflicts)})
     except ImportError as e:
-        out.append({"name": "intersystems-irispython", "version": None, "ok": False, "detail": str(e)})
+        out.append({"name": "intersystems-irispython", "version": None, "ok": False, "detail": str(e),
+                    "conflict": bool(conflicts)})
     try:
         import pyodbc  # noqa: PLC0415 — yedek yol
         drivers = [d for d in pyodbc.drivers() if "intersystems" in d.lower() or "iris" in d.lower()]
-        out.append({"name": "pyodbc", "version": version("pyodbc"), "ok": bool(drivers),
+        out.append({"name": "pyodbc", "version": version("pyodbc"), "ok": bool(drivers), "conflict": False,
                     "detail": f"ODBC sürücüleri: {drivers}" if drivers else "InterSystems ODBC sürücüsü kayıtlı değil"})
     except ImportError as e:
-        out.append({"name": "pyodbc", "version": None, "ok": False, "detail": str(e)})
+        out.append({"name": "pyodbc", "version": None, "ok": False, "detail": str(e), "conflict": False})
     return out
 
 

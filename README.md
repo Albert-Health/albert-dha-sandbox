@@ -76,11 +76,32 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 | LPRS katsayıları | Gray 2012 | ilk yazarın sunumundan (makaleye atıflı); tam metinle teyit bekliyor (K5) |
 | LRA madde puanları | Gray 2010 | birincil makaleden teyit (K5) |
 
-## Kurulum ve çalıştırma
+## Kurulum (VM'de ve yerelde aynı)
+
+Proje kendi sanal ortamını (venv) kurmaz. Projenin çalıştırılacağı Python'a iki dosya **bir kez** kurulur:
+
+- `requirements.txt` — projenin çalışması için: numpy, pandas, matplotlib ve IRIS sürücüsü (`intersystems-irispython`)
+- `requirements-explore.txt` — veri keşfi için: Jupyter, scipy, polars, duckdb … (proje kodu bunları kullanmaz)
+
+| Nerede | Kim kurar | Hangi Python |
+|---|---|---|
+| Enclave VM | DHA, teslimden önce — VM'de GitHub dışında internet yok, sonradan paket kurulamaz | VM'in Python'u (≥ 3.10) |
+| Yerel | sen | seçtiğin Python (≥ 3.10): pyenv sürümü, conda ortamı ya da venv — fark etmez |
 
 ```bash
-python -m pip install -r requirements.txt        # enclave VM'inde DHA kurar
+git clone https://github.com/Albert-Health/albert-dha-sandbox.git sandbox-git   # klasör adı = IntelliJ modül adı
+cd sandbox-git
+python -m pip install -r requirements.txt -r requirements-explore.txt           # VM'de bunu DHA yapar
 python tools/check_environment.py                # ortam kontrolü; VM'de: --iris --github (IRIS + adapter eşlemesi)
+```
+
+Aşağıda `python` = paketlerin kurulu olduğu Python (IntelliJ'de proje SDK'sı). `check_environment` FAIL varsa
+çıkış kodu 1'dir ve eksik paketlerin o Python'a nasıl kurulacağını yazar. Not: terminaldeki `python3` başka bir
+Python olabilir — çıktının `[python]` bölümü hangisinin kullanıldığını gösterir.
+
+## Çalıştırma
+
+```bash
 python -m unittest discover -s tests -v          # kural testleri
 
 # Sentetik test verisiyle uçtan uca:
@@ -106,12 +127,14 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
 
 ## IntelliJ IDEA ile çalışma
 
-1. **Python ortamı (bir kez):** `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt jupyter ipykernel`
-2. **SDK (bir kez):** *File → Project Structure → SDKs → + → Add Python SDK → Virtualenv → Existing* → `.venv/bin/python`.
-   Ardından *Modules → sandbox-git → + → Python* facet'ini ekleyip bu SDK'yı seç.
-3. **Kaynak klasörleri:** `src/` Sources, `tests/` Test Sources; `data/`, `outputs/`, `.venv/`, `archive/` Excluded olmalı
-   (*Project Structure → Modules → Sources*).
-4. **Run configuration'lar** `.run/` klasöründe hazır ve repoda; sağ üstteki listeden seçilir:
+1. **SDK (bir kez):** *File → Project Structure → SDKs → + → Add Python SDK → System Interpreter* (ya da
+   *Existing environment*) → paketlerin kurulu olduğu Python (VM'de DHA'nın kurduğu, yerelde seçtiğin).
+   *Project → SDK* olarak bunu seç; *Modules → sandbox-git → + → Python* facet'i de bu SDK'yı kullansın.
+   Run configuration'lar Python yolu yazmaz, proje / modül SDK'sını kullanır — VM'de ve yerelde aynı dosyalar çalışır.
+2. **Kaynak klasörleri:** `src/` Sources, `tests/` Test Sources; `data/`, `outputs/`, `archive/` (varsa `.venv/`)
+   Excluded olmalı (*Project Structure → Modules → Sources*).
+3. **Run configuration'lar** `.run/` klasöründe hazır ve repoda; sağ üstteki listeden seçilir:
+   - `0b · Check environment` — ortam kontrolü; `0c` = VM'de (`--iris --github`)
    - `0 · Tests (unittest)` — kural testleri
    - `1 · Build synthetic C1-C2-C3` — `data/synthetic/raw` → `data/canonical/synthetic/`
    - `2 · NB0 Data profile` — çıktılar `outputs/<run_id>/nb00/`
@@ -119,7 +142,7 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
    - `5 · KPI report`, `6 · Evidence package`
    - `7 · Positive control`, `7b · NB2 on positive-control data`
    - `9 · Generate .ipynb from notebooks` — `notebooks/00_data_profile.ipynb` üretir; IntelliJ'de Jupyter olarak açılır
-     (kernel: `.venv`). Kaynak her zaman `.py` dosyasıdır; `.ipynb` git'e girmez.
+     (kernel: proje SDK'sı). Kaynak her zaman `.py` dosyasıdır; `.ipynb` git'e girmez.
 
 Not: Notebook'lar `ROOT/src`'yi kendisi `sys.path`'e ekler; working directory proje kökü olmalı (run config'lerde ayarlı).
 

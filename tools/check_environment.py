@@ -9,12 +9,12 @@ Kullanım:
 
 Gruplar (FAIL = proje bu ortamda çalışmaz; WARN = eksik ama engel değil):
   python     Python ≥ 3.10, pip, venv, başlık dosyaları ve derleyici (python3-dev, build-essential)
-  core       requirements.txt paketleri kurulu, sürüm aralığında ve import ediliyor
+  core       requirements.txt paketleri kurulu, sürüm aralığında ve import ediliyor (IRIS sürücüsü dahil)
   repo       git, commit, çalışma ağacı; data/ ve outputs/ yazılabilir
   iris       sürücü (intersystems-irispython; yedek pyodbc), bağlantı ayarları, TCP, bağlantı + SELECT 1
   mapping    adapter SOURCES / IRIS_COHORTS tabloları ve sütunları IRIS'te var mı (satır okunmaz).
              Eksikler WARN: ortam sorunu değil, nabidh.py'de düzeltilecek eşleme — ama ingest o hâliyle çalışmaz
-  explore    VM gereksinimlerindeki keşif paketleri (Jupyter, scipy, polars …) — projenin bağımlılığı değil
+  explore    requirements-explore.txt: keşif paketleri (Jupyter, scipy, polars …) — projenin bağımlılığı değil
   desktop    masaüstü oturumu, IntelliJ, tarayıcı (yalnız Linux'ta WARN)
   resources  disk, RAM, CPU (VM gereksinimi: 250 GB boş disk, 16 GB RAM, 4 vCPU)
   tests      unit testler ve `pip check` (VM kabul kriteri)
@@ -46,14 +46,10 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 MIN_PYTHON = (3, 10)
 MIN_DISK_GB, MIN_RAM_GB, MIN_CPUS = 250, 16, 4          # VM gereksinimi (R9)
-# VM gereksinimlerinde (R5) istenen keşif paketleri: dağıtım adı. Projenin kodu bunları kullanmaz (kural 2).
-EXPLORE_PACKAGES = [
-    "jupyterlab", "notebook", "ipykernel", "ipywidgets", "jupytext", "nbconvert", "papermill",
-    "scipy", "pyarrow", "polars", "duckdb", "openpyxl", "xlsxwriter", "tabulate",
-    "statsmodels", "scikit-learn", "lifelines", "missingno", "seaborn", "plotly",
-    "sqlalchemy", "sqlalchemy-iris", "pytest", "ruff", "tqdm",
-]
+REQUIREMENTS = REPO_ROOT / "requirements.txt"                 # proje (FAIL)
+EXPLORE_REQUIREMENTS = REPO_ROOT / "requirements-explore.txt"  # keşif, VM gereksinimi R5 (WARN); kod kullanmaz
 IMPORT_NAME = {"scikit-learn": "sklearn"}
+NO_IMPORT = {"intersystems-irispython"}          # sürücü yalnız io/iris.py'de yüklenir → [iris] grubunda denenir
 
 PASS, WARN, FAIL, SKIP, INFO = "PASS", "WARN", "FAIL", "SKIP", "INFO"
 
@@ -122,13 +118,9 @@ def _gb(n_bytes: float) -> float:
     return n_bytes / 2**30
 
 
-VENV = REPO_ROOT / ".venv"
-VENV_HINT = ".venv/bin/python tools/check_environment.py"
-
-
-def wrong_interpreter() -> bool:
-    """Projenin .venv'i var ama betik başka bir Python'la çalışıyor (ör. terminaldeki global python3)."""
-    return VENV.is_dir() and Path(sys.prefix).resolve() != VENV.resolve()
+def install_hint() -> str:
+    """Eksik paketleri BU Python'a kurma komutu (proje kendi venv'ini kurmaz; VM'de DHA bir kez kurar)."""
+    return f"{sys.executable} -m pip install -r requirements.txt -r requirements-explore.txt"
 
 
 def _norm(name: str) -> str:
@@ -185,13 +177,8 @@ def check_python() -> list[Result]:
     v = sys.version_info
     r.append(Result(g, "Python sürümü", PASS if v[:2] >= MIN_PYTHON else FAIL,
                     f"{platform.python_version()} ({sys.executable}); gerekli ≥ {'.'.join(map(str, MIN_PYTHON))}"))
-    if wrong_interpreter():
-        r.append(Result(g, "Sanal ortam", WARN, f"projenin .venv'i var ama bu Python onu kullanmıyor ({sys.prefix}) "
-                                                f"→ {VENV_HINT}"))
-    else:
-        in_venv = sys.prefix != sys.base_prefix
-        r.append(Result(g, "Sanal ortam", PASS if in_venv else INFO,
-                        sys.prefix if in_venv else f"sanal ortam değil ({sys.prefix})"))
+    kind = "sanal ortam" if sys.prefix != sys.base_prefix else "sistem / kullanıcı Python'u"
+    r.append(Result(g, "Python ortamı", INFO, f"{sys.prefix} ({kind}) — paketler bu Python'da aranır"))
     pip_v = _dist_version("pip")
     r.append(Result(g, "pip", PASS if pip_v else FAIL, pip_v or "pip yok (python -m pip çalışmaz)"))
     has_venv = importlib.util.find_spec("venv") is not None and importlib.util.find_spec("ensurepip") is not None
@@ -209,14 +196,16 @@ def check_python() -> list[Result]:
 
 def check_core() -> list[Result]:
     g, r = "core", []
-    req = REPO_ROOT / "requirements.txt"
-    for dist, spec in parse_requirements(req):
+    for dist, spec in parse_requirements(REQUIREMENTS):
         v = _dist_version(dist)
         if v is None:
             r.append(Result(g, dist, FAIL, f"kurulu değil (gerekli {spec or 'herhangi bir sürüm'})"))
             continue
         if not version_ok(v, spec):
             r.append(Result(g, dist, FAIL, f"{v} kurulu, gerekli {spec}"))
+            continue
+        if dist in NO_IMPORT:
+            r.append(Result(g, dist, PASS, f"{v} ({spec}); bağlantısı [iris] grubunda denenir"))
             continue
         try:
             importlib.import_module(IMPORT_NAME.get(dist, dist))
@@ -303,8 +292,8 @@ def check_iris(required: bool, sqlite_dir: Path | None, cohorts: list[str] | Non
     main, alt = drivers["intersystems-irispython"], drivers["pyodbc"]
     missing = FAIL if required or configured else WARN
     r.append(Result(g, "Sürücü: intersystems-irispython",
-                    PASS if main["ok"] else (WARN if alt["ok"] else missing),
-                    (main["version"] or "") if main["ok"] else main["detail"]))
+                    (WARN if main["conflict"] else PASS) if main["ok"] else (WARN if alt["ok"] else missing),
+                    f"{main['version'] or ''} {main['detail']}".strip() if main["ok"] else main["detail"]))
     r.append(Result(g, "Yedek sürücü: pyodbc + IRIS ODBC", PASS if alt["ok"] else INFO,
                     f"{alt['version']}; {alt['detail']}" if alt["version"] else alt["detail"]))
 
@@ -397,7 +386,7 @@ def check_mapping(conn, cohorts: list[str] | None) -> list[Result]:
 
 def check_explore() -> list[Result]:
     r = []
-    for dist in EXPLORE_PACKAGES:
+    for dist, _ in parse_requirements(EXPLORE_REQUIREMENTS):
         v = _dist_version(dist)
         r.append(Result("explore", dist, PASS if v else WARN, v or "kurulu değil"))
     return r
@@ -504,8 +493,9 @@ def print_report(results: list[Result]) -> None:
     fails = [x for x in results if x.status == FAIL]
     if fails:
         print("Ortam hazır DEĞİL — FAIL olanlar: " + "; ".join(f"{x.group}/{x.check}" for x in fails))
-        if wrong_interpreter():
-            print(f"Muhtemel neden: projenin .venv'i dışında bir Python ({sys.executable}). Şunu dene:  {VENV_HINT}")
+        if any(x.group == "core" and x.status == FAIL for x in fails):
+            print(f"Paketler bu Python'da ({sys.executable}) eksik. Ya bu Python'a kur:\n  {install_hint()}\n"
+                  f"ya da paketlerin kurulu olduğu Python'la çalıştır (IntelliJ: proje SDK'sı).")
     else:
         print("Ortam hazır (FAIL yok)." + (" WARN'lara bak." if counts[WARN] else ""))
 

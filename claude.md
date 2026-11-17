@@ -27,6 +27,9 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    sürücü (`intersystems-irispython`, yedek `pyodbc`) yalnızca orada ve tembel import edilir — testler ve
    analiz kodu sürücüsüz çalışır. Bağlantı şifresi repoya, run configuration'a, audit'e girmez.
    Kod hem pandas 2.x hem 3.x ile çalışmalı (ör. `Series.reset_index(names=)` pandas 2'de yok).
+   Kurulum tek mekanizma: projenin Python'una `requirements.txt` (proje) + `requirements-explore.txt` (keşif;
+   kod import etmez) bir kez kurulur — VM'de DHA kurar, proje venv kurmaz. Komutlar ve run configuration'lar
+   Python yolu yazmaz (`python` / IntelliJ proje SDK'sı).
 3. **Lab değerleri asla model girdisi değildir.** Yalnızca uygunluk / outcome tanımında kullanılır.
 4. **Her çalıştırma audit'lenir** (KPI: Audit Trail %100, Critical). Notebook/araçlar `audit.Run`
    açar; tüm çıktılar `run.save_table / save_figure / save_json / register_output` ile yazılır;
@@ -75,14 +78,16 @@ Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
 
 ## Çalıştırma
 ```bash
-.venv/bin/python tools/check_environment.py              # ortam kontrolü (VM'de: --iris --github); FAIL → çıkış 1
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python tools/build_synthetic_cohorts.py        # data/synthetic/raw → data/canonical/synthetic/{c1,c2,c3}
-.venv/bin/python notebooks/00_data_profile.py
-.venv/bin/python notebooks/01_c1_c2_feasibility.py
-.venv/bin/python notebooks/02_c3_benchmark.py            # SANDBOX_BOOTSTRAP_REPS=100 ile hızlı
-.venv/bin/python tools/kpi_report.py
-.venv/bin/python tools/build_evidence_package.py
+# python = paketlerin kurulu olduğu Python (bu makinede: .venv/bin/python)
+python -m pip install -r requirements.txt -r requirements-explore.txt   # bir kez (VM'de DHA)
+python tools/check_environment.py              # ortam kontrolü (VM'de: --iris --github); FAIL → çıkış 1
+python -m unittest discover -s tests -v
+python tools/build_synthetic_cohorts.py        # data/synthetic/raw → data/canonical/synthetic/{c1,c2,c3}
+python notebooks/00_data_profile.py
+python notebooks/01_c1_c2_feasibility.py
+python notebooks/02_c3_benchmark.py            # SANDBOX_BOOTSTRAP_REPS=100 ile hızlı
+python tools/kpi_report.py
+python tools/build_evidence_package.py
 # NABIDH adapter provası: make_nabidh_dryrun → ingest_nabidh --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
 #   → SANDBOX_SOURCE=nabidh_dryrun ile NB0/NB1/NB2
 #   IRIS yolu provası: ingest_nabidh --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris

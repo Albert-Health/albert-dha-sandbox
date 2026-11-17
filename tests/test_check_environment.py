@@ -54,8 +54,12 @@ class TestVersions(unittest.TestCase):
                              [("numpy", ">=1.24,<3"), ("pandas", ">=2.0"), ("matplotlib", "")])
 
     def test_repo_requirements_parse(self):
-        names = [n for n, _ in ce.parse_requirements(ROOT / "requirements.txt")]
-        self.assertEqual(names, ["numpy", "pandas", "matplotlib"])
+        names = [n for n, _ in ce.parse_requirements(ce.REQUIREMENTS)]
+        self.assertEqual(names, ["numpy", "pandas", "matplotlib", "intersystems-irispython"])
+        explore = [n for n, _ in ce.parse_requirements(ce.EXPLORE_REQUIREMENTS)]
+        self.assertIn("jupyterlab", explore)
+        self.assertNotIn("sqlalchemy-iris", explore)        # resmi sürücüyü ezen sarmalayıcıyı çeker
+        self.assertFalse(set(names) & set(explore))
 
 
 class TestRunChecks(unittest.TestCase):
@@ -63,8 +67,9 @@ class TestRunChecks(unittest.TestCase):
         with no_iris_settings():
             res = ce.run_checks(quick=True)
         # Ortamın kendisi hakkında iddia yok (testler yanlış Python'la da koşabilir): yalnız yapı
-        self.assertEqual(set(by(res, "core")), {"numpy", "pandas", "matplotlib", "Proje modülleri (src/sandbox)"})
-        self.assertIn("Sanal ortam", by(res, "python"))
+        self.assertEqual(set(by(res, "core")),
+                         {"numpy", "pandas", "matplotlib", "intersystems-irispython", "Proje modülleri (src/sandbox)"})
+        self.assertEqual(by(res, "python")["Python ortamı"].status, ce.INFO)
         self.assertEqual(by(res, "iris")["Bağlantı ayarları"].status, ce.SKIP)
         self.assertEqual(by(res, "mapping")["Adapter eşlemesi (IRIS)"].status, ce.SKIP)
         self.assertEqual(by(res, "tests")["Unit testler + pip check"].status, ce.SKIP)
@@ -79,13 +84,20 @@ class TestRunChecks(unittest.TestCase):
         self.assertEqual(res["matplotlib"].status, ce.FAIL)
         self.assertIn("kurulu değil", res["matplotlib"].detail)
 
-    def test_wrong_interpreter_hint(self):
-        with mock.patch.object(ce.sys, "prefix", "/somewhere/else"):
-            self.assertTrue(ce.wrong_interpreter() or not ce.VENV.is_dir())
-            res = by(ce.check_python(), "python")
-        if ce.VENV.is_dir():
-            self.assertEqual(res["Sanal ortam"].status, ce.WARN)
-            self.assertIn(ce.VENV_HINT, res["Sanal ortam"].detail)
+    def test_install_hint_targets_this_python(self):
+        hint = ce.install_hint()
+        self.assertTrue(hint.startswith(sys.executable))
+        self.assertIn("-r requirements.txt -r requirements-explore.txt", hint)
+
+    def test_driver_conflict_warns(self):
+        fake = [{"name": "intersystems-irispython", "version": "5.3.2", "ok": True, "conflict": True,
+                 "detail": "iris-embedded-python-wrapper de kurulu"},
+                {"name": "pyodbc", "version": None, "ok": False, "conflict": False, "detail": "yok"}]
+        with no_iris_settings(), mock.patch("sandbox.io.iris.driver_status", return_value=fake):
+            res, conn = ce.check_iris(False, None, None)
+        got = {r.check: r for r in res}
+        self.assertEqual(got["Sürücü: intersystems-irispython"].status, ce.WARN)
+        self.assertIn("wrapper", got["Sürücü: intersystems-irispython"].detail)
 
     def test_pip_check_split(self):
         lines = ["grpcio-tools 1.76.0 has requirement protobuf<7.0.0,>=6.31.1, but you have protobuf 4.25.8.",
