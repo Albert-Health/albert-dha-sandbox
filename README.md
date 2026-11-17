@@ -78,6 +78,8 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 
 ## Kurulum (VM'de ve yerelde aynı)
 
+Enclave VM'de adım adım kurulum ve ilk çalıştırma: [`docs/vm_kurulum.md`](docs/vm_kurulum.md).
+
 Proje kendi sanal ortamını (venv) kurmaz. Projenin çalıştırılacağı Python'a iki dosya **bir kez** kurulur:
 
 - `requirements.txt` — projenin çalışması için: numpy, pandas, matplotlib ve IRIS sürücüsü (`intersystems-irispython`)
