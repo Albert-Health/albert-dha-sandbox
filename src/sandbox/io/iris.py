@@ -61,7 +61,7 @@ def parse_url(url: str) -> IrisTarget:
 
 
 def read_credentials_file(path: Path | None = None) -> dict[str, str]:
-    path = Path(path or os.environ.get(ENV_CREDENTIALS) or DEFAULT_CREDENTIALS).expanduser()
+    path = Path(path).expanduser() if path else credentials_file_path()
     if not path.is_file():
         return {}
     out = {}
@@ -114,6 +114,50 @@ def connect(url: str | None = None, user: str | None = None, password: str | Non
     if fn is None:
         raise RuntimeError("Kurulu `iris` modülünde connect() yok; intersystems-irispython sürümünü kontrol et")
     return fn(t.host, t.port, t.namespace, s["user"], password)
+
+
+def driver_status() -> list[dict]:
+    """Kurulu IRIS sürücüleri, bağlanmadan: [{name, version, ok, detail}] (tools/check_environment.py)."""
+    from importlib import metadata  # noqa: PLC0415
+
+    def version(dist):
+        try:
+            return metadata.version(dist)
+        except metadata.PackageNotFoundError:
+            return None
+
+    out = []
+    try:
+        import iris  # noqa: PLC0415 — intersystems-irispython
+        fn = getattr(iris, "connect", None) or getattr(getattr(iris, "dbapi", None), "connect", None)
+        detail = "" if callable(fn) else "`iris` modülünde connect() yok (başka bir `iris` paketi mi, ör. scitools-iris?)"
+        out.append({"name": "intersystems-irispython", "version": version("intersystems-irispython"),
+                    "ok": callable(fn), "detail": detail})
+    except ImportError as e:
+        out.append({"name": "intersystems-irispython", "version": None, "ok": False, "detail": str(e)})
+    try:
+        import pyodbc  # noqa: PLC0415 — yedek yol
+        drivers = [d for d in pyodbc.drivers() if "intersystems" in d.lower() or "iris" in d.lower()]
+        out.append({"name": "pyodbc", "version": version("pyodbc"), "ok": bool(drivers),
+                    "detail": f"ODBC sürücüleri: {drivers}" if drivers else "InterSystems ODBC sürücüsü kayıtlı değil"})
+    except ImportError as e:
+        out.append({"name": "pyodbc", "version": None, "ok": False, "detail": str(e)})
+    return out
+
+
+def tcp_check(host: str, port: int, timeout: float = 5.0) -> float:
+    """host:port'a TCP bağlantısı açıp kapatır; süreyi ms olarak döndürür (OSError → erişilemiyor)."""
+    import socket  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    with socket.create_connection((host, port), timeout=timeout):
+        pass
+    return (time.perf_counter() - t0) * 1000
+
+
+def credentials_file_path() -> Path:
+    return Path(os.environ.get(ENV_CREDENTIALS) or DEFAULT_CREDENTIALS).expanduser()
 
 
 # --------------------------------------------------------------------------

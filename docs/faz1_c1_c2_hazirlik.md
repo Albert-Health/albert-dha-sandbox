@@ -99,8 +99,9 @@ ilaçları" içinde olabilir) · Townsend.
 ## 4. Enclave'de çalıştırma akışı
 
 ```bash
-# 0. Kurulum (VM'i DHA hazırlıyor — K4) ve duman testi
-python -m unittest discover -s tests -v
+# 0. Kurulum (VM'i DHA hazırlıyor — K4) ve ortam kontrolü: paketler, IRIS sürücüsü / bağlantısı,
+#    SOURCES tablolarının IRIS'te olup olmadığı, unit testler, pip check (FAIL varsa çıkış 1)
+python tools/check_environment.py --iris --github
 
 # 1. Veri: DHA InterSystems IRIS'te (jdbc:IRIS://host:port/NAMESPACE). Bağlantı ayarları repo DIŞINDA,
 #    ~/.nabidh_iris (chmod 600): NABIDH_IRIS_URL=…, NABIDH_IRIS_USER=…, NABIDH_IRIS_PASSWORD=…

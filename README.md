@@ -80,6 +80,7 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 
 ```bash
 python -m pip install -r requirements.txt        # enclave VM'inde DHA kurar
+python tools/check_environment.py                # ortam kontrolü; VM'de: --iris --github (IRIS + adapter eşlemesi)
 python -m unittest discover -s tests -v          # kural testleri
 
 # Sentetik test verisiyle uçtan uca:

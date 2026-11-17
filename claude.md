@@ -64,7 +64,7 @@ src/sandbox/
   kpi.py               KPI Framework satırları + actual/met + markdown rapor
   audit.py, sdc.py
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
-tools/                 ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
+tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, positive_control, py2ipynb
 docs/                  OPEN_ITEMS.md, evidence_package/ şablonları
 tests/                 unittest (pytest yok)
@@ -75,6 +75,7 @@ Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
 
 ## Çalıştırma
 ```bash
+.venv/bin/python tools/check_environment.py              # ortam kontrolü (VM'de: --iris --github); FAIL → çıkış 1
 .venv/bin/python -m unittest discover -s tests -v
 .venv/bin/python tools/build_synthetic_cohorts.py        # data/synthetic/raw → data/canonical/synthetic/{c1,c2,c3}
 .venv/bin/python notebooks/00_data_profile.py
