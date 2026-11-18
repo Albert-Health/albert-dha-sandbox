@@ -162,6 +162,24 @@ class TestSchema(unittest.TestCase):
         rep = schema.validate(back)
         self.assertFalse((rep["severity"] == "ERROR").any(), rep[rep["severity"] == "ERROR"])
 
+    def test_require_cohorts(self):
+        """Notebook'lar yanlış SANDBOX_SOURCE'ta ya da ingest öncesi anlaşılır mesajla durur."""
+        ds = tiny_dataset()
+        ds.source, ds.cohort = "nabidh_test", "c1"
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            schema.write_dataset(ds, base)
+            self.assertEqual(schema.require_cohorts(base, "nabidh_test", ("c1", "c2", "c3"), require_all=False), ["c1"])
+            with self.assertRaisesRegex(FileNotFoundError, r"c2 kanonik verisi yok"):
+                schema.require_cohorts(base, "nabidh_test", ("c1", "c2"))         # NB1: ikisi de gerekli
+            with self.assertRaises(FileNotFoundError) as cm:
+                schema.require_cohorts(base, "synthetic", ("c1", "c2", "c3"), require_all=False)
+            msg = str(cm.exception)
+            for part in ("SANDBOX_SOURCE='synthetic'", "nabidh_test", "%env SANDBOX_SOURCE=nabidh", "ingest_nabidh"):
+                self.assertIn(part, msg)
+            with self.assertRaisesRegex(FileNotFoundError, "diğer kaynaklar: yok"):
+                schema.require_cohorts(base / "none", "nabidh", ("c1",))
+
     def test_ifcc_conversion(self):
         ds = tiny_dataset()
         extra = schema.coerce(pd.DataFrame([("P01", "4548-4", "HbA1c", 48, "mmol/mol", "2020-01-01")],

@@ -113,6 +113,29 @@ def write_dataset(ds: Dataset, base: Path) -> Path:
     return d
 
 
+def require_cohorts(base: Path, source: str, cohorts, *, require_all: bool = True) -> list[str]:
+    """Kanonik verisi olan kohortlar (`<base>/<source>/<kohort>/patients.csv`).
+
+    require_all=True: biri eksikse hata; False: en az biri yeterli (NB0 — Faz 1'de C3 yok). Hata mesajı ne
+    yapılacağını söyler: SANDBOX_SOURCE yanlış (varsayılan 'synthetic'; enclave'de 'nabidh') ya da veri henüz
+    ingest edilmemiş. Böylece notebook ilk hücrede anlaşılır biçimde durur.
+    """
+    cohorts = list(cohorts)
+    present = [c for c in cohorts if (cohort_dir(base, source, c) / "patients.csv").is_file()]
+    missing = [c for c in cohorts if c not in present]
+    if present and not (require_all and missing):
+        return present
+    base = Path(base)
+    others = sorted(p.name for p in base.iterdir() if p.is_dir() and p.name != source) if base.is_dir() else []
+    raise FileNotFoundError(
+        f"{base / source} altında {', '.join(missing)} kanonik verisi yok (SANDBOX_SOURCE={source!r}). "
+        f"Kanonik verisi olan diğer kaynaklar: {', '.join(others) or 'yok'}.\n"
+        f"  Kaynak yanlışsa (enclave'de 'nabidh'): terminalde `SANDBOX_SOURCE=nabidh python notebooks/<nb>.py`; "
+        f"Jupyter'de en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekleyip baştan çalıştır; "
+        f"IntelliJ'de '(enclave)' run configuration'ları.\n"
+        f"  Veri henüz yoksa önce: `python tools/ingest_nabidh.py --input iris` (docs/vm_kurulum.md §6).")
+
+
 def read_dataset(base: Path, source: str, cohort: str) -> Dataset:
     d = cohort_dir(base, source, cohort)
     tables = {}

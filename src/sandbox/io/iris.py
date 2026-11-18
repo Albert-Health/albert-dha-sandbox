@@ -5,7 +5,8 @@ yalnızca bağlanırken (tembel import) yüklenir; testler ve analiz kodu sürü
 IRIS'e, yalnızca SELECT için açılır (`assert_select`).
 
 Bağlantı bilgisi (öncelik sırasıyla): fonksiyon argümanı → ortam değişkeni → kimlik dosyası (repo DIŞINDA;
-varsayılan ~/.nabidh_iris, `KEY=VALUE` satırları, `chmod 600`) → şifre için terminalde sorulur.
+varsayılan ~/.nabidh_iris, `KEY=VALUE` satırları, `chmod 600`) → şifre için sorulur (terminal, IntelliJ'de
+'Emulate terminal' açık run configuration, Jupyter; bkz. `can_prompt`).
   NABIDH_IRIS_URL       jdbc:IRIS://host:port/NAMESPACE   (DHA'nın verdiği bağlantı dizesi)
   NABIDH_IRIS_USER      salt-okunur kullanıcı
   NABIDH_IRIS_PASSWORD  şifre (dosyaya ya da ortama; repoya, run configuration'a, audit'e asla)
@@ -81,7 +82,7 @@ def connection_settings(url: str | None = None, user: str | None = None) -> dict
         return {"driver": "pyodbc", "target": "ODBC (dize audit'e yazılmaz)", "user": None}
     url = url or os.environ.get(ENV_URL) or file.get(ENV_URL)
     if not url:
-        raise RuntimeError(f"IRIS bağlantı dizesi yok: {ENV_URL} ortam değişkeni ya da {DEFAULT_CREDENTIALS} "
+        raise RuntimeError(f"IRIS bağlantı dizesi yok: {ENV_URL} ortam değişkeni ya da {credentials_file_path()} "
                            f"dosyasında {ENV_URL}=jdbc:IRIS://host:port/NAMESPACE")
     user = user or os.environ.get(ENV_USER) or file.get(ENV_USER)
     if not user:
@@ -102,9 +103,16 @@ def connect(url: str | None = None, user: str | None = None, password: str | Non
     t = parse_url(s["_url"])
     password = password or os.environ.get(ENV_PASSWORD) or read_credentials_file().get(ENV_PASSWORD)
     if not password:
-        if not sys.stdin.isatty():
-            raise RuntimeError(f"IRIS şifresi yok: {ENV_PASSWORD} ya da {DEFAULT_CREDENTIALS}")
-        password = getpass.getpass(f"IRIS şifresi ({s['user']}@{t}): ")
+        where = f"{ENV_PASSWORD} ortam değişkeni ya da {credentials_file_path()}"
+        if not can_prompt():
+            raise RuntimeError(f"IRIS şifresi yok ve sorulamıyor (terminal yok; IntelliJ run configuration'ında "
+                               f"'Emulate terminal' kapalı?): {where}")
+        try:
+            password = getpass.getpass(f"IRIS şifresi ({s['user']}@{t}): ")
+        except Exception as e:              # ör. Jupyter'de stdin kapalı (nbconvert / papermill)
+            raise RuntimeError(f"IRIS şifresi sorulamadı ({type(e).__name__}): {where}") from e
+        if not password:
+            raise RuntimeError(f"IRIS şifresi boş: {where}")
     try:
         fn = _driver_connect()
     except ImportError as e:
@@ -178,6 +186,16 @@ def tcp_check(host: str, port: int, timeout: float = 5.0) -> float:
 
 def credentials_file_path() -> Path:
     return Path(os.environ.get(ENV_CREDENTIALS) or DEFAULT_CREDENTIALS).expanduser()
+
+
+def can_prompt() -> bool:
+    """Şifre etkileşimli sorulabilir mi: gerçek terminal (IntelliJ'de 'Emulate terminal' açık run configuration'lar
+    dahil) ya da Jupyter kernel'i (ipykernel getpass'i ön yüze iletir)."""
+    try:
+        tty = sys.stdin is not None and sys.stdin.isatty()
+    except (AttributeError, ValueError):     # kapalı / değiştirilmiş stdin
+        tty = False
+    return tty or "ipykernel" in sys.modules
 
 
 # --------------------------------------------------------------------------

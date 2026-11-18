@@ -4,6 +4,9 @@ Ana iddia: aynı ham veri dosyadan da IRIS'ten de okunsa kanonik çıktı birebi
 import copy
 import datetime as dt
 import decimal
+import importlib.util
+import io
+import json
 import os
 import sys
 import tempfile
@@ -207,6 +210,69 @@ class TestIrisHelpers(unittest.TestCase):
                     os.environ.pop(k, None)
                 with self.assertRaisesRegex(RuntimeError, "bağlantı dizesi yok"):
                     iris.connection_settings()
+
+    def test_can_prompt(self):
+        """Terminal, IntelliJ 'Emulate terminal' (tty), Jupyter (ipykernel) → sorulabilir; boru / stdin yok → hayır."""
+        tty, pipe = mock.Mock(isatty=lambda: True), mock.Mock(isatty=lambda: False)
+        no_kernel = {k: v for k, v in sys.modules.items() if k != "ipykernel"}
+        with mock.patch.dict(sys.modules, no_kernel, clear=True):
+            with mock.patch.object(sys, "stdin", tty):
+                self.assertTrue(iris.can_prompt())
+            with mock.patch.object(sys, "stdin", pipe):
+                self.assertFalse(iris.can_prompt())
+                with mock.patch.dict(sys.modules, {"ipykernel": mock.Mock()}):
+                    self.assertTrue(iris.can_prompt())
+            with mock.patch.object(sys, "stdin", None):
+                self.assertFalse(iris.can_prompt())
+
+    def test_password_prompt(self):
+        env = {iris.ENV_URL: "jdbc:IRIS://h:51772/NS", iris.ENV_USER: "reader",
+               iris.ENV_CREDENTIALS: str(ROOT / "tests" / "__no_such_credentials_file__")}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop(iris.ENV_PASSWORD, None)
+            os.environ.pop(iris.ENV_ODBC, None)
+            with mock.patch.object(iris, "can_prompt", return_value=False):
+                with self.assertRaisesRegex(RuntimeError, "sorulamıyor.*Emulate terminal"):
+                    iris.connect()
+            fake = mock.Mock(return_value="conn")
+            with mock.patch.object(iris, "can_prompt", return_value=True), \
+                    mock.patch.object(iris, "_driver_connect", return_value=fake), \
+                    mock.patch("getpass.getpass", return_value="typed") as gp:
+                self.assertEqual(iris.connect(), "conn")
+            gp.assert_called_once()
+            self.assertEqual(fake.call_args.args, ("h", 51772, "NS", "reader", "typed"))
+            # Jupyter'de stdin kapalı (nbconvert / papermill): kernel hatası anlaşılır RuntimeError olur
+            with mock.patch.object(iris, "can_prompt", return_value=True), \
+                    mock.patch("getpass.getpass", side_effect=NotImplementedError("stdin")):
+                with self.assertRaisesRegex(RuntimeError, "sorulamadı"):
+                    iris.connect()
+
+
+
+class TestIngestConnectionFailure(unittest.TestCase):
+    """tools/ingest_nabidh.py --input iris: bağlantı kurulamazsa traceback yerine okunur mesaj, çıkış 2,
+    audit'te `connection_failed`; şifre hiçbir yere yazılmaz."""
+
+    def test_readable_error_and_audited(self):
+        spec = importlib.util.spec_from_file_location("ingest_nabidh", ROOT / "tools" / "ingest_nabidh.py")
+        ing = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ing)
+        env = {iris.ENV_URL: "jdbc:IRIS://h:51772/NS", iris.ENV_USER: "reader", iris.ENV_PASSWORD: "topsecret",
+               iris.ENV_CREDENTIALS: str(ROOT / "tests" / "__no_such_credentials_file__")}
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, env), \
+                mock.patch("sandbox.audit.OUTPUT_DIR", Path(d)), \
+                mock.patch("sandbox.audit.AUDIT_DIR", Path(d) / "audit"), \
+                mock.patch.object(iris, "connect", side_effect=ConnectionError("Failed to connect to server")), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            os.environ.pop(iris.ENV_ODBC, None)
+            rc = ing.main(["--input", "iris", "--cohorts", "c1", "--source", "test_iris"])
+            manifest = json.loads(next(Path(d).glob("*_ingest_nabidh_*/run_manifest.json")).read_text(encoding="utf-8"))
+            log = (Path(d) / "audit" / "audit_log.jsonl").read_text(encoding="utf-8")
+        self.assertEqual(rc, 2)
+        self.assertEqual(manifest["status"], "connection_failed")
+        self.assertIn("IRIS'e bağlanılamadı (h:51772/NS): ConnectionError", out.getvalue())
+        self.assertIn("check_environment.py --iris", out.getvalue())
+        self.assertNotIn("topsecret", out.getvalue() + log + json.dumps(manifest))
 
 
 if __name__ == "__main__":

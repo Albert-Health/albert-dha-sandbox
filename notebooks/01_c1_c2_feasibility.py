@@ -49,10 +49,11 @@ from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lprs, lrs, qdiabetes2018a as qd
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 P = dict(PARAMS)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))   # duyarlılık çalıştırmaları (audit'e yazılır)
 run = Run("nb01_c1_c2_feasibility", params=P, source=SOURCE)
+schema.require_cohorts(CANONICAL_DIR, SOURCE, ("c1", "c2"))
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in ("c1", "c2")])
 data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in ("c1", "c2")}
 run.log("datasets loaded", source=SOURCE, n={c: d.n_patients for c, d in data.items()})

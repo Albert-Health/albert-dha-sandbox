@@ -124,7 +124,8 @@ python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris
 python tools/ingest_nabidh.py --input iris       # → data/nabidh_iris/raw/ (snapshot) + data/canonical/nabidh/
 python tools/ingest_nabidh.py                    # ya da ham dosyadan: data/nabidh/raw/<c1|c2|c3>/
 SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
-python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üretir
+SANDBOX_SOURCE=nabidh python tools/kpi_report.py
+python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üretir; Jupyter: SANDBOX_SOURCE=nabidh jupyter lab
 ```
 
 ## IntelliJ IDEA ile çalışma
@@ -142,9 +143,13 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
    - `2 · NB0 Data profile` — çıktılar `outputs/<run_id>/nb00/`
    - `3 · NB1 C1-C2 feasibility`, `4 · NB2 C3 benchmark` (`4b` = washout 0 gün (v2), `4c` = lookback 730 gün duyarlılığı)
    - `5 · KPI report`, `6 · Evidence package`
+   - Enclave: `1e · Ingest NABIDH from IRIS`, ardından `2e` / `3e` / `4e` / `5e` (enclave) — NB0 / NB1 / NB2 / KPI,
+     `SANDBOX_SOURCE=nabidh` ile. IRIS'e bağlananlar (`0b`, `0c`, `1e`) *Emulate terminal* açık: şifre ayarlı
+     değilse sorulur
    - `7 · Positive control`, `7b · NB2 on positive-control data`
-   - `9 · Generate .ipynb from notebooks` — `notebooks/00_data_profile.ipynb` üretir; IntelliJ'de Jupyter olarak açılır
-     (kernel: proje SDK'sı). Kaynak her zaman `.py` dosyasıdır; `.ipynb` git'e girmez.
+   - `9 · Generate .ipynb from notebooks` — üç notebook'un `.ipynb`'ini üretir; IntelliJ'de Jupyter olarak açılır
+     (kernel: proje SDK'sı; enclave'de en üste `%env SANDBOX_SOURCE=nabidh`). Kaynak her zaman `.py` dosyasıdır;
+     `.ipynb` git'e girmez.
 
 Not: Notebook'lar `ROOT/src`'yi kendisi `sys.path`'e ekler; working directory proje kökü olmalı (run config'lerde ayarlı).
 

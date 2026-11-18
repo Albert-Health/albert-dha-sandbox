@@ -40,16 +40,16 @@ from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lrs
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 pd.set_option("display.width", 160)
 
 P = dict(PARAMS)
 # Duyarlılık çalıştırmaları için: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (audit'e yazılır)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
 run = Run("nb00_data_profile", params=P, source=SOURCE)
-run.add_inputs([CANONICAL_DIR / SOURCE / c for c in COHORTS if (CANONICAL_DIR / SOURCE / c).exists()])
-data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in COHORTS
-        if (CANONICAL_DIR / SOURCE / c).exists()}
+present = schema.require_cohorts(CANONICAL_DIR, SOURCE, COHORTS, require_all=False)   # Faz 1: yalnız C1 / C2
+run.add_inputs([CANONICAL_DIR / SOURCE / c for c in present])
+data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in present}
 run.log("datasets loaded", source=SOURCE, cohorts=list(data))
 print({c: d.n_patients for c, d in data.items()})
 

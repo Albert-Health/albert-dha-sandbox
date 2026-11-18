@@ -51,7 +51,11 @@ NABIDH_IRIS_USER=<kullanıcı>
 NABIDH_IRIS_PASSWORD=<şifre>
 ```
 
-Şifre satırı yazılmazsa araçlar terminalde sorar. Audit'e yalnız `host:port/NAMESPACE` ve kullanıcı girer.
+Dosya yerine aynı adlarla ortam değişkeni de olur (`export NABIDH_IRIS_URL=…`; ortam değişkeni dosyayı ezer).
+Şifre satırı yazılmazsa bağlanırken sorulur — terminalde, IntelliJ'de `0b`, `0c`, `1e` run configuration'larında
+(*Emulate terminal* açık) ve Jupyter'de. Başka run configuration'larda ya da nbconvert / papermill ile
+sorulamaz: o zaman şifre dosyada ya da `NABIDH_IRIS_PASSWORD` ortam değişkeninde olmalı. Audit'e yalnız
+`host:port/NAMESPACE` ve kullanıcı girer.
 
 ```bash
 python tools/check_environment.py --iris --github
@@ -66,7 +70,9 @@ olup olmadığını denetler. İlk seferde `[mapping]` WARN beklenir (adlar hen�
 2. *Project Structure → SDKs → + → Add Python SDK → System Interpreter* → DHA'nın Python 3.11'i.
    *Project → SDK* ve *Modules → sandbox-git → Python* facet'i bu SDK.
 3. *Modules → Sources*: `src/` Sources, `tests/` Test Sources; `data/`, `outputs/` Excluded.
-4. Run configuration'lar (`.run/`) hazır: önce `0c · Check environment (enclave, IRIS + GitHub)`.
+4. Run configuration'lar (`.run/`) hazır: önce `0c · Check environment (enclave, IRIS + GitHub)`. Enclave'de
+   veriyi okuyanlar adında **(enclave)** olanlardır (`SANDBOX_SOURCE=nabidh`): `1e` ingest, `2e` NB0, `3e` NB1,
+   `4e` NB2, `5e` KPI. Eki olmayan `2`–`5` sentetik veriyi okur; enclave'de sentetik veri yoktur.
 5. *Database → + → Data Source → InterSystems IRIS* (yoksa *Driver*'a DHA'nın jar'ını ekle) → aynı URL ve
    kullanıcı. Şifreyi IntelliJ'in kendi deposunda tut; proje dosyalarına yazılmasın.
 
@@ -88,12 +94,29 @@ Yalnız adapter değişir (AGENTS.md kural 7); analiz koduna dokunulmaz.
 python tools/ingest_nabidh.py --input iris --cohorts c1 c2   # → data/nabidh_iris/raw/ snapshot + data/canonical/nabidh/
 SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py
 SANDBOX_SOURCE=nabidh python notebooks/01_c1_c2_feasibility.py
-python tools/kpi_report.py
+SANDBOX_SOURCE=nabidh python tools/kpi_report.py
 ```
+
+IntelliJ'de aynı sıra: `1e` → `2e` → `3e` → `5e`. `SANDBOX_SOURCE` verilmezse varsayılan `synthetic`'tir; notebook
+ilk hücrede "kanonik verisi yok (SANDBOX_SOURCE='synthetic')" diye durur, KPI raporu uyarı basar.
 
 - Ingest'in `*_value_counts.csv` raporunda "unmapped" değer varsa adapter sözlüklerini genişlet; IRIS'e
   tekrar gitmeden snapshot'tan: `python tools/ingest_nabidh.py --raw-root data/nabidh_iris/raw`.
 - Her run `outputs/<run_id>/` altına yazar ve audit'lenir; manifest `status: success` olmalı.
+
+### Jupyter'de inceleme
+
+```bash
+python tools/py2ipynb.py notebooks/00_data_profile.py notebooks/01_c1_c2_feasibility.py   # IntelliJ: 9
+SANDBOX_SOURCE=nabidh jupyter lab
+```
+
+- Notebook'lar IRIS'e değil, ingest'in yazdığı `data/canonical/nabidh/`'e bakar: önce ingest (yukarıda).
+- Jupyter değişkensiz açıldıysa (IntelliJ'in kendi Jupyter'i dahil): en üste `%env SANDBOX_SOURCE=nabidh`
+  hücresi ekle, kernel'i baştan çalıştır.
+- Grafikler hücrede görünür ve `outputs/<run_id>/` altına da kaydedilir. Run son hücrede kapanır; yarıda
+  kalan run kernel kapanınca `failed_or_interrupted` olarak kapanır.
+- Kaynak `.py` dosyasıdır; `.ipynb`'deki değişiklik yeniden üretilince kaybolur.
 
 ## 7. Kurallar (VM'de de geçerli)
 

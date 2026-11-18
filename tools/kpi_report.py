@@ -25,6 +25,10 @@ def main() -> None:
     run = Run("kpi_report", source=source)
     runs = {"nb00": kpi.latest_run("nb00_data_profile", source), "nb01": kpi.latest_run("nb01_c1_c2_feasibility", source),
             "nb02": kpi.latest_run("nb02_c3_benchmark", source)}
+    if not any(runs.values()):
+        print(f"UYARI: SANDBOX_SOURCE={source!r} için başarılı NB0 / NB1 / NB2 run'ı yok → KPI'lar boş kalır. "
+              f"Önce notebook'ları aynı SANDBOX_SOURCE ile çalıştır (enclave'de 'nabidh'; IntelliJ: 2e / 3e / 4e, "
+              f"sonra 5e).\n")
     ev_dirs = sorted(OUTPUT_DIR.glob("evidence_package_*/checklist.json"))
     evidence = json.loads(ev_dirs[-1].read_text(encoding="utf-8")) if ev_dirs else {}
     for name, d in runs.items():

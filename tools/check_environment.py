@@ -315,9 +315,11 @@ def check_iris(required: bool, sqlite_dir: Path | None, cohorts: list[str] | Non
             r.append(Result(g, "Kimlik dosyası", PASS, f"{cred} (yalnız sahibi okuyabilir)"))
     has_pw = bool(os.environ.get(iris.ENV_PASSWORD) or iris.read_credentials_file().get(iris.ENV_PASSWORD))
     if s["driver"] != "pyodbc" and not has_pw:
-        r.append(Result(g, "Şifre", WARN if sys.stdin.isatty() else FAIL,
-                        "ayarlı değil — terminalde sorulacak" if sys.stdin.isatty()
-                        else f"ayarlı değil ve terminal yok: {iris.ENV_PASSWORD} ya da {cred}"))
+        prompt = iris.can_prompt()
+        r.append(Result(g, "Şifre", WARN if prompt else FAIL,
+                        "ayarlı değil — bağlanırken sorulacak" if prompt
+                        else f"ayarlı değil ve sorulamıyor (terminal yok; IntelliJ'de run configuration → "
+                             f"'Emulate terminal'): {iris.ENV_PASSWORD} ya da {cred}"))
 
     # 3. Ağ (TCP) — yalnız JDBC dizesiyle
     if s["driver"] != "pyodbc":

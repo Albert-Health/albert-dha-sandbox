@@ -93,9 +93,18 @@ def main(argv=None) -> int:
             conn = iris.sqlite_standin({nabidh.IRIS_COHORTS[c]["schema"]: sq / f"{c}.sqlite" for c in cohorts})
             target, user, driver = f"sqlite stand-in: {sq}", None, "sqlite3"
         else:
-            s = iris.connection_settings(a.iris_url)
-            target, user, driver = s["target"], s["user"], s["driver"]
-            conn = iris.connect(a.iris_url)
+            user = driver = None
+            try:
+                s = iris.connection_settings(a.iris_url)
+                target, user, driver = s["target"], s["user"], s["driver"]
+                conn = iris.connect(a.iris_url)
+            except Exception as e:                  # ayar / sürücü / ağ / giriş — şifre mesajda yok
+                err = f"{type(e).__name__}: {str(e)[:300]}"
+                print(f"IRIS'e bağlanılamadı ({target or 'bağlantı ayarı yok'}): {err}\n"
+                      f"Ayrıntılı tanı: python tools/check_environment.py --iris")
+                run.log("iris connect failed", target=target, user=user, driver=driver, error=err)
+                run.finish("connection_failed")
+                return 2
         run.log("ingest start", input="iris", target=target, user=user, driver=driver, cohorts=cohorts,
                 snapshot_root=str(snap_root) if snap_root else None)
     else:

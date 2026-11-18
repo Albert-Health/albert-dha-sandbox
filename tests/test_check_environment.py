@@ -133,6 +133,19 @@ class TestRunChecks(unittest.TestCase):
         self.assertEqual(got["TCP erişimi"].status, ce.FAIL)
         self.assertNotIn("topsecret", " ".join(r.detail for r in res))
 
+    def test_missing_password_depends_on_prompt(self):
+        """Şifre yoksa: sorulabiliyorsa (terminal / Emulate terminal / Jupyter) WARN, sorulamıyorsa FAIL."""
+        for prompt, status in ((True, ce.WARN), (False, ce.FAIL)):
+            with no_iris_settings(), mock.patch.object(iris, "can_prompt", return_value=prompt), \
+                    mock.patch.object(iris, "tcp_check", side_effect=OSError("kapalı")):
+                os.environ.update({iris.ENV_URL: "jdbc:IRIS://127.0.0.1:1/NS", iris.ENV_USER: "reader"})
+                res, conn = ce.check_iris(False, None, None)
+            got = {r.check: r for r in res}
+            self.assertIsNone(conn)
+            self.assertEqual(got["Şifre"].status, status, got["Şifre"].detail)
+            if not prompt:
+                self.assertIn("Emulate terminal", got["Şifre"].detail)
+
 
 class TestMapping(unittest.TestCase):
     def setUp(self):

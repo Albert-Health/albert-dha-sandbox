@@ -52,12 +52,13 @@ from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lrs, qdiabetes2018a as qd
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh"
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 P = dict(PARAMS)
 # Duyarlılık çalıştırmaları için: SANDBOX_PARAMS='{"outcome_washout_days": 90}' (audit'e yazılır)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
 REPS = int(os.environ.get("SANDBOX_BOOTSTRAP_REPS", P["bootstrap_reps"]))
 run = Run("nb02_c3_benchmark", params=P, source=SOURCE)
+schema.require_cohorts(CANONICAL_DIR, SOURCE, ("c3",))
 run.add_inputs([CANONICAL_DIR / SOURCE / "c3"])
 ds = schema.read_dataset(CANONICAL_DIR, SOURCE, "c3")
 built = cohorts.build_c3(ds, P)
