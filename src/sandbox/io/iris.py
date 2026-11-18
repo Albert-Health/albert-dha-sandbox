@@ -184,6 +184,14 @@ def tcp_check(host: str, port: int, timeout: float = 5.0) -> float:
     return (time.perf_counter() - t0) * 1000
 
 
+def resolve_host(host: str, port: int) -> list[str]:
+    """host'un DNS'teki IP adresleri (socket.gaierror → çözülmüyor). IP verilirse kendisi döner."""
+    import socket  # noqa: PLC0415
+
+    infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    return list(dict.fromkeys(i[4][0] for i in infos))
+
+
 def credentials_file_path() -> Path:
     return Path(os.environ.get(ENV_CREDENTIALS) or DEFAULT_CREDENTIALS).expanduser()
 

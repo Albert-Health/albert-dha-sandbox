@@ -1,6 +1,6 @@
 # Açık işler, kararlar ve bilinen kısıtlar
 
-Son güncelleme: 2026-11-16. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
+Son güncelleme: 2026-11-18. Durum etiketleri: **[AÇIK]** yapılacak · **[KARAR BEKLİYOR]** medikal ekip /
 danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** raporlanacak bilinen sınırlama.
 
 ## 1. Kod — kalan işler
@@ -15,6 +15,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | K7 | Adım 3 / UAE modeli (`notebooks/03_uae_model.py`) = Study Flow 4. basamak | Koşullu | Yürütülürse NABIDH'ten yeni veri teslimi istenir. Keşif–sınama ayrımı, tanı-öncesi tampon, girdi çiti (app'te sorulabilir, lab yok); tüm popülasyona uygulanabilir olmalı |
 | K8 | Sentetik veri üreticisi repoda yok | [KISIT] | 100k sentetik veri ekip içinde ayrı paylaşılıyor |
 | K9 | IRIS girdisi (`io/iris.py`, `nabidh.load_iris`, `ingest_nabidh --input iris`) | Yapıldı (2026-11-16) | NABIDH verisi DHA'da InterSystems IRIS'te (`jdbc:IRIS://…`). Ham dosya ve IRIS aynı eşlemeden geçer; IRIS sonucu `data/nabidh_iris/raw/` altına snapshot. SQLite ile prova edildi; gerçek IRIS'e bağlantı enclave'de denenecek (sürücü: `intersystems-irispython`) |
+| K10 | Terminal-only enclave erişimi (2026-11-18): kopyala-yapıştır runbook `docs/enclave_terminal.md`, `tools/enclave.sh` (R1–R9 kontrolleri, `iris-setup`, IntelliJ'siz IRIS keşfi `io/explore.py`, `mapping`, `run`) | Yapıldı (2026-11-18) | Çıktı `KOPYALA` bloğunda, yalnız meta veri / özet (değer ≥ 10 hasta, kimlik / doğum tarihi sütunu gizli). SQLite provası ve sahte IRIS bağlantısıyla test edildi; gerçek IRIS'te (INFORMATION_SCHEMA, `TOP`, `%EXACT`) ilk kullanımda doğrulanacak |
 
 ## 2. Medikal ekipten kararlar (config parametresiyle)
 | # | Karar | Parametre | Varsayılan | Bağlam |

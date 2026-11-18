@@ -33,6 +33,16 @@ def suppress_rates(df: pd.DataFrame, num_col: str, den_cols, rate_cols,
     return out
 
 
+def fmt_count(n, threshold: int | None = None) -> str:
+    """Tek bir sayım → metin: 0 < n < threshold ise '<threshold' (terminale basılan özetler için)."""
+    threshold = threshold or PARAMS["small_cell_threshold"]
+    try:
+        v = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    return f"<{threshold}" if 0 < v < threshold else str(v)
+
+
 def suppress_small_counts(df: pd.DataFrame, count_cols, threshold: int | None = None) -> pd.DataFrame:
     """count_cols içindeki 0 < n < threshold değerlerini '<threshold' ile değiştirir."""
     threshold = threshold or PARAMS["small_cell_threshold"]

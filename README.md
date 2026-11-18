@@ -4,6 +4,10 @@ Başvuru: **S-2025-Y4B7N9** · QDiabetes-2018 (Model A) ve Leicester Risk Score'
 
 > Bu kod yalnızca DHA Secure Data Enclave içinde gerçek veriyle çalıştırılır. Repoda **hiçbir hasta verisi yoktur** (gerçek veya sentetik); `data/` ve `outputs/` git dışıdır.
 
+**Enclave'e yalnız terminalden erişim:** kopyala-yapıştır rehberi [`docs/enclave_terminal.md`](docs/enclave_terminal.md)
+— VM gereksinimleri R1–R9 tek tek, IRIS erişimi, IRIS keşfi (IntelliJ'siz), adapter eşlemesi, Faz 1. Tek komut:
+`bash ~/sandbox-git/tools/enclave.sh <komut>`; sonuç `KOPYALA` işaretleri arasında, yalnız özet / meta veri.
+
 ## Yapı
 
 ```
@@ -16,6 +20,7 @@ src/sandbox/
   codelists.py            ICD-10 / SNOMED / ATC / LOINC listeleri
   io/schema.py            kanonik şema, okuma/yazma, doğrulama
   io/adapters/            synthetic.py, nabidh.py (kaynak → kanonik)
+  io/iris.py, io/explore.py  IRIS bağlantısı (yalnız SELECT); terminalden şema / tablo / sütun / değer keşfi
   phenotype.py            glisemik ölçümler, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py              pozitif havuz (C1/C2), C3 (v2 incident kuralları, washout)
   scores/qdiabetes2018a.py  QDiabetes-2018 Model A (CRAN QDiabetes 1.0-2 katsayıları; referans testli)
@@ -27,7 +32,8 @@ src/sandbox/
   audit.py                audit trail (run log, kod/veri hash) — KPI: Audit Trail %100
   sdc.py                  küçük hücre bastırma
 notebooks/                .py (percent format) — Jupyter/VS Code'da hücre hücre açılır
-tools/                    ingest_nabidh.py (NABIDH ham → kanonik), make_nabidh_dryrun.py (prova verisi),
+tools/                    enclave.sh + enclave.py (terminal-only enclave: R1–R9, iris-setup, keşif, run),
+                          ingest_nabidh.py (NABIDH ham → kanonik), make_nabidh_dryrun.py (prova verisi),
                           build_synthetic_cohorts.py, kpi_report.py, build_evidence_package.py,
                           positive_control.py, py2ipynb.py
 docs/evidence_package/    model card, validasyon, veri kalite, kohort türetme şablonları
@@ -78,7 +84,8 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 
 ## Kurulum (VM'de ve yerelde aynı)
 
-Enclave VM'de adım adım kurulum ve ilk çalıştırma: [`docs/vm_kurulum.md`](docs/vm_kurulum.md).
+Enclave VM'de adım adım kurulum ve ilk çalıştırma: [`docs/vm_kurulum.md`](docs/vm_kurulum.md) (masaüstü VM,
+IntelliJ) · yalnız terminal: [`docs/enclave_terminal.md`](docs/enclave_terminal.md).
 
 Proje kendi sanal ortamını (venv) kurmaz. Projenin çalıştırılacağı Python'a iki dosya **bir kez** kurulur:
 

@@ -4,6 +4,10 @@ DHA'nın masaüstü VM'inde (IntelliJ, GitHub dışında internet yok) projeyi a
 paketleri DHA hazırlar (`docs/gap.md` K4); bu belge **bizim** VM'de yapacaklarımızdır. Analiz akışının
 ayrıntısı: `docs/faz1_c1_c2_hazirlik.md` §4.
 
+> Erişim yalnız terminalse (grafik arayüz yok): aynı işler kopyala-yapıştırla [`enclave_terminal.md`](enclave_terminal.md)
+> üzerinden — R1–R9 kontrolleri, `iris-setup`, IntelliJ Database aracı yerine `schemas` / `tables` / `columns` /
+> `values`, `mapping`, `run`.
+
 ## 0. DHA'dan beklenen (teslimde kontrol et)
 
 | Ne | Beklenen |

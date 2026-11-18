@@ -57,6 +57,8 @@ src/sandbox/
                        FamilyHistory, Medication, Encounter → kanonik; load = ham dosya, load_iris = IRIS)
   io/iris.py           IRIS bağlantısı (jdbc:IRIS:// dizesi, ~/.nabidh_iris), SELECT koruması, sorgu → metin
                        tablosu; prova için SQLite stand-in
+  io/explore.py        terminalden IRIS keşfi (INFORMATION_SCHEMA / SQLite): şema, tablo, sütun profili, değer
+                       dağılımı; ifşa kuralları (hassas ad / kimlik gibi sütunda değer yok, değer ≥ 10 hastada)
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
   scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py (Leicester varyant
@@ -68,8 +70,10 @@ src/sandbox/
   audit.py, sdc.py
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
-                       build_evidence_package, positive_control, py2ipynb
-docs/                  gap.md (açık işler + kararlar), faz1_c1_c2_hazirlik.md, vm_kurulum.md, evidence_package/ şablonları
+                       build_evidence_package, positive_control, py2ipynb, enclave.sh + enclave.py (terminal-only
+                       enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run; çıktı KOPYALA bloğu)
+docs/                  gap.md (açık işler + kararlar), faz1_c1_c2_hazirlik.md, vm_kurulum.md, enclave_terminal.md
+                       (kopyala-yapıştır runbook), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 .run/                  IntelliJ run configuration'ları (repoda)
 ```
@@ -93,6 +97,8 @@ python tools/build_evidence_package.py
 #   IRIS yolu provası: ingest_nabidh --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
 # Enclave: tools/ingest_nabidh.py --input iris (IRIS → data/nabidh_iris/raw/<kohort> snapshot → data/canonical/nabidh/)
 #   ya da ham dosyadan (data/nabidh/raw/<kohort>); sonra SANDBOX_SOURCE=nabidh
+# Enclave yalnız terminal: bash ~/sandbox-git/tools/enclave.sh <komut> (docs/enclave_terminal.md). Bloğa (KOPYALA
+#   BAŞ/SON) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
 ```
 
 ## Değişiklik yaparken

@@ -1,0 +1,362 @@
+# Enclave — yalnız terminalle çalışma (kopyala → yapıştır)
+
+Enclave'e yalnız terminalden erişildiğinde her iş tek bir komutla yapılır:
+`bash ~/sandbox-git/tools/enclave.sh <komut>`. Bu sayfadaki her kod bloğu GitHub'da sağ üstteki kopyala
+düğmesiyle alınır ve terminale olduğu gibi yapıştırılır. Yalnız `SEMA`, `SEMA.TABLO`, `SUTUN` gibi büyük
+harfli yer tutucular yapıştırdıktan sonra düzeltilir.
+
+Her komut sonucunu iki işaret satırı arasında basar. Enclave dışına kopyalanan yalnız bu bloktur:
+
+```text
+----8<---- KOPYALA BAŞ | enclave req R5 | 2026-11-18 10:00 UTC | commit 1c877f2 | python 3.11.9 | <run_id> ----8<----
+...
+----8<---- KOPYALA SON ----8<----
+```
+
+## Nasıl işler
+
+```text
+GitHub (bu sayfa) ──kopyala──▶ enclave terminali ──KOPYALA bloğu──▶ ekip
+        ▲                                                            │
+        └──── git push ◀── adapter / kod düzeltmesi (enclave dışında) ◀┘
+enclave'de: git pull (salt-okuma token) → komutu tekrar çalıştır
+```
+
+- Kod enclave'e yalnız `git pull` ile girer; enclave'de dosya düzenlenmez. Adapter eşlemesi
+  (`src/sandbox/io/adapters/nabidh.py`) bloklara bakılarak dışarıda yazılır, push edilir, enclave'de çekilir.
+- Bloklar yalnız meta veri ve özet içerir: tablo / sütun adları, tipler, durumlar, sayımlar (< 10 → `<10`),
+  değer şekilleri (`2023-01-05` → `9999-99-99`) ve en az 10 farklı hastada geçen kategorik değerler. Kimlik,
+  ad, doğum tarihi, iletişim gibi sütunların değeri hiç basılmaz. Yine de kopyalamadan önce bloğa göz at;
+  DHA'nın çıktı kuralları geçerli.
+- `run` adımlarının tam ekran çıktısı bloğun üstünde kalır ve kopyalanmaz.
+- Şifre ve token hiçbir bloğa, dosyaya ya da mesaja yapıştırılmaz.
+- Her komut audit'lenir: `outputs/<run_id>/enclave/block.txt`. Blok ekrandan kaydıysa: [`last`](#6-faz-1i-çalıştır).
+
+## 0. İlk temas (repo yokken)
+
+İşletim sistemi, Python, git ve iki bağlantı noktası (GitHub 443, IRIS 51772):
+
+```bash
+echo "----8<---- KOPYALA BAŞ | adım 0 | $(date -u '+%Y-%m-%d %H:%M UTC') ----8<----"
+grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release; uname -m; echo "kabuk: $SHELL"
+for p in python3.11 python3.12 python3 python; do command -v "$p" >/dev/null && echo "$p: $("$p" --version 2>&1) · pandas $("$p" -c 'import pandas; print(pandas.__version__)' 2>/dev/null || echo yok)"; done
+git --version || echo "git yok"
+timeout 8 bash -c '</dev/tcp/github.com/443' 2>/dev/null && echo "github.com:443 açık" || echo "github.com:443 KAPALI"
+timeout 8 bash -c '</dev/tcp/dhasbxnbprddb01.dha.ae/51772' 2>/dev/null && echo "IRIS :51772 açık" || echo "IRIS :51772 KAPALI ya da DNS yok"
+df -h ~ | tail -1; nproc; free -g | head -2
+echo "----8<---- KOPYALA SON ----8<----"
+```
+
+Beklenen: bir Python 3.10+ ve yanında pandas 2.x, git, `github.com:443 açık`. IRIS satırı KAPALI ise
+[R7](#r7--ağ-vm--iris-tcp-51772) ayrıntıyı verir.
+
+## 1. Repoyu al, güncelle
+
+Token'ı 12 saat bellekte tut (isteğe bağlı; diske yazılmaz, `git pull` gün içinde tekrar sormaz):
+
+```bash
+git config --global credential.helper 'cache --timeout=43200'
+```
+
+Klonla. `Username` = GitHub kullanıcı adı, `Password` = salt-okuma token (yazarken görünmez):
+
+```bash
+git clone https://github.com/Albert-Health/albert-dha-sandbox.git ~/sandbox-git
+```
+
+Güncelle (her yeni düzeltmeden sonra):
+
+```bash
+git -C ~/sandbox-git pull --ff-only && git -C ~/sandbox-git log -1 --format='%h %s (%cr)'
+```
+
+Komut listesi:
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh help
+```
+
+## 2. VM gereksinimleri — tek tek (R1–R9)
+
+Kaynak: "Data Exploration Environment – VM Requirements". Her gereksinimin kendi komutu var. Durumlar:
+**PASS** tamam · **WARN** eksik ama iş durmaz · **FAIL** iş durur · INFO / SKIP bilgi. Bloğun son satırı özettir.
+
+R1–R4 masaüstü VM'in parçalarıdır (Ubuntu masaüstü, IntelliJ, eklentiler, JDBC). Terminal-only VM'de WARN
+beklenir; DHA masaüstü VM'i teslim edince PASS olmalı. Terminalden çalışmak için R5–R9 yeterli.
+
+| R | Konu | PASS ne demek |
+|---|---|---|
+| R1 | Masaüstü | Ubuntu 22+, `graphical.target`, masaüstü paketleri kurulu |
+| R2 | IntelliJ IDEA Ultimate | kurulu ve Ultimate (Community değil) |
+| R3 | Eklentiler | Database Tools, Python, Jupyter klasörleri var |
+| R4 | IRIS JDBC sürücüsü | `intersystems-jdbc*.jar` VM'de |
+| R5 | Python ve paketler | Python ≥ 3.10, `requirements.txt` paketleri, `pip check`, unit testler |
+| R6 | Git + GitHub | git var, `git ls-remote origin` başarılı, `data/` ve `outputs/` yazılabilir |
+| R7 | Ağ | IRIS host'u DNS'te (opsiyonel), TCP 51772 açık |
+| R8 | Salt-okuma IRIS kullanıcısı | giriş + `SELECT 1`, şemalar görünüyor, test sorgusu satır döndürüyor |
+| R9 | Kaynaklar | ≥ 4 vCPU, ≥ 16 GB RAM, ≥ 250 GB boş disk |
+
+### R1 · Masaüstü
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R1
+```
+
+### R2 · IntelliJ IDEA Ultimate
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R2
+```
+
+### R3 · IntelliJ eklentileri
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R3
+```
+
+### R4 · IRIS JDBC sürücüsü
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R4
+```
+
+### R5 · Python, paketler, testler
+
+Unit testleri ve `pip check`'i de çalıştırır (birkaç saniye). Yalnız paketler için sona ` --quick` ekle.
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R5
+```
+
+### R6 · Git ve GitHub
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R6
+```
+
+### R7 · Ağ: VM → IRIS, TCP 51772
+
+[§3](#3-iris-erişimini-oluştur)'ten önce DHA'nın host'unu (dhasbxnbprddb01.dha.ae:51772), sonra
+`~/.nabidh_iris`'teki hedefi dener.
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R7
+```
+
+### R8 · Salt-okuma IRIS kullanıcısı
+
+Önce [§3](#3-iris-erişimini-oluştur). Şifre ayarlı değilse bir kez sorar.
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R8
+```
+
+### R9 · Kaynaklar
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R9
+```
+
+### Hepsi birden
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req all
+```
+
+## 3. IRIS erişimini oluştur
+
+**3.1 Bağlantı ayarı.** Namespace'i ve salt-okuma kullanıcıyı sorar; `~/.nabidh_iris`'e (repo dışında,
+`chmod 600`) yazar. Şifre dosyaya yazılmaz.
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh iris-setup
+```
+
+Sormadan, tek satırda (yer tutucuları düzelt):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh iris-setup --namespace NAMESPACE --user KULLANICI
+```
+
+Host DNS'te çözülmüyorsa IP ile (R7 DNS satırı WARN):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh iris-setup --url jdbc:IRIS://IP_ADRESI:51772/NAMESPACE --user KULLANICI
+```
+
+**3.2 Şifre (oturum boyu, isteğe bağlı).** Yapılmazsa her komut şifreyi bir kez sorar. Bu satır şifreyi
+yalnız açık terminal oturumunun belleğinde tutar:
+
+```bash
+read -rs -p "IRIS şifresi: " NABIDH_IRIS_PASSWORD && echo && export NABIDH_IRIS_PASSWORD
+```
+
+İş bitince:
+
+```bash
+unset NABIDH_IRIS_PASSWORD
+```
+
+**3.3 Dene.**
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh req R7 R8
+```
+
+## 4. IRIS'i keşfet (IntelliJ Database aracının yerine)
+
+Amaç, adapter eşlemesi için şunları bulmak: NABIDH kaynaklarının (Patient, tanı, Observation, SocialHistory,
+FamilyHistory, Medication, Encounter) hangi şema / tabloda olduğu, sütun adları, tarih biçimi, C1 / C2 / C3'ün
+nasıl ayrıldığı ve cinsiyet, uyruk, sigara, aile öyküsü değer listeleri. IRIS'e yalnız `SELECT` gider.
+
+Namespace'teki şemalar (sistem şemaları gizli; hepsi için sona ` --all`):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh schemas
+```
+
+Adında bir metin geçen tablo ve sütunlar (ör. `patient`, `diagnos`, `observ`, `social`, `family`, `medic`,
+`encounter`, `cohort`, `smok`, `nation`):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh find patient
+```
+
+Bir şemanın tabloları ve satır sayıları (çok tablolu şemada sona ` --no-count` ya da ` --like Patient`):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh tables SEMA
+```
+
+Bir tablonun sütunları: tip, doluluk, en sık değer şekli, tür tahmini (tarih, kategori, sayı, kimlik?):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh columns SEMA.TABLO
+```
+
+Bir sütunun değerleri. Kategorik sütunda en az 10 farklı hastada geçen değerler; tarih ve ölçümde yüzdelikler
+(tarih ay çözünürlüğünde); kimlik / ad / doğum tarihi sütununda yalnız şekil:
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh values SEMA.TABLO SUTUN
+```
+
+Filtreyle (ör. yalnız BMI gözlemleri) — sona ekle: ` --where "Code = '39156-5'"`. Hasta anahtarı sütunu
+otomatik bulunamazsa: ` --patient-col SUTUN`.
+
+Bir sorgunun satır sayısı, satır okumadan (ör. kohort ayrımı, kod varlığı):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh count "SELECT DISTINCT PatientID FROM SEMA.TABLO WHERE KOSUL"
+```
+
+Şekil okuma: rakam → `9`, harf dizisi → `a`. `9999-99-99` ISO tarih, `99/99/9999` gün-önce tarih (adapter
+`DATE_FORMAT`), `99999` ve sütun adı tarih gibiyse IRIS iç tarihi (`horolog`), `a99.9` ICD-10, `9999-9` LOINC.
+
+## 5. Adapter eşlemesi
+
+`SOURCES` (tablo + sütun adları) ve `IRIS_COHORTS` (kohort başına şema) IRIS'te tutuyor mu (satır okunmaz):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh mapping c1 c2
+```
+
+WARN varsa: bu bloğu ve §4'ün ilgili bloklarını gönder → `nabidh.py` dışarıda güncellenip push edilir →
+[§1 güncelle](#1-repoyu-al-güncelle) → `mapping` tekrar. Hepsi PASS olunca §6.
+
+## 6. Faz 1'i çalıştır
+
+Sıra: ingest → NB0 → NB1 → KPI. Her `run`, adımın tam çıktısını ekranda gösterir (kopyalanmaz) ve en sonda
+özet bloğu basar.
+
+IRIS → snapshot (`data/nabidh_iris/raw/`) + kanonik veri (`data/canonical/nabidh/`):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh run ingest --cohorts c1 c2
+```
+
+Blokta "eşlenemeyen değerler" varsa onu gönder; sözlükler güncellenince IRIS'e gitmeden snapshot'tan tekrar:
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh run ingest --snapshot --cohorts c1 c2
+```
+
+Veri profili (şema kontrolü, hacim, Framework Match, eşlenemeyen kodlar):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh run nb0
+```
+
+C1 / C2 fizibilite: skor hesaplanabilirliği, eksiklik nedenleri, C1 yakalama oranı, skor özetleri:
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh run nb1
+```
+
+KPI tablosu:
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh run kpi
+```
+
+Bir run'ın diğer tabloları (önce listeler; sonra dosya adını ekleyip bas):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh show nb1
+```
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh show nb1 nb01/ethnicity_mapping.csv
+```
+
+Son bloğu yeniden bas (ekrandan kaydıysa):
+
+```bash
+bash ~/sandbox-git/tools/enclave.sh last
+```
+
+Faz 2 (C3) aynı yoldan: `run ingest --cohorts c3`, sonra `run nb2` (hızlı deneme için sona
+` --bootstrap-reps 100`).
+
+## 7. Komut özeti
+
+| Komut | Ne yapar |
+|---|---|
+| `req R1` … `req R9`, `req all` | VM gereksinimlerini dener |
+| `iris-setup` | `~/.nabidh_iris`: bağlantı dizesi + kullanıcı (şifre yazılmaz) |
+| `schemas` · `tables SEMA` · `columns SEMA.TABLO` | IRIS kataloğu |
+| `values SEMA.TABLO SUTUN` · `find METIN` · `count "SELECT ..."` | değer dağılımı, arama, sayım |
+| `mapping c1 c2` | adapter eşlemesi IRIS'te tutuyor mu |
+| `run ingest\|nb0\|nb1\|nb2\|kpi` | adımı çalıştırır, özet bloğu basar |
+| `show ADIM [DOSYA]` | bir run'ın çıktı tablosunu basar (sayımlar bastırılmış) |
+| `last` | son bloğu yeniden basar |
+
+Ortak seçenekler: `--max-rows N` (tablo satırı), `--iris-sqlite DIZIN` (prova, §9).
+
+## 8. Sorun giderme
+
+| Belirti | Ne yap |
+|---|---|
+| `Python >= 3.10 bulunamadı` ya da R5'te paket FAIL | DHA'nın kurduğu Python'u ver: komutun başına `SANDBOX_PYTHON=/tam/yol/python3 ` ekle. Eksik paket → DHA'ya `requirements.txt` ile ilet |
+| R6: `could not read Username` | token önbellekte değil: §1'deki `git pull`'u bir kez çalıştırıp token'ı gir, R6'yı tekrarla |
+| R7: TCP FAIL | firewall kuralı DHA'da (R7); DNS WARN ise §3.1'deki IP'li `iris-setup` |
+| R8: giriş FAIL | kullanıcı / şifre / namespace: `iris-setup`'ı tekrar çalıştır; şifreyi §3.2 ile yeniden gir |
+| R8: hiç şema görünmüyor | namespace yanlış ya da SELECT yetkisi yok → DHA (R8). `schemas --all` |
+| `şema yok` / `tablo yok` | blok yakın adları önerir; `schemas`, `find` ile ara |
+| `run` çıkış kodu ≠ 0 | blokta "Yer" ve "Hata" satırları var; hasta değeri içermiyorsa bloğu gönder |
+| Blok ekrandan kaydı | `last` |
+
+## 9. Yerelde prova (enclave dışında)
+
+Aynı komutlar IRIS yerine SQLite prova verisiyle (sentetik veri NABIDH biçiminde):
+
+```bash
+python tools/build_synthetic_cohorts.py && python tools/make_nabidh_dryrun.py
+bash tools/enclave.sh schemas --iris-sqlite data/nabidh_dryrun/iris
+bash tools/enclave.sh mapping c1 c2 --iris-sqlite data/nabidh_dryrun/iris
+bash tools/enclave.sh run ingest --source nabidh_dryrun_iris --iris-sqlite data/nabidh_dryrun/iris --cohorts c1 c2
+bash tools/enclave.sh run nb1 --source nabidh_dryrun_iris
+```
+
+Kod: `tools/enclave.sh` (Python'u bulur), `tools/enclave.py` (komutlar), `src/sandbox/io/explore.py`
+(IRIS kataloğu ve ifşa kuralları), testler `tests/test_enclave.py`.
