@@ -80,7 +80,7 @@ olup olmadığını denetler. İlk seferde `[mapping]` WARN beklenir (adlar hen�
      `"horolog"`); gerekirse `query`
 3. `python tools/check_environment.py --iris --cohorts c1 c2` → `[mapping]` PASS olana kadar tekrarla.
 
-Yalnız adapter değişir (CLAUDE.md kural 7); analiz koduna dokunulmaz.
+Yalnız adapter değişir (AGENTS.md kural 7); analiz koduna dokunulmaz.
 
 ## 6. Çalıştır (Faz 1: C1 / C2)
 

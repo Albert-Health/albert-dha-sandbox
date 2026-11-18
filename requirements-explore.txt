@@ -1,5 +1,5 @@
 # Keşif ortamı (VM gereksinimleri R5): veriyi IntelliJ / Jupyter'de incelemek için.
-# Projenin kodu bunları KULLANMAZ (CLAUDE.md kural 2) — çekirdek bağımlılıklar requirements.txt'te.
+# Projenin kodu bunları KULLANMAZ (AGENTS.md kural 2) — çekirdek bağımlılıklar requirements.txt'te.
 # Kurulum:   python -m pip install -r requirements.txt -r requirements-explore.txt
 # Kontrol:   python tools/check_environment.py   ([explore] grubu bu dosyayı okur)
 # sqlalchemy-iris bilerek YOK: iris-embedded-python-wrapper'ı çeker, o da resmi sürücünün

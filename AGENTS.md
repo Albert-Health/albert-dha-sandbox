@@ -1,7 +1,7 @@
-# CLAUDE.md — Albert Health × DHA Health Data Sandbox (S-2025-Y4B7N9)
+# AGENTS.md — Albert Health × DHA Health Data Sandbox (S-2025-Y4B7N9)
 
-Bu dosya Claude Code (ve ekip) için projenin çalışma kurallarıdır. Her oturumda önce bunu, sonra
-`docs/OPEN_ITEMS.md`'yi oku.
+Bu dosya ekip ve kodlama asistanları için projenin çalışma kurallarıdır. Her oturumda önce bunu, sonra
+`docs/gap.md`'yi oku.
 
 ## Proje ne yapıyor
 QDiabetes-2018 Model A ve Leicester Risk Score'un (LRS) UAE nüfusunda (NABIDH verisi, DHA Secure
@@ -37,9 +37,9 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    yazma. `outputs/audit/audit_log.jsonl` append-only — elle düzenleme, silme.
 5. **Parametreler tek yerde:** `src/sandbox/config.py → PARAMS`. Notebook içinde sabit eşik/pencere
    yazma. Duyarlılık çalıştırmaları `SANDBOX_PARAMS='{"key": value}'` ortam değişkeniyle (audit'e girer).
-6. **Klinik kararlar Claude'un/geliştiricinin değildir.** `[KARAR BEKLİYOR]` işaretli parametrelerin
+6. **Klinik kararlar kodlama asistanının/geliştiricinin değildir.** `[KARAR BEKLİYOR]` işaretli parametrelerin
    varsayılanını medikal ekip onayı olmadan değiştirme. Karar gelince: config'i güncelle, yorumdaki
-   işareti `[KARAR: <tarih>, <kim>]` yap, `docs/OPEN_ITEMS.md`'de "Kararlar" bölümüne işle.
+   işareti `[KARAR: <tarih>, <kim>]` yap, `docs/gap.md` §5 "Kararlar" bölümüne işle.
 7. **Kaynak formatı yalnızca adapter'da.** Analiz kodu sadece kanonik şemayı okur
    (`src/sandbox/io/schema.py`). NABIDH formatı / IRIS şeması değişirse yalnızca `io/adapters/nabidh.py`
    (SOURCES, IRIS_COHORTS ve değer sözlükleri) değişir. Ham dosya ve IRIS aynı SOURCES eşlemesinden geçer.
@@ -69,7 +69,7 @@ src/sandbox/
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, positive_control, py2ipynb
-docs/                  OPEN_ITEMS.md, evidence_package/ şablonları
+docs/                  gap.md (açık işler + kararlar), faz1_c1_c2_hazirlik.md, vm_kurulum.md, evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 .run/                  IntelliJ run configuration'ları (repoda)
 ```

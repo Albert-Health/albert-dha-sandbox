@@ -161,7 +161,7 @@ eski davranışı veriyor (LRA %0, Framework Match "Eksik: waist_cm"). Sentetik 
 | A8 | NB1'e etnisiteye göre skor dağılımı (Emirati / Gulf Arab / Güney Asya / diğer) | [İYİ OLUR] | Ana hipotezin (Emirati'de düşük tahmin) Faz 1'deki ilk betimleyici sinyali |
 | A9 | ICD kodları kısaltılmış gelirse ("F17.2") sigara tanı eşlemesi | [İYİ OLUR] | Kod listesi tam kod bekliyor (F17210 …); etki küçük (~15 hasta) |
 | A11 | NB1 §4: C1 (ve karşılaştırma için C2) yakalama oranı — Leicester skor ≥ etkin varyant eşiği (`variant` sütunu), QDiabetes horizon riski ≥ `qd_risk_threshold_pct`; T2DM / prediyabet; Wilson %95 GA; iki referans tarihi; oranlarda küçük hücre bastırma (`sdc.suppress_rates`) | **[YAPILDI 2026-11-14]** | C1'in birincil amacı (anlatım kaydı). QDiabetes D5'e, Leicester (LPRS) D23 eşiğine bağlı |
-| A10 | NB0 `SANDBOX_PARAMS`'ı okusun; `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın; `claude.md` / `docs/gap.md` adları kurallarla eşleşsin | [İYİ OLUR] | Audit tutarlılığı; Linux VM'de `claude.md` ≠ `CLAUDE.md` |
+| A10 | NB0 `SANDBOX_PARAMS`'ı okusun; `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın | [İYİ OLUR] | Audit tutarlılığı. (Ad uyumu yapıldı 2026-11-18: kural dosyası `AGENTS.md`, açık işler `docs/gap.md`) |
 
 ## 6. Kararlar — Faz 1'i etkileyenler (kayıt: `docs/gap.md` §5)
 
