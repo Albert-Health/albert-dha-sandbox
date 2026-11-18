@@ -265,7 +265,6 @@ def map_ethnicity_qdiabetes(raw: pd.Series) -> pd.Series:
 CORE_VARIABLES = [
     "sex", "age", "ethnicity", "bmi", "smoking", "family_history", "cvd", "hypertension",
 ]
-SUPPLEMENTAL_VARIABLES = ["waist"]
 
 
 # --------------------------------------------------------------------------

@@ -133,7 +133,7 @@ def require_cohorts(base: Path, source: str, cohorts, *, require_all: bool = Tru
         f"  Kaynak yanlışsa (enclave'de 'nabidh'): terminalde `SANDBOX_SOURCE=nabidh python notebooks/<nb>.py`; "
         f"Jupyter'de en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekleyip baştan çalıştır; "
         f"IntelliJ'de '(enclave)' run configuration'ları.\n"
-        f"  Veri henüz yoksa önce: `python tools/ingest_nabidh.py --input iris` (docs/vm_kurulum.md §6).")
+        f"  Veri henüz yoksa önce: `python tools/ingest_nabidh.py --input iris` (docs/faz1_c1_c2.md).")
 
 
 def read_dataset(base: Path, source: str, cohort: str) -> Dataset:

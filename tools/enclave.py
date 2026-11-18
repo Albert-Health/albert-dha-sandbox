@@ -1,14 +1,14 @@
 """Enclave terminal aracı: VM gereksinimlerini (R1–R9) tek tek dener, IRIS erişimini kurar, IRIS'i keşfeder
 (IntelliJ Database aracının yerine), adapter eşlemesini denetler ve Faz 1 adımlarını çalıştırır.
 
-Grafik arayüz yokken, yalnız terminalle çalışmak için. Komutlar docs/enclave_terminal.md'den kopyala-yapıştırla
-çalıştırılır; projenin Python'unu tools/enclave.sh bulur:
-  bash ~/sandbox-git/tools/enclave.sh req R5            # tek gereksinim; birkaç: req R7 R8; hepsi: req all
-  bash ~/sandbox-git/tools/enclave.sh iris-setup        # ~/.nabidh_iris (URL + kullanıcı; şifre dosyaya yazılmaz)
-  bash ~/sandbox-git/tools/enclave.sh schemas | tables SEMA | columns SEMA.TABLO | values SEMA.TABLO SUTUN
-  bash ~/sandbox-git/tools/enclave.sh find smok | count "SELECT ..." | mapping c1 c2
-  bash ~/sandbox-git/tools/enclave.sh run ingest|nb0|nb1|nb2|kpi
-  bash ~/sandbox-git/tools/enclave.sh show nb1 nb01/score_summary.csv | last
+Repo kökünden çalıştırılır (VM'de ~/Desktop/albert-dha/albert-dha-sandbox). Komutlar docs/enclave_terminal.md'den
+kopyala-yapıştırla; projenin Python'unu tools/enclave.sh bulur:
+  bash tools/enclave.sh req R5            # tek gereksinim; birkaç: req R7 R8; hepsi: req all
+  bash tools/enclave.sh iris-setup        # ~/.nabidh_iris (URL + kullanıcı; şifre dosyaya yazılmaz)
+  bash tools/enclave.sh schemas | tables SEMA | columns SEMA.TABLO | values SEMA.TABLO SUTUN
+  bash tools/enclave.sh find smok | count "SELECT ..." | mapping c1 c2
+  bash tools/enclave.sh run ingest|nb0|nb1|nb2|kpi
+  bash tools/enclave.sh show nb1 nb01/score_summary.csv | last
 
 Her komutun sonucu iki işaret satırı arasında basılır:
   ----8<---- KOPYALA BAŞ | <komut> | <zaman> | commit <sha> | <run_id> ----8<----
@@ -51,7 +51,7 @@ Result, PASS, WARN, FAIL, SKIP, INFO = ce.Result, ce.PASS, ce.WARN, ce.FAIL, ce.
 
 DEFAULT_IRIS_HOST = "dhasbxnbprddb01.dha.ae"      # DHA'nın bağlantı dizesi (VM Requirements R7)
 DEFAULT_IRIS_PORT = 51772
-CMD = "bash ~/sandbox-git/tools/enclave.sh"
+CMD = "bash tools/enclave.sh"   # repo kökünden
 MARK = "----8<----"
 MARK_END = f"{MARK} KOPYALA SON {MARK}"
 
@@ -369,7 +369,7 @@ def req_r6(a) -> list:
         else:
             os.environ["GIT_TERMINAL_PROMPT"] = old
     if any(x.check.startswith("GitHub") and x.status == FAIL for x in r):
-        r.append(Result("repo", "İpucu", INFO, "token önbellekte değilse: `git -C ~/sandbox-git pull` ile bir kez gir "
+        r.append(Result("repo", "İpucu", INFO, "token önbellekte değilse: repo kökünde `git pull` ile bir kez gir "
                                                "(docs/enclave_terminal.md §1, credential cache), sonra tekrar"))
     return r
 

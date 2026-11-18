@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Enclave terminal girişi: projenin Python'unu bulur ve tools/enclave.py'yi çalıştırır.
-#   bash ~/sandbox-git/tools/enclave.sh help          # komutlar; rehber: docs/enclave_terminal.md
+#   bash tools/enclave.sh help                        # repo kökünden          # komutlar; rehber: docs/enclave_terminal.md
 # Python: SANDBOX_PYTHON verilmişse o. Yoksa sırayla .venv/bin/python (yalnız yerelde varsa), python3.11,
 # python3.12, python3.13, python3.10, python3, python içinden requirements.txt'e uyan (>= 3.10, pandas >= 2) ilki;
 # uyan yoksa pandas'lı ilki, o da yoksa >= 3.10 ilki (req R5 eksiği gösterir).

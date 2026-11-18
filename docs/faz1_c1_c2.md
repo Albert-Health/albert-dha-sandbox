@@ -1,0 +1,303 @@
+# Faz 1 — C1 / C2: enclave'de yapılacaklar
+
+Güncelleme: 2026-11-18 · Açık işler ve kararların kaydı: [`gap.md`](gap.md) · Komutların ayrıntısı:
+[`enclave_terminal.md`](enclave_terminal.md)
+
+| Ortam | Değer |
+|---|---|
+| VM | DHA uzak masaüstü (XFCE, IntelliJ, Firefox). Repo: `~/Desktop/albert-dha/albert-dha-sandbox` |
+| Python | `/usr/bin/python3`; paketler `--user` ile kuruldu (2026-11-18). Komutlarda `python3` |
+| IRIS | `10.28.29.29:51772`, namespace `HSSBX`, salt-okuma kullanıcı; ayar `~/.nabidh_iris` (repo dışında) |
+| C1 şeması | `SBXV_ENCL447CCD80_HSAA` |
+| C2 şeması | `SBXV_ENCL6F10EFBD_HSAA` |
+| C3 şeması (Faz 2) | `SBXV_ENCL94F43B4B_HSAA` |
+
+**Çalışma döngüsü.** Her komut sonucunu `KOPYALA BAŞ` … `KOPYALA SON` arasında basar. Bu bloğu ekibe
+yapıştır. Adapter düzeltmesi VM dışında yapılır ve push edilir; VM'de `git pull --ff-only` ile alınıp komut
+tekrarlanır. VM'de kod düzenlenmez. Bloklarda yalnız meta veri ve özet vardır. Yine de yapıştırmadan önce
+göz at.
+
+## Faz 1 neyi cevaplar
+
+- **C1 (birincil):** QDiabetes-2018 A ve Leicester (LPRS, bel çevresiz) skorları, T2DM ya da prediyabetli
+  olduğu bilinen hastaların yüzde kaçını "yüksek risk" buluyor (duyarlılık, `nb01/c1_detection_rate.csv`).
+- **C2:** 8 çekirdek değişkenin NABIDH'te ne kadar dolu olduğu (tamlık).
+- Ayrıca: skorlar hangi oranda hesaplanabiliyor ve neden hesaplanamıyor, C1 ile C2 farkı (SMD, seçilim
+  etkisi), etnisite eşlemesi, skor dağılımı.
+- **Cevaplamaz:** özgüllük, PPV, AUROC, kalibrasyon. C1/C2'de negatif vaka yok; bunlar Faz 2'de (C3).
+
+## Yapılacaklar (sırayla)
+
+### 0 · Başlat (~5 dk)
+
+- [ ] Terminal, repo kökü:
+
+  ```bash
+  cd ~/Desktop/albert-dha/albert-dha-sandbox
+  ```
+
+- [ ] Kodu güncelle. İlk seferde VM'deki eski `nabidh.py` değişikliğini kenara al:
+
+  ```bash
+  git stash && git pull --ff-only && git log -1 --oneline
+  ```
+
+  Sonraki güncellemeler: `git pull --ff-only`.
+
+- [ ] IRIS şifresini oturum boyu bellekte tut, her komutta sorulmasın. Şifre dosyaya yazılmaz:
+
+  ```bash
+  read -rs -p "IRIS şifresi: " NABIDH_IRIS_PASSWORD && echo && export NABIDH_IRIS_PASSWORD
+  ```
+
+- [ ] Ortam + IRIS + eşleme kontrolü:
+
+  ```bash
+  python3 tools/check_environment.py --iris --quick
+  ```
+
+  Beklenen: FAIL yok. `[mapping]` c1 ve c2 PASS. c1 encounters INFO: yetki yok, Faz 1'de gerekmiyor. WARN
+  çıkarsa bloğu gönder.
+
+- [ ] Kısa adlar (yeni terminal açınca tekrar):
+
+  ```bash
+  C1=SBXV_ENCL447CCD80_HSAA; C2=SBXV_ENCL6F10EFBD_HSAA
+  ```
+
+### 1 · Değerlere bak — ingest'ten önce (~20 dk, K3)
+
+Adapter sözlükleri tahmine dayanıyor. Bu adım onları gerçek değerlerle tamamlar. `values` yalnız ≥ 10
+hastada geçen değerleri ya da yüzdelikleri basar.
+
+- [ ] **1a · Sigara kalemi.** Ingest SocialHistory'de birden çok kalem görürse durur, çünkü hangisinin sigara
+  olduğunu bilmez. Önce bunlar:
+
+  ```bash
+  bash tools/enclave.sh values $C1.SocialHistory SocialHabitCategory_Code
+  bash tools/enclave.sh values $C2.SocialHistory SocialHabitCategory_Description
+  bash tools/enclave.sh values $C1.SocialHistory SocialHabitQty_Description
+  bash tools/enclave.sh values $C2.SocialHistory SocialHabitQty_Description
+  ```
+
+  Ne çıkar: SOURCES `social_history` filtresi, `SMOKING_VALUES`, yoğunluk (D7: midwakh, shisha?).
+
+- [ ] **1b · Demografi:**
+
+  ```bash
+  for s in $C1 $C2; do for c in Gender_Code EthnicGroup_Description Age; do bash tools/enclave.sh values $s.Patient $c; done; done
+  ```
+
+  Ne çıkar: `SEX_MAP`; etnik grup listesi (adım 2 kararı için); yaş dağılımı (QDiabetes 25–84, LPRS 40–75).
+
+- [ ] **1c · Lab ve ölçüm birimleri.** Observation'da birim sütunu yok. Birim değer aralığından anlaşılır:
+
+  ```bash
+  for s in $C1 $C2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
+  ```
+
+  | Kod | Medyan buysa | Birim |
+  |---|---|---|
+  | 4548-4 HbA1c | ~5–8 | % (kod bunu varsayıyor) |
+  | 4548-4 HbA1c | ~30–65 | mmol/mol → adapter'da dönüşüm gerekir |
+  | 1558-6 açlık glukozu, 1521-4 OGTT | ~90–150 | mg/dL (kod bunu varsayıyor) |
+  | 1558-6 açlık glukozu, 1521-4 OGTT | ~5–8 | mmol/L → dönüşüm gerekir |
+  | 8302-2 boy | ~150–180 | cm (~1,5–1,8 ise metre) |
+  | 3141-9 kilo | ~60–100 | kg |
+  | 39156-5 BMI | ~25–32 | kg/m² |
+
+  Bu kontrol neden kritik: glukoz mmol/L geliyorsa kod onu mg/dL sanır. O zaman lab kanıtı "normal" çıkar ve
+  C1'deki T2DM / prediyabet ayrımı bozulur.
+
+- [ ] **1d · Kodlar: tanı, gözlem, aile öyküsü, ilaç:**
+
+  ```bash
+  for s in $C1 $C2; do bash tools/enclave.sh values $s.Diagnosis Diagnosis_Code --top 40; bash tools/enclave.sh values $s.Observation ObservationCode_Code --top 40; bash tools/enclave.sh values $s.FamilyHistory FamilyMember_Description; bash tools/enclave.sh values $s.FamilyHistory Diagnosis_Code; done
+  bash tools/enclave.sh values $C1.Medication DrugProduct_Code --top 40
+  bash tools/enclave.sh values $C2.Medication DrugProduct_Description --top 40
+  ```
+
+  Ne çıkar: Diagnosis_Code gerçekten ICD-10 mu, noktalı mı (`a99.9`); ObservationCode_Code LOINC mi
+  (`9999-9`); `FH_RELATION_DEGREE`; DrugProduct_Code ATC mi (`a99aa99`). C2'de ilaç kodu yok: antihipertansif
+  ve diyabet ilaçları addan ATC'ye eşlenmeli (A4). Eşlenmezse C2'de LPRS'in antihipertansif girdisi hep 0 kalır.
+
+- [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
+
+  ```bash
+  for t in Patient Diagnosis Observation SocialHistory FamilyHistory Medication; do bash tools/enclave.sh columns $C1.$t; done
+  ```
+
+- [ ] **Blokları gönder → adapter güncellenir, push edilir → VM'de `git pull --ff-only`.**
+
+### 2 · Karar: etnisite kaynağı (D6, medikal ekip)
+
+Durum: view'larda uyruk sütunu yok. Varsayılan `ethnicity_source = "nationality"` (2026-11-13 kararı) ile
+herkesin etnisitesi boş kalır. Sonuç: QDiabetes herkesi beyaz referans ("WhiteNA") sayar, LPRS hiç
+hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
+
+- [ ] Seçenek (a): `EthnicGroup_Description` kullanılır (`ethnicity_source = "ethnicity"`). 1b'deki değerlerin
+  QDiabetes kategorisine ve LPRS beyaz / BME ayrımına eşlenmesini medikal ekip onaylar.
+- [ ] Seçenek (b): DHA'dan uyruk sütunu istenir. Adapter hazır: `Nationality` sütunu gelince otomatik okunur.
+- Karar gelene kadar iki yol da denenebilir. Varsayılan değişmez; ikinci run duyarlılık olarak audit'e
+  girer (adım 5).
+
+### 3 · Ingest: IRIS → snapshot + kanonik veri (~10 dk)
+
+- [ ] Çalıştır:
+
+  ```bash
+  bash tools/enclave.sh run ingest --cohorts c1 c2
+  ```
+
+  Beklenen: `success`. C1 ≈ 2.600, C2 ≈ 2.600 hasta (Data availability). Blokta bakılacaklar: eşlenemeyen
+  değerler, düşen satırlar (kodsuz ilaç, diyabet dışı aile öyküsü, kullanılamayan yaş), `unparseable_*`
+  tarihler.
+
+- [ ] Eşlenemeyen değer varsa bloğu gönder. Sözlük güncellenip `git pull` yapılınca IRIS'e gitmeden
+  snapshot'tan tekrarla:
+
+  ```bash
+  bash tools/enclave.sh run ingest --snapshot --cohorts c1 c2
+  ```
+
+### 4 · NB0: veri profili
+
+- [ ] Çalıştır:
+
+  ```bash
+  bash tools/enclave.sh run nb0
+  ```
+
+  Bakılacaklar: şema ERROR = 0, hacim, Framework Match, eşlenemeyen kodlar. Ayrıntı için:
+
+  ```bash
+  bash tools/enclave.sh show nb0 nb00/core_variable_completeness.csv
+  ```
+
+  ```bash
+  bash tools/enclave.sh show nb0 nb00/ethnicity_categories.csv
+  ```
+
+### 5 · NB1: C1 / C2 fizibilite
+
+- [ ] Çalıştır:
+
+  ```bash
+  bash tools/enclave.sh run nb1
+  ```
+
+  Blokta: skor hesaplanabilirliği, eksiklik nedenleri, C1 yakalama oranı, skor özeti, birlikte tamlık.
+  Yakalama oranı eşik seçilene kadar "Pending" kalır: QDiabetes için D5, LPRS için D23. Medikal ekip eşiği
+  dağılıma bakarak seçer; dağılım `score_summary` içinde. Ayrıntı için:
+
+  ```bash
+  bash tools/enclave.sh show nb1 nb01/selection_effect_smd.csv
+  ```
+
+  ```bash
+  bash tools/enclave.sh show nb1 nb01/ethnicity_mapping.csv
+  ```
+
+- [ ] D6 kararı gelmediyse, etnisite alanıyla duyarlılık run'ı:
+
+  ```bash
+  SANDBOX_PARAMS='{"ethnicity_source": "ethnicity"}' bash tools/enclave.sh run nb1
+  ```
+
+### 6 · KPI (Faz 1'de kısmi)
+
+- [ ] Çalıştır:
+
+  ```bash
+  bash tools/enclave.sh run kpi
+  ```
+
+### 7 · Jupyter'de inceleme (isteğe bağlı)
+
+- [ ] Notebook'ları üret ve aç:
+
+  ```bash
+  python3 tools/py2ipynb.py notebooks/00_data_profile.py notebooks/01_c1_c2_feasibility.py
+  SANDBOX_SOURCE=nabidh python3 -m jupyterlab
+  ```
+
+- Notebook'lar IRIS'i değil, ingest'in yazdığı `data/canonical/nabidh/` klasörünü okur; önce adım 3 yapılmış
+  olmalı.
+- Değişkensiz açıldıysa en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekle.
+- Kaynak `.py` dosyasıdır; `.ipynb`'de yapılan değişiklik yeniden üretilince kaybolur.
+
+### 8 · Çıktı çıkarma
+
+- [ ] Enclave'den yalnız `KOPYALA` blokları ve küçük hücreleri bastırılmış (< 10 → "<10") özet tablolar
+  çıkar. DHA'nın onayı gerekir.
+- `data/`, snapshot'lar, hasta kimliği içeren dosyalar ve ekran görüntüleri çıkmaz.
+
+## Gün içinde sorulacaklar
+
+**DHA / NABIDH**
+- [ ] `Patient.Age` hangi güne göre hesaplandı? Doğum yılı ya da tarihi verilebilir mi? (D24)
+- [ ] Uyruk sütunu verilebilir mi? (D6)
+- [ ] Observation için birim sütunu var mı, ya da lab birimleri teyit edilebilir mi?
+- [ ] C2 Medication'da `DrugProduct_Code` yok. Verilebilir mi?
+- [ ] C1 "complete case" tanımı nedir? C2'nin N'i ve örnekleme yöntemi nedir? C1 ile C2 örtüşüyor mu?
+- [ ] Veri çekim tarihi nedir? (Referans tarihi "veri sonu" için, D22.)
+- [ ] Çıktı çıkarma kuralları: küçük hücre eşiği, figür onayı, izinli formatlar.
+- [ ] C1 Encounter view'ı için SELECT yetkisi (Faz 1'de gerekmiyor).
+- [ ] Faz 2 için: C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu?
+
+**Medikal ekip**
+- [ ] D6: etnisite kaynağı ve eşlemesi (adım 2).
+- [ ] D5: QDiabetes eşiği. D23: LPRS eşiği. C1 duyarlılığı bu ikisine bağlı.
+- [ ] D22: birincil referans tarihi (veri sonu mu, ilk kanıt günü mü).
+- [ ] D7: yoğunluğu belirtilmemiş "current" sigara. D17: aile öyküsü kaydı olmaması negatif mi sayılır?
+
+## Faz 1 "tamam" tanımı
+
+- [ ] Ingest, NB0 ve NB1 run'ları `success`; şema ERROR = 0; audit %100.
+- [ ] Değer raporlarında (ingest, NB0 `unmapped_codes`) eşlenemeyen önemli değer kalmadı.
+- [ ] C1 ve C2: 8 çekirdek değişkenin tamlığı, QDiabetes ve LPRS hesaplanabilirliği, eksiklik nedenleri.
+- [ ] C1 yakalama oranı: eşikler (D5, D23) seçildiyse oranlar, seçilmediyse "Pending" ile birlikte dağılım.
+- [ ] C1–C2 SMD tablosu (seçilim etkisi).
+- [ ] Etnisite eşleme tablosu medikal ekibe iletildi (D6).
+- [ ] Enclave'den çıkan tabloların küçük hücre kontrolü yapıldı ve DHA onayı alındı.
+
+## Başvuru: skor girdileri ve kaynakları (HSAA view'ları)
+
+| Girdi | QDiabetes | LPRS | View / sütun | Not |
+|---|---|---|---|---|
+| Cinsiyet | ✓ | ✓ | Patient.Gender_Code | `SEX_MAP` değerlerle teyit (1b) |
+| Yaş | ✓ | ✓ | Patient.Age | Doğum tarihi yok → yaştan yaklaşık türetilir (D24, ±6 ay) |
+| Etnik grup | ✓ | ✓ (beyaz / BME) | Patient.EthnicGroup_Description | Uyruk yok → D6 |
+| BMI | ✓ | ✓ | Observation 39156-5 → boy 8302-2 + kilo 3141-9 → Z68 | Birim yok (1c) |
+| Sigara | ✓ | — | SocialHistory (kalem + Qty) + F17.2 / Z72.0 / Z87.891 | Kalem filtresi (1a) |
+| Aile öyküsü (diyabet) | ✓ | ✓ | FamilyHistory (Diagnosis_Code / _Description, FamilyMember) + Z83.3 | Yalnız birinci derece pozitif |
+| KVH | ✓ | — | Diagnosis I20–I25, I50, I6x, G45 | — |
+| Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication | C2'de ilaç kodu yok (1d, A4) |
+| Glisemik lab (yalnız statü, model girdisi değil) | — | — | Observation 4548-4, 1558-6, 1521-4 | Birim yok (1c) |
+
+NABIDH Data availability listesindeki hasta sayıları ve oranları (C1 = 2.600, C2 = 2.600, C3 = 1.000):
+
+| Kalem | Kod / kaynak | C1 | C2 | C3 |
+|---|---|---|---|---|
+| Tip 2 diyabet | E11 | 1.221 (%47,0) | 1.408 (%54,2) | 322 (%32,2) |
+| Prediyabet | R73 | 2.180 (%83,8) | 1.720 (%66,2) | 580 (%58,0) |
+| Hipertansiyon | I10–I16 | 1.015 (%39,0) | 1.199 (%46,1) | 384 (%38,4) |
+| KVH | I20–I25, I50, I6x, G45 | 507 (%19,5) | 447 (%17,2) | 208 (%20,8) |
+| Obezite / BMI kodu | E66, Z68 | 557 (%21,4) | 313 (%12,0) | 160 (%16,0) |
+| Sigara (tanı) | F17.2, Z72.0, Z87.891 | 15 (%0,6) | 15 (%0,6) | <10 |
+| Diyabet aile öyküsü (tanı) | Z83.3 | 309 (%11,9) | 133 (%5,1) | 50 (%5,0) |
+| Tip 1 diyabet (0 olmalı) | E10 | 0 | 0 | 0 |
+| HbA1c | LOINC 4548-4 | 462 (%17,8) | 217 (%8,3) | 1.000 (%100) |
+| Açlık glukozu | LOINC 1558-6 | 923 (%35,5) | 736 (%28,3) | 500 (%50,0) |
+| OGTT 2 saat | LOINC 1521-4 | 17 (%0,7) | 30 (%1,2) | 31 (%3,1) |
+| BMI | LOINC 39156-5 | 2.600 (%100) | 336 (%12,9) | 186 (%18,6) |
+| Boy | LOINC 8302-2 | 2.600 (%100) | 2.471 (%95,0) | 976 (%97,6) |
+| Kilo | LOINC 3141-9 | 2.600 (%100) | 2.515 (%96,7) | 983 (%98,3) |
+| Sigara durumu | SocialHistory | 2.600 (%100) | 1.483 (%57,0) | 766 (%76,6) |
+| Diyabet aile öyküsü | FamilyHistory | 2.600 (%100) | 419 (%16,1) | 168 (%16,8) |
+| İlaç order'ları | Medication | 1.557 (%59,9) | 1.513 (%58,2) | 496 (%49,6) |
+| Encounter | Encounter | — | — | 1.000 (%100) |
+
+Beklentiler: C2'de sigara kaydı %57 (D8: kayıt yok = bilinmiyor). Bu yüzden C2'de QDiabetes en fazla
+yaklaşık %57 hastada hesaplanabilir. Aile öyküsü C2'de yalnız %16 kayıtlı; kaydı olmayanların nasıl
+sayılacağı D17'ye bağlı. Bel çevresi teslim edilmiyor, bu yüzden Leicester skoru LPRS (K-LRS).

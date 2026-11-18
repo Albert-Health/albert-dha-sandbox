@@ -28,8 +28,8 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    analiz kodu sürücüsüz çalışır. Bağlantı şifresi repoya, run configuration'a, audit'e girmez.
    Kod hem pandas 2.x hem 3.x ile çalışmalı (ör. `Series.reset_index(names=)` pandas 2'de yok).
    Kurulum tek mekanizma: projenin Python'una `requirements.txt` (proje) + `requirements-explore.txt` (keşif;
-   kod import etmez) bir kez kurulur — VM'de DHA kurar, proje venv kurmaz. Komutlar ve run configuration'lar
-   Python yolu yazmaz (`python` / IntelliJ proje SDK'sı).
+   kod import etmez) bir kez kurulur — VM'de `/usr/bin/python3`'e `--user` ile (2026-11-18); proje venv
+   kurmaz. Komutlar ve run configuration'lar Python yolu yazmaz (`python` / IntelliJ proje SDK'sı).
 3. **Lab değerleri asla model girdisi değildir.** Yalnızca uygunluk / outcome tanımında kullanılır.
 4. **Her çalıştırma audit'lenir** (KPI: Audit Trail %100, Critical). Notebook/araçlar `audit.Run`
    açar; tüm çıktılar `run.save_table / save_figure / save_json / register_output` ile yazılır;
@@ -72,8 +72,8 @@ notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, positive_control, py2ipynb, enclave.sh + enclave.py (terminal-only
                        enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run; çıktı KOPYALA bloğu)
-docs/                  gap.md (açık işler + kararlar), faz1_c1_c2_hazirlik.md, vm_kurulum.md, enclave_terminal.md
-                       (kopyala-yapıştır runbook), evidence_package/ şablonları
+docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
+                       enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 .run/                  IntelliJ run configuration'ları (repoda)
 ```
@@ -83,7 +83,7 @@ Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
 ## Çalıştırma
 ```bash
 # python = paketlerin kurulu olduğu Python (bu makinede: .venv/bin/python)
-python -m pip install -r requirements.txt -r requirements-explore.txt   # bir kez (VM'de DHA)
+python -m pip install -r requirements.txt -r requirements-explore.txt   # bir kez (VM'de: python3 -m pip install --user …)
 python tools/check_environment.py              # ortam kontrolü (VM'de: --iris --github); FAIL → çıkış 1
 python -m unittest discover -s tests -v
 python tools/build_synthetic_cohorts.py        # data/synthetic/raw → data/canonical/synthetic/{c1,c2,c3}
@@ -97,7 +97,7 @@ python tools/build_evidence_package.py
 #   IRIS yolu provası: ingest_nabidh --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
 # Enclave: tools/ingest_nabidh.py --input iris (IRIS → data/nabidh_iris/raw/<kohort> snapshot → data/canonical/nabidh/)
 #   ya da ham dosyadan (data/nabidh/raw/<kohort>); sonra SANDBOX_SOURCE=nabidh
-# Enclave yalnız terminal: bash ~/sandbox-git/tools/enclave.sh <komut> (docs/enclave_terminal.md). Bloğa (KOPYALA
+# Enclave: repo kökünde bash tools/enclave.sh <komut> (docs/faz1_c1_c2.md, docs/enclave_terminal.md). Bloğa (KOPYALA
 #   BAŞ/SON) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
 ```
 

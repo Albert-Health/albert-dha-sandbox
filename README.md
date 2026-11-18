@@ -4,9 +4,9 @@ Başvuru: **S-2025-Y4B7N9** · QDiabetes-2018 (Model A) ve Leicester Risk Score'
 
 > Bu kod yalnızca DHA Secure Data Enclave içinde gerçek veriyle çalıştırılır. Repoda **hiçbir hasta verisi yoktur** (gerçek veya sentetik); `data/` ve `outputs/` git dışıdır.
 
-**Enclave'e yalnız terminalden erişim:** kopyala-yapıştır rehberi [`docs/enclave_terminal.md`](docs/enclave_terminal.md)
-— VM gereksinimleri R1–R9 tek tek, IRIS erişimi, IRIS keşfi (IntelliJ'siz), adapter eşlemesi, Faz 1. Tek komut:
-`bash ~/sandbox-git/tools/enclave.sh <komut>`; sonuç `KOPYALA` işaretleri arasında, yalnız özet / meta veri.
+**Enclave'de çalışma:** Faz 1'in sıralı yapılacaklar listesi [`docs/faz1_c1_c2.md`](docs/faz1_c1_c2.md) · komut
+rehberi [`docs/enclave_terminal.md`](docs/enclave_terminal.md) (IRIS keşfi, adapter eşlemesi, run, sorun giderme).
+Tek komut, repo kökünde: `bash tools/enclave.sh <komut>`; sonuç `KOPYALA` işaretleri arasında, yalnız özet / meta veri.
 
 ## Yapı
 
@@ -39,7 +39,6 @@ tools/                    enclave.sh + enclave.py (terminal-only enclave: R1–R
 docs/evidence_package/    model card, validasyon, veri kalite, kohort türetme şablonları
 tests/                    unittest (pytest gerekmez)
 outputs/                  <run_id>/... + audit/audit_log.jsonl (git dışı)
-archive/                  önceki prototip notebook ve raporlar
 ```
 
 ## Akış
@@ -84,8 +83,8 @@ Ortam değişkenleri (hepsi audit manifest'ine yazılır): `SANDBOX_SOURCE` (syn
 
 ## Kurulum (VM'de ve yerelde aynı)
 
-Enclave VM'de adım adım kurulum ve ilk çalıştırma: [`docs/vm_kurulum.md`](docs/vm_kurulum.md) (masaüstü VM,
-IntelliJ) · yalnız terminal: [`docs/enclave_terminal.md`](docs/enclave_terminal.md).
+Enclave VM'de güncelleme ve çalıştırma: [`docs/faz1_c1_c2.md`](docs/faz1_c1_c2.md) §0 ·
+[`docs/enclave_terminal.md`](docs/enclave_terminal.md) §1.
 
 Proje kendi sanal ortamını (venv) kurmaz. Projenin çalıştırılacağı Python'a iki dosya **bir kez** kurulur:
 
@@ -94,13 +93,13 @@ Proje kendi sanal ortamını (venv) kurmaz. Projenin çalıştırılacağı Pyth
 
 | Nerede | Kim kurar | Hangi Python |
 |---|---|---|
-| Enclave VM | DHA, teslimden önce — VM'de GitHub dışında internet yok, sonradan paket kurulamaz | VM'in Python'u (≥ 3.10) |
+| Enclave VM | biz, 2026-11-18'de geçici internet penceresinde: `python3 -m pip install --user -r …` (sonra internet yok; GitHub açık) | `/usr/bin/python3` |
 | Yerel | sen | seçtiğin Python (≥ 3.10): pyenv sürümü, conda ortamı ya da venv — fark etmez |
 
 ```bash
 git clone https://github.com/Albert-Health/albert-dha-sandbox.git sandbox-git   # klasör adı = IntelliJ modül adı
 cd sandbox-git
-python -m pip install -r requirements.txt -r requirements-explore.txt           # VM'de bunu DHA yapar
+python -m pip install -r requirements.txt -r requirements-explore.txt           # VM'de: python3 -m pip install --user …
 python tools/check_environment.py                # ortam kontrolü; VM'de: --iris --github (IRIS + adapter eşlemesi)
 ```
 
@@ -141,7 +140,9 @@ python tools/py2ipynb.py notebooks/00_data_profile.py   # istenirse .ipynb üret
    *Existing environment*) → paketlerin kurulu olduğu Python (VM'de DHA'nın kurduğu, yerelde seçtiğin).
    *Project → SDK* olarak bunu seç; *Modules → sandbox-git → + → Python* facet'i de bu SDK'yı kullansın.
    Run configuration'lar Python yolu yazmaz, proje / modül SDK'sını kullanır — VM'de ve yerelde aynı dosyalar çalışır.
-2. **Kaynak klasörleri:** `src/` Sources, `tests/` Test Sources; `data/`, `outputs/`, `archive/` (varsa `.venv/`)
+   Run configuration'lar modül adı olarak `sandbox-git` bekler. VM'de klasör `albert-dha-sandbox` olduğu için modülü
+   *Project Structure → Modules*'ta `sandbox-git` olarak yeniden adlandır (ya da terminal komutlarını kullan).
+2. **Kaynak klasörleri:** `src/` Sources, `tests/` Test Sources; `data/`, `outputs/` (varsa `.venv/`)
    Excluded olmalı (*Project Structure → Modules → Sources*).
 3. **Run configuration'lar** `.run/` klasöründe hazır ve repoda; sağ üstteki listeden seçilir:
    - `0b · Check environment` — ortam kontrolü; `0c` = VM'de (`--iris --github`)
