@@ -8,7 +8,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 |---|---|---|---|
 | K1 | 100k sentetik veride uçtan uca çalıştırma (build → NB0 → NB1 → NB2 → KPI) | [AÇIK] | Mini veride geçti; 44k C3'te bootstrap süresi/bellek görülmedi |
 | K2 | Eksik veri stratejisi: complete-case (mevcut) vs multiple imputation (QDiabetes orijinal yöntemi) | [AÇIK] + [KARAR BEKLİYOR] | Mini veride QDiabetes yalnızca %3 hastada hesaplanabiliyor; parametreli yapılmalı |
-| K3 | NABIDH adapter MAPPING (`io/adapters/nabidh.py`) | [AÇIK] | Enclave'de IRIS şeması / dosya ve sütun adları görülünce: SOURCES (`table` / `file`, `columns`), IRIS_COHORTS (namespace / şema), tarih biçimi |
+| K3 | NABIDH adapter MAPPING (`io/adapters/nabidh.py`) | Kısmen (2026-11-18) | **Yapıldı:** IRIS_COHORTS (HSSBX, kohort başına `SBXV_ENCL…_HSAA` şeması), SOURCES sütunları HSAA view'larına (hasta anahtarı Patient.ID = diğer view'larda `Patient`); kohortlar arası farklı sütun adı için liste (C2 SocialHabitCategory_Description); doğum tarihi yaştan (D24); C2 Medication'da kod yok → kodsuz satırlar düşer, adları raporlanır; prova verisi aynı biçimde. **Açık (değerlere bakılacak):** Diagnosis_Code gerçekten ICD-10 mi, ObservationCode_Code LOINC mi; birim sütunu yok → HbA1c % mı mmol/mol mü, glukoz mg/dL mi mmol/L mi (değer aralığından); SocialHistory'de sigara kalemi (filter) ve SocialHabitQty değerleri (SMOKING_VALUES); Gender_Code değerleri; FamilyMember değerleri; DrugProduct_Code ATC mi; EthnicGroup değerleri (D6); tarih biçimleri (ingest `unparseable_*`) |
 | K4 | VM ortamı (masaüstü, IntelliJ, Python paketleri, IRIS sürücüleri, GitHub erişimi) | [DIŞ] — DHA çözüyor | Bizde iş yok; yalnız not. Gereksinimler DHA'ya iletildi (Claude Docs: "Data Exploration Environment – VM Requirements"). Offline wheel paketi gerekmiyor. VM teslim edilince `tools/check_environment.py --iris --github` ile doğrula |
 | K5 | Leicester katsayı / puanlarının birincil makalelerle teyidi | [AÇIK] | **LPRS (varsayılan, K-LRS):** katsayılar ilk yazarın (L. J. Gray) Leicester Diabetes Centre sunumundaki formülden alındı (Diabetologia 2012;55(4):959–66'ya atıflı); makale tam metni paywall'da — tablo/ekle karşılaştırılmalı. **LRA 2010** (artık yalnız karşılaştırma): madde puanları birincil tablodan teyit; kategoriler NHS Health Check belgesiyle doğrulandı |
 | K6 | Evidence package şablonlarının doldurulması (`docs/evidence_package/filled/`) | [AÇIK] + [KARAR BEKLİYOR] | Doldurulana kadar KPI "Not Met" → graduation ön değerlendirmesi "Do Not Graduate" |
@@ -25,7 +25,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D3 | Prediktör penceresi (index öncesi; index sonrası ± gün) | `predictor_lookback_days` | **365 [KARAR]**; 730 duyarlılık | v2 iki sürüm: 12 vs 24 ay. Sentetikte index'te BMI %37, sigara %21 |
 | D4 | Eksik veri yaklaşımı | (K2 ile eklenecek) | complete-case | Parametre türüne göre değişecek [KARAR — ayrıntı açık] |
 | D5 | QDiabetes risk eşiği (sens/spec/PPV/alert rate) | `qd_risk_threshold_pct` | **None [KARAR — şimdilik]** | İlgili KPI'lar "Pending". C1'in birincil sorusu (QDiabetes duyarlılığı, NB1 §4) da eşik seçilene kadar "Pending" |
-| D6 | Etnisite eşlemesi NABIDH → QDiabetes 9 kategori / LRS | `codelists` eşleme tabloları | Emirati, Gulf Arab, Arab → "Other" | Sentetikte "Other" eşlemesi tek başına ~2× düşük tahmin üretiyor |
+| D6 | Etnisite eşlemesi NABIDH → QDiabetes 9 kategori / LRS | `codelists` eşleme tabloları | Emirati, Gulf Arab, Arab → "Other" | Sentetikte "Other" eşlemesi tek başına ~2× düşük tahmin üretiyor. **2026-11-18: enclave view'larında uyruk yok, yalnız `EthnicGroup_Description`** → 2026-11-13 kararıyla (`ethnicity_source = "nationality"`) tüm hastaların etnisitesi boş kalır (QDiabetes "WhiteNA", LPRS/LRA hesaplanmaz). Karar yeniden açık: etnisite alanına geçiş (`"ethnicity"` + değerlerin eşlemesi) ya da DHA'dan uyruk istemek |
 | D7 | Yoğunluksuz "current" sigara kategorisi | `qd_smoking_current_category` | 3 (moderate) | Midwakh / shisha nasıl ele alınacak |
 | D8 | Sigara kaydı yok = non-smoker mı | `qd_missing_smoking_as_non` | **False [KARAR]** | Kayıt yok = bilinmiyor |
 | D9 | Kapsam dışı 7 Model A prediktörü = 0 (indirgenmiş model) | `qd_force_reduced_model` | **True [KARAR]** | Statin, steroid, atipik antipsikotik, şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS |
@@ -42,11 +42,16 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D20 | Fairness alt grupları ve kabul edilebilir fark | (eklenecek) | cinsiyet, yaş bandı, etnisite | — |
 | D21 | Kod listelerinin klinik onayı; model card klinik bölümleri | — | — | Evidence package (Critical KPI) için şart |
 | D23 | LPRS "yüksek risk" eşiği (skor ≥ x) | `lprs_high_risk_threshold` | **None** [KARAR BEKLİYOR] | LPRS sabit terimsiz doğrusal öngörücü; yayımlanmış mutlak eşik bulunamadı. Yazarlar sıralama kullandı: pratik başına en yüksek %10 (Let's Prevent / Walking Away) ya da hedef duyarlılık (ör. %80). Seçilene kadar C1 Leicester yakalama oranı ve C3 eşik metrikleri "Pending". Dağılım NB1 `score_summary.csv`'de (medyan, IQR) |
+| D24 | Doğum tarihi yok, yalnız yaş: doğum tarihi = AGE_REFERENCE_DATE − (Age + 0,5) yıl. Age hangi güne göre? | `nabidh.AGE_REFERENCE_DATE` (adapter; kaynak bilgisi) | **2026-11-18 [KARAR BEKLİYOR]** (view'ların ilk sorgulandığı gün) | DHA'ya sorulacak: Age'in referans günü; doğum yılı / tarihi verilebilir mi (`BirthDate` gelirse o kullanılır). Hata ≤ ±6 ay: QDiabetes yaşı sürekli kullanır (küçük etki); LPRS / LRA yaş bandı sınırında sınıf değişebilir |
 | D22 | C1/C2 duyarlılığında referans tarihi: veri sonu mu, statüyü belirleyen ilk kanıt (tanı) günü mü | `cohorts.positive_reference_dates` | NB1 §4 ikisini yan yana raporlar; birincil seçilmeli | Veri sonu: tanı sonrası kayıtlar (tedavi sonrası BMI, ilaç) skora girer, yaş veri sonuna göre. İlk kanıt: "tanıda yakalar mıydı" sorusuna uygun ama o gün kayıtlar daha seyrek → hesaplanabilirlik düşer |
 
 ## 3. Dış taraflar
 **DHA / NABIDH [DIŞ]:** C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec'e göre evet; NB2'nin duyarlılık / AUROC / kalibrasyonu buna dayanır — yalnız "gelişmeyenler" teslim edildiyse C3'ten yalnız özgüllük çıkar); veri sözlüğü; IRIS namespace adı, NABIDH verisinin hangi şema / tablolarda olduğu, kohortların nasıl ayrıldığı (şema başına mı, kohort tablosu mu); etnisite/uyruk kategori listesi; birimler;
 C3'te cap/örneklem neden uygulandı ve tam eligible N; VM ortamı (K4 — DHA çözüyor);
+**enclave'de görülenle (2026-11-18) açılan sorular:** HSAA Patient.Age hangi güne göre, doğum yılı / tarihi
+verilebilir mi (D24); uyruk sütunu verilebilir mi (D6); Observation'da birim sütunu; C2 Medication'da
+DrugProduct_Code yok; C1 Encounter view'ında `dha-sbx-000010` kullanıcısına SELECT yetkisi yok
+("Privilege violation", opsiyonel kaynak — ingest atlıyor);
 enclave'den çıktı çıkarma kuralları (küçük hücre eşiği, figür onayı).
 
 **DFF / Precoh [DIŞ]:** "Joint Completeness — QDiabetes"nin 8 çekirdek değişkenle yeniden tanımı;
@@ -69,6 +74,8 @@ Layer 2 koşullu).
 - İndirgenmiş Model A (D9) ve Townsend = 0 (D10) karşılaştırılabilirliği sınırlar.
 - C3 iki glisemik ölçüm şartı daha sık test edilen (muhtemelen daha riskli) hastaları seçer.
 - Etnik grup uyruktan türetiliyor (D6); uyruk etnisite değildir (ör. Hindistan kökenli İngiltere vatandaşı).
+- Doğum tarihi yaştan yaklaşık türetiliyor (D24, ±6 ay).
+- Observation'da birim yok: lab birimi değer aralığından / kod listesinden çıkarılmak zorunda (K3).
 
 ## 5. Kararlar (verildikçe buraya)
 | Tarih | Karar | Kim | Parametre / commit |

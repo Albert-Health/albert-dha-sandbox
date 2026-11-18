@@ -1,10 +1,12 @@
-"""Prova verisi: sentetik kanonik C1 / C2 / C3 → NABIDH teslim biçimi (adapter SOURCES'taki örnek adlar).
+"""Prova verisi: sentetik kanonik C1 / C2 / C3 → enclave'deki HSAA view'larının biçimi (adapter SOURCES).
 
-Amaç: tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) zincirini Pazartesiden önce NABIDH adapter'ı
-üzerinden uçtan uca çalıştırmak. NABIDH "Data availability" listesine uyulur:
-- verilenler: hasta profili (cinsiyet M/F, uyruk), tanılar (Z83.3 dahil), Observation (HbA1c, FPG,
-  OGTT, BMI, boy, kilo — LOINC), SocialHistory (sigara), FamilyHistory (diyabet), Medication;
-  Encounter yalnız C3
+Amaç: tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) zincirini NABIDH adapter'ı üzerinden uçtan uca
+çalıştırmak. Enclave'de görülen view'lara uyulur (2026-11-18):
+- Patient: ID, Age (doğum tarihi yok; yaş AGE_REFERENCE_DATE'e göre), Gender_Code (M/F),
+  EthnicGroup_Description; uyruk yok. Diğer view'larda hasta anahtarı `Patient` (= Patient.ID)
+- Diagnosis (yalnız ICD-10, Z83.3 dahil), Observation (HbA1c, FPG, OGTT, BMI, boy, kilo — LOINC; birim
+  sütunu yok), SocialHistory (sigara), FamilyHistory (diyabet), Medication; Encounter yalnız C3
+- C2 farkları: SocialHabitCategory_Description (_Code değil), Medication'da DrugProduct_Code yok
 - verilmeyenler: bel çevresi, diğer vital'ler, random glukoz
 SENTETİK — gerçek hasta verisi değildir. Dosyaların ilk satırı bunu belirtir.
 
@@ -53,45 +55,57 @@ def _d(s: pd.Series) -> pd.Series:
     return s.dt.strftime("%Y-%m-%d")
 
 
+def _age(dob: pd.Series, ref: pd.Timestamp) -> pd.Series:
+    """Referans günündeki tam yıl yaş."""
+    before = (dob.dt.month > ref.month) | ((dob.dt.month == ref.month) & (dob.dt.day > ref.day))
+    return (ref.year - dob.dt.year - before.astype(int)).astype("Int64")
+
+
 def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
     pts, cond, labs, obs, meds = (ds[t] for t in ("patients", "conditions", "labs", "observations", "medications"))
     out = {}
     out["patients.csv"] = pd.DataFrame({
-        "patient_id": pts["patient_id"], "sex": pts["sex"].map({"Male": "M", "Female": "F"}),
-        "date_of_birth": _d(pts["date_of_birth"]), "nationality": pts["nationality"],
-        "ethnicity": pts["ethnicity_raw"], "facility_id": pts["facility_id"]})
+        "ID": pts["patient_id"], "Age": _age(pts["date_of_birth"], pd.Timestamp(nabidh.AGE_REFERENCE_DATE)),
+        "EthnicGroup_Description": pts["ethnicity_raw"], "Gender_Code": pts["sex"].map({"Male": "M", "Female": "F"})})
+    icd = cond[cond["code_system"] == "ICD-10"]
     out["diagnoses.csv"] = pd.DataFrame({
-        "patient_id": cond["patient_id"], "code_system": cond["code_system"], "code": cond["code"],
-        "description": cond["description"], "diagnosis_date": _d(cond["date"])})
+        "ID": range(1, len(icd) + 1), "DiagnosisDate": _d(icd["date"]), "Patient": icd["patient_id"],
+        "Diagnosis_Code": icd["code"], "Diagnosis_Description": icd["description"]})
 
     lab = labs[labs["loinc"].isin(DELIVERED_LABS)]
     vit = obs[obs["concept"].isin(list(VITAL_LOINC))]
-    out["observations.csv"] = pd.concat([
-        pd.DataFrame({"patient_id": lab["patient_id"], "code_system": "LN", "loinc": lab["loinc"],
-                      "name": lab["test_name"], "value": lab["value"], "unit": lab["unit"], "date": _d(lab["date"])}),
-        pd.DataFrame({"patient_id": vit["patient_id"], "code_system": "LN", "loinc": vit["concept"].map(VITAL_LOINC),
-                      "name": vit["concept"], "value": vit["value"], "unit": vit["unit"], "date": _d(vit["date"])}),
+    m = pd.concat([
+        pd.DataFrame({"Patient": lab["patient_id"], "ObservationCode_Code": lab["loinc"],
+                      "ObservationCode_Description": lab["test_name"], "ObservationValue": lab["value"],
+                      "ObservationDate": _d(lab["date"])}),
+        pd.DataFrame({"Patient": vit["patient_id"], "ObservationCode_Code": vit["concept"].map(VITAL_LOINC),
+                      "ObservationCode_Description": vit["concept"], "ObservationValue": vit["value"],
+                      "ObservationDate": _d(vit["date"])}),
     ], ignore_index=True)
+    out["observations.csv"] = m.assign(ID=range(1, len(m) + 1))
 
     sm = obs[obs["concept"] == "smoking_status"]
+    item = "SocialHabitCategory_Description" if cohort == "c2" else "SocialHabitCategory_Code"
     out["social_history.csv"] = pd.DataFrame({
-        "patient_id": sm["patient_id"], "item": "Tobacco smoking status", "value": sm["value"],
-        "code": sm["code"], "date": _d(sm["date"])})
+        "ID": range(1, len(sm) + 1), "EnteredOn": _d(sm["date"]), "Patient": sm["patient_id"],
+        item: "Tobacco", "SocialHabitQty_Description": sm["value"]})
 
     fh = cond[codelists.match_dx(cond, "family_history_dm")]
     out["family_history.csv"] = pd.DataFrame({
-        "patient_id": fh["patient_id"], "relation": pd.NA, "condition": "Diabetes mellitus",
-        "status": "Yes", "date": _d(fh["date"])})
+        "ID": range(1, len(fh) + 1), "EnteredOn": _d(fh["date"]), "Patient": fh["patient_id"],
+        "Diagnosis_Code": fh["code"], "Diagnosis_Description": "Diabetes mellitus", "FamilyMember_Description": pd.NA})
 
-    out["medications.csv"] = pd.DataFrame({
-        "patient_id": meds["patient_id"], "atc_code": meds["atc_code"], "drug_name": meds["drug_name"],
-        "prescription_date": _d(meds["date"]), "route": meds["route"]})
+    med = pd.DataFrame({
+        "ID": range(1, len(meds) + 1), "FromTime": _d(meds["date"]), "Patient": meds["patient_id"],
+        "ToTime": pd.NA, "DrugProduct_Code": meds["atc_code"], "DrugProduct_Description": meds["drug_name"],
+        "Route_Description": meds["route"]})
+    out["medications.csv"] = med.drop(columns=["DrugProduct_Code"]) if cohort == "c2" else med
 
     if cohort == "c3":
         enc = ds["encounters"]
         out["encounters.csv"] = pd.DataFrame({
-            "patient_id": enc["patient_id"], "encounter_id": enc["encounter_id"], "encounter_date": _d(enc["date"]),
-            "facility_id": enc["facility_id"], "encounter_type": enc["encounter_type"]})
+            "ID": enc["encounter_id"], "EncounterEndDate": _d(enc["date"]), "EncounterStartDate": _d(enc["date"]),
+            "EncounterType": enc["encounter_type"], "Patient": enc["patient_id"]})
     return out
 
 

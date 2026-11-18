@@ -166,14 +166,24 @@ class TestMapping(unittest.TestCase):
         self.assertEqual(res["c1 · encounters"].status, ce.INFO)            # opsiyonel, tablo yok
         self.assertEqual(sum(r.status == ce.PASS for r in res.values()), 6)
 
+    def test_mapping_accepts_column_alternative(self):
+        """C2: SocialHabitCategory_Code yerine _Description — liste tanımında ikincisi yeter."""
+        tables = raw_tables(self.t / "raw", rename={"SocialHistory": {"SocialHabitCategory_Code":
+                                                                      "SocialHabitCategory_Description"}})
+        conn = standin(self.t, tables)
+        res = {r.check: r for r in ce.check_mapping(conn, ["c1"])}
+        conn.close()
+        self.assertEqual(res["c1 · social_history"].status, ce.PASS)
+        self.assertNotIn("opsiyonel olup olmayan", res["c1 · social_history"].detail)
+
     def test_missing_column_and_table_warn(self):
-        tables = raw_tables(self.t / "raw", rename={"Diagnosis": {"code": "dx"}})
+        tables = raw_tables(self.t / "raw", rename={"Diagnosis": {"Diagnosis_Code": "dx"}})
         tables.pop("Medication")
         conn = standin(self.t, tables)
         res = {r.check: r for r in ce.check_mapping(conn, ["c1"])}
         conn.close()
         self.assertEqual(res["c1 · diagnoses"].status, ce.WARN)
-        self.assertIn("'code'", res["c1 · diagnoses"].detail)
+        self.assertIn("'Diagnosis_Code'", res["c1 · diagnoses"].detail)
         self.assertIn("dx", res["c1 · diagnoses"].detail)                 # tablodaki sütunlar listelenir
         self.assertEqual(res["c1 · medications"].status, ce.WARN)
         self.assertIn("ingest çalışmaz", res["c1 · medications"].detail)

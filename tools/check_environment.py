@@ -374,9 +374,9 @@ def check_mapping(conn, cohorts: list[str] | None) -> list[Result]:
                 r.append(Result(g, label, status, f"{src}: okunamadı ({type(e).__name__}: {str(e)[:150]}) — {note}"))
                 continue
             low = {h.lower() for h in have}
-            req = [x for x in spec["columns"].values() if x.lower() not in low]
-            opt = [x for x in [*spec.get("optional_columns", {}).values(), *(spec.get("filter") or {})]
-                   if x.lower() not in low]
+            opt_srcs = [*spec.get("optional_columns", {}).values(), *nabidh.filter_columns(spec).values()]
+            req, opt = ([nabidh.label(x) for x in srcs if not any(c.lower() in low for c in nabidh.alternatives(x))]
+                        for srcs in (spec["columns"].values(), opt_srcs))
             if req:
                 r.append(Result(g, label, WARN, f"{src}: zorunlu sütun yok {req} — ingest çalışmaz. "
                                                 f"Tablodaki sütunlar: {have[:25]}"))

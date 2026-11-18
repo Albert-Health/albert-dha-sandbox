@@ -21,8 +21,9 @@ import pandas as pd  # noqa: E402
 import enclave  # noqa: E402
 from sandbox import audit, sdc  # noqa: E402
 from sandbox.io import explore, iris  # noqa: E402
+from sandbox.io.adapters import nabidh  # noqa: E402
 
-SCHEMA = "NABIDH_C1"           # nabidh.IRIS_COHORTS["c1"]["schema"]: enclave --iris-sqlite bu adla bağlar
+SCHEMA = nabidh.IRIS_COHORTS["c1"]["schema"]   # enclave --iris-sqlite c1.sqlite'yi bu adla bağlar
 
 
 def fixture_tables() -> dict[str, pd.DataFrame]:
@@ -95,7 +96,7 @@ class TestCatalog(_Db, unittest.TestCase):
         self.assertEqual(sorted(explore.list_tables(c, SCHEMA.lower())["table"]), ["Observation", "Patient"])
         self.assertEqual(explore.list_columns(c, SCHEMA, "Patient")["column"].tolist(),
                          ["PatientID", "Sex", "DateOfBirth", "Nationality"])
-        self.assertEqual(explore.resolve_table(c, "nabidh_c1.patient"), (SCHEMA, "Patient"))
+        self.assertEqual(explore.resolve_table(c, f"{SCHEMA.lower()}.patient"), (SCHEMA, "Patient"))
         with self.assertRaisesRegex(LookupError, "Patient"):
             explore.resolve_table(c, f"{SCHEMA}.Patiant")
         with self.assertRaises(ValueError):

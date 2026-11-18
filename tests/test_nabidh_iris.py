@@ -26,7 +26,7 @@ from sandbox.io.adapters import nabidh  # noqa: E402
 from sandbox.io.adapters.synthetic import read_raw_csv  # noqa: E402
 from test_nabidh_adapter import write_raw  # noqa: E402
 
-SCHEMA = "NABIDH_C1"
+SCHEMA = nabidh.IRIS_COHORTS["c1"]["schema"]
 
 
 def raw_tables(raw_dir: Path, rename=None, extra=None) -> dict[str, pd.DataFrame]:
@@ -57,7 +57,7 @@ class TestFilesVsIris(unittest.TestCase):
         cls.ds_file, cls.rep_file = nabidh.load(t / "raw", "c1")
         # IRIS tarafında sütun adları büyük harf ve fazladan bir kimlik sütunu: eşleme yine tutmalı,
         # kimlik sütunu çekilmemeli
-        tables = raw_tables(t / "raw", rename={"Patient": {"patient_id": "PATIENT_ID", "sex": "Sex"}},
+        tables = raw_tables(t / "raw", rename={"Patient": {"ID": "id", "Gender_Code": "GENDER_CODE"}},
                             extra={"Patient": {"full_name": "SHOULD NOT LEAVE IRIS"}})
         cls.conn = standin(t, tables)
         cls.snap = t / "snap"
@@ -79,7 +79,7 @@ class TestFilesVsIris(unittest.TestCase):
         self.assertEqual(s["status"], "read")
         self.assertEqual(s["rows_read"], self.rep_file["sources"]["patient_profile"]["rows_read"])
         self.assertIn(f"FROM {SCHEMA}.Patient", s["query"])
-        self.assertIn('"PATIENT_ID" AS "patient_id"', s["query"])
+        self.assertIn('"id" AS "ID"', s["query"])
         self.assertNotIn("full_name", s["query"])               # yalnız eşlemedeki sütunlar
         self.assertEqual(len(s["sha256"]), 64)
 
@@ -109,16 +109,16 @@ class TestIrisSources(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_missing_required_column(self):
-        conn = standin(self.t, raw_tables(self.t / "raw", rename={"Diagnosis": {"code": "dx"}}))
-        with self.assertRaisesRegex(KeyError, r"diagnoses .*bulunmayan zorunlu.*'code'"):
+        conn = standin(self.t, raw_tables(self.t / "raw", rename={"Diagnosis": {"Diagnosis_Code": "dx"}}))
+        with self.assertRaisesRegex(KeyError, r"diagnoses .*bulunmayan zorunlu.*'Diagnosis_Code'"):
             nabidh.load_iris(conn, "c1")
         conn.close()
 
     def test_explicit_query_and_placeholders(self):
-        tables = raw_tables(self.t / "raw", rename={"Patient": {"patient_id": "PID"}})
+        tables = raw_tables(self.t / "raw", rename={"Patient": {"ID": "PID"}})
         conn = standin(self.t, tables)
         src = copy.deepcopy(nabidh.SOURCES)
-        src["patient_profile"]["query"] = ("SELECT PID AS patient_id, sex, date_of_birth, nationality "
+        src["patient_profile"]["query"] = ("SELECT PID AS ID, Gender_Code, Age, Nationality "
                                            "FROM {schema}.Patient WHERE '{cohort}' = 'c1'")
         ds, rep = nabidh.load_iris(conn, "c1", sources=src)
         self.assertEqual(sorted(ds["patients"]["patient_id"]), ["A1", "A2", "A3", "A4"])
@@ -141,7 +141,7 @@ class TestIrisSources(unittest.TestCase):
     def test_horolog_dates(self):
         tables = raw_tables(self.t / "raw")
         dx = tables["Diagnosis"]
-        dx["diagnosis_date"] = ["66839", "65743,3600", "", "not-a-date"]   # 2023-12-31, 2020-12-30 01:00
+        dx["DiagnosisDate"] = ["66839", "65743,3600", "", "not-a-date"]   # 2023-12-31, 2020-12-30 01:00
         conn = standin(self.t, tables)
         src = copy.deepcopy(nabidh.SOURCES)
         src["diagnoses"]["date_format"] = "horolog"

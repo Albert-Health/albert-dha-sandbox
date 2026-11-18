@@ -22,46 +22,54 @@ def _csv(d: Path, name: str, header: str, rows: list[str], encoding="utf-8"):
     (d / name).write_text("\n".join([header, *rows]) + "\n", encoding=encoding)
 
 
-def write_raw(d: Path, social_rows=None, dob="1970-01-01"):
+def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="SocialHabitCategory_Code",
+              drug_code=True):
+    """HSAA view'larının biçimi (enclave, 2026-11-18): Patient.ID = diğer view'larda Patient; yaş var, doğum
+    tarihi yok. social_item / drug_code: C2'deki farklar (kategori açıklaması, ilaç kodu yok)."""
     # BOM'lu dosya (Excel çıktısı) + karışık cinsiyet yazımı
-    _csv(d, "patients.csv", "patient_id,sex,date_of_birth,nationality,ethnicity,facility_id", [
-        f"A1,M,{dob},United Arab Emirates,,F1",
-        "A2,female,1980-05-05,IND,,F1",
-        "A3,F,1975-02-02,Iran,,F2",
-        "A4,MALE,1965-03-03,,,F2",
+    _csv(d, "patients.csv", "ID,Age,Gender_Code,EthnicGroup_Description,Nationality", [
+        "A1,56,M,,United Arab Emirates",
+        "A2,46,female,,IND",
+        "A3,51,F,,Iran",
+        "A4,abc,MALE,,",                             # yaş sayı değil → doğum tarihi yok
     ], encoding="utf-8-sig")
-    _csv(d, "diagnoses.csv", "patient_id,code_system,code,description,diagnosis_date", [
-        "A1,I10,E11.9,T2D,2021-01-01",           # HL7 'I10' = ICD-10
-        "A2,ICD10,I10,HTN,2019-01-01",
-        "A3,ICD-10,R73.03,Prediabetes,2020-01-01",
-        "A4,ICD-10,E11.9,T2D,not-a-date",
+    _csv(d, "diagnoses.csv", "Patient,Diagnosis_Code,Diagnosis_Description,DiagnosisDate", [
+        f"A1,E11.9,T2D,{diag_date}",
+        "A2,I10,HTN,2019-01-01",
+        "A3,R73.03,Prediabetes,2020-01-01",
+        "A4,E11.9,T2D,not-a-date",
     ])
-    _csv(d, "observations.csv", "patient_id,code_system,loinc,name,value,unit,date", [
-        "A1,LN,4548-4,HbA1c,6.8,%,2021-01-01",
-        "A2,LN,1558-6,FPG,<5.0,mmol/L,2020-01-01",
-        "A1,LN,39156-5,BMI,31.2,kg/m2,2020-06-01",
-        "A2,LN,8302-2,Height,160,cm,2015-01-01",
-        "A2,LN,3141-9,Weight,64,kg,2020-01-01",
-        "A3,LN,9999-9,Mystery,1,,2020-01-01",
+    _csv(d, "observations.csv", "Patient,ObservationCode_Code,ObservationCode_Description,ObservationValue,"
+                                "ObservationDate", [
+        "A1,4548-4,HbA1c,6.8,2021-01-01",
+        "A2,1558-6,FPG,<5.0,2020-01-01",
+        "A1,39156-5,BMI,31.2,2020-06-01",
+        "A2,8302-2,Height,160,2015-01-01",
+        "A2,3141-9,Weight,64,2020-01-01",
+        "A3,9999-9,Mystery,1,2020-01-01",
     ])
-    _csv(d, "social_history.csv", "patient_id,item,value,code,date", social_rows or [
-        "A1,Smoking,Never smoker,,2018-01-01",
-        "A1,Smoking,unknown,,2020-01-01",            # bilgisiz → önceki 'never' korunur
-        "A2,Smoking,Current every day smoker,,2019-01-01",
-        "A3,Smoking,,8517006,2019-01-01",            # yalnız SNOMED kod → ex
-        "A4,Smoking,weird value,,2019-01-01",        # eşlenemez
+    _csv(d, "social_history.csv", f"Patient,{social_item},SocialHabitQty_Description,EnteredOn", social_rows or [
+        "A1,Smoking,Never smoker,2018-01-01",
+        "A1,Smoking,unknown,2020-01-01",             # bilgisiz → önceki 'never' korunur
+        "A2,Smoking,Current every day smoker,2019-01-01",
+        "A3,Smoking,Ex-smoker,2019-01-01",
+        "A4,Smoking,weird value,2019-01-01",         # eşlenemez
     ])
-    _csv(d, "family_history.csv", "patient_id,relation,condition,status,date", [
-        "A1,Mother,Diabetes mellitus type 2,Yes,2018-01-01",
-        "A1,Father,Hypertension,Yes,2018-01-01",     # diyabet değil → atılır
-        "A2,Uncle,Diabetes,Yes,2018-01-01",          # ikinci derece → pozitif sayılmaz, kayıt var
-        "A3,,E11,No,2018-01-01",                     # negatif kayıt
-        "A4,Sister,Diabetes,maybe,2018-01-01",       # eşlenemeyen durum
+    _csv(d, "family_history.csv", "Patient,Diagnosis_Code,Diagnosis_Description,FamilyMember_Description,EnteredOn", [
+        "A1,E11,Diabetes mellitus type 2,Mother,2018-01-01",
+        "A1,I10,Hypertension,Father,2018-01-01",     # diyabet değil → atılır
+        "A2,,Diabetes,Uncle,2018-01-01",             # yalnız açıklama; ikinci derece → pozitif sayılmaz
+        "A3,E11.9,,,2018-01-01",                     # yalnız kod; akrabalık yok → birinci derece sayılır
     ])
-    _csv(d, "medications.csv", "patient_id,atc_code,drug_name,prescription_date,route", [
-        "A2,c09aa02,Enalapril,2019-02-01,Oral",
-        "A1,Metformin,Metformin,2021-02-01,Oral",    # ATC değil → raporlanır
-    ])
+    if drug_code:
+        _csv(d, "medications.csv", "Patient,DrugProduct_Code,DrugProduct_Description,FromTime,Route_Description", [
+            "A2,c09aa02,Enalapril,2019-02-01,Oral",
+            "A1,Metformin,Metformin,2021-02-01,Oral",    # ATC değil → raporlanır
+        ])
+    else:
+        _csv(d, "medications.csv", "Patient,DrugProduct_Description,FromTime,Route_Description", [
+            "A2,Enalapril,2019-02-01,Oral",
+        ])
 
 
 class TestAdapter(unittest.TestCase):
@@ -80,6 +88,18 @@ class TestAdapter(unittest.TestCase):
         p = self.ds["patients"].set_index("patient_id")
         self.assertEqual(list(p["sex"]), ["Male", "Female", "Female", "Male"])
         self.assertEqual(p.loc["A2", "nationality"], "IND")
+
+    def test_date_of_birth_from_age(self):
+        p = self.ds["patients"].set_index("patient_id")["date_of_birth"]
+        ref = pd.Timestamp(nabidh.AGE_REFERENCE_DATE)
+        self.assertEqual(p["A1"], (ref - pd.Timedelta(days=56.5 * 365.25)).normalize())
+        age_at_ref = (ref - p["A1"]).days / 365.25
+        self.assertTrue(56 <= age_at_ref < 57)
+        self.assertTrue(pd.isna(p["A4"]))                         # "abc" → NaT, raporlanır
+        vc = pd.DataFrame(self.rep["value_counts"])
+        derived = vc[vc["field"] == "date_of_birth"]
+        self.assertEqual(int(derived["n_rows"].iloc[0]), 3)
+        self.assertIn("abc", set(vc.loc[vc["field"].str.startswith("age not usable"), "value"]))
 
     def test_code_system_normalised(self):
         c = self.ds["conditions"]
@@ -104,8 +124,7 @@ class TestAdapter(unittest.TestCase):
     def test_family_history_values(self):
         o = self.ds["observations"]
         fh = o[o["concept"] == "family_history_dm"].groupby("patient_id")["value"].apply(sorted).to_dict()
-        self.assertEqual(fh, {"A1": ["positive"], "A2": ["positive_non_first_degree"], "A3": ["negative"],
-                              "A4": ["unmapped:maybe"]})
+        self.assertEqual(fh, {"A1": ["positive"], "A2": ["positive_non_first_degree"], "A3": ["positive"]})
 
     def test_medications_uppercased(self):
         self.assertIn("C09AA02", set(self.ds["medications"]["atc_code"]))
@@ -124,7 +143,7 @@ class TestAdapter(unittest.TestCase):
         self.assertEqual(s.loc["A2", "smoking_raw"], "current")
         self.assertEqual(s.loc["A3", "smoking_raw"], "ex")
         self.assertFalse(s.loc["A4", "ok_smoking"])                 # eşlenemeyen değer = eksik
-        self.assertEqual(list(s["family_history"]), [True, False, False, False])
+        self.assertEqual(list(s["family_history"]), [True, False, True, False])
         self.assertEqual(list(s["family_history_recorded"]), [True, True, True, False])
         self.assertEqual(list(s["ok_family_history"]), [True, True, True, False])
         self.assertEqual(s.loc["A2", "bmi_source"], "height_weight")
@@ -136,25 +155,56 @@ class TestAdapterOptions(unittest.TestCase):
     def test_date_format_day_first(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            write_raw(d, dob="03/04/1970")
+            write_raw(d, diag_date="03/04/2021")
             src = copy.deepcopy(nabidh.SOURCES)
-            src["patient_profile"]["date_format"] = "%d/%m/%Y"
+            src["diagnoses"]["date_format"] = "%d/%m/%Y"
             ds, rep = nabidh.load(d, "c1", src)
-        dob = ds["patients"].set_index("patient_id").loc["A1", "date_of_birth"]
-        self.assertEqual(dob, pd.Timestamp("1970-04-03"))
+        dx = ds["conditions"].set_index("patient_id").loc["A1", "date"]
+        self.assertEqual(dx, pd.Timestamp("2021-04-03"))
+
+    def test_birth_date_column_preferred_over_age(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d)
+            pts = pd.read_csv(d / "patients.csv", dtype=str, encoding="utf-8-sig")
+            pts["BirthDate"] = ["1970-01-01", "", "", ""]
+            pts.to_csv(d / "patients.csv", index=False)
+            ds, _ = nabidh.load(d, "c1")
+        p = ds["patients"].set_index("patient_id")["date_of_birth"]
+        self.assertEqual(p["A1"], pd.Timestamp("1970-01-01"))
+        self.assertTrue(pd.notna(p["A2"]))                         # BirthDate boş → yaştan
+
+    def test_c2_shape(self):
+        """C2: sigara kategorisi açıklama sütununda, ilaç kodu yok. Eşleme yine çalışmalı."""
+        rows = ["A1,Tobacco,Never smoker,2018-01-01", "A1,Alcohol,Yes,2018-01-01"]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows, social_item="SocialHabitCategory_Description", drug_code=False)
+            src = copy.deepcopy(nabidh.SOURCES)
+            src["social_history"]["filter"] = {"item": ["tobacco"]}
+            ds, rep = nabidh.load(d, "c2", src)
+        sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"]
+        self.assertEqual(list(sm["value"]), ["never"])
+        self.assertEqual(rep["sources"]["social_history"]["filtered_out_by_item"], 1)
+        self.assertEqual(len(ds["medications"]), 0)                 # kodsuz satır kanonik tabloya girmez
+        self.assertIn("atc_code", rep["sources"]["medications"]["absent_optional_columns"])
+        self.assertEqual(rep["sources"]["medications"]["rows_out"], {"medications": 0})
+        vc = pd.DataFrame(rep["value_counts"])
+        self.assertIn("Enalapril", set(vc.loc[vc["field"] == "drug_name without ATC code", "value"]))
+        self.assertEqual(int(vc.loc[vc["field"] == "rows dropped: no drug code", "n_rows"].iloc[0]), 1)
 
     def test_missing_required_column(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d)
             src = copy.deepcopy(nabidh.SOURCES)
-            src["diagnoses"]["columns"]["code"] = "icd_code"
+            src["diagnoses"]["columns"]["code"] = ["icd_code", "dx_code"]
             with self.assertRaises(KeyError) as cm:
                 nabidh.load(d, "c1", src)
-        self.assertIn("icd_code", str(cm.exception))
+        self.assertIn("icd_code | dx_code", str(cm.exception))
 
     def test_social_history_needs_filter_when_mixed(self):
-        rows = ["A1,Smoking,Never smoker,,2018-01-01", "A1,Alcohol,Yes,,2018-01-01"]
+        rows = ["A1,Smoking,Never smoker,2018-01-01", "A1,Alcohol,Yes,2018-01-01"]
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d, social_rows=rows)

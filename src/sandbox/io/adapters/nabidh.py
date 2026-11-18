@@ -1,8 +1,9 @@
 """NABIDH (enclave) ham verisi → kanonik şema.
 
-Teslim yapısı (NABIDH "Data availability", 2026-11-13): kohort başına olay düzeyi kaynaklar —
-Patient profile · tanı (ICD-10) · Observation (lab + vital, LOINC) · SocialHistory (sigara) ·
-FamilyHistory (diyabet aile öyküsü) · Medication (çalışma ilaçları) · Encounter (yalnız C3).
+Teslim yapısı (NABIDH "Data availability", 2026-11-13; enclave'de görülen hâli 2026-11-18): kohort başına
+bir IRIS şeması (HSSBX namespace'i, *_HSAA), içinde HSAA view'ları — Patient (ID, Age, Gender_Code,
+EthnicGroup_Description; doğum tarihi ve uyruk yok) · Diagnosis · Observation (lab + vital; birim yok) ·
+SocialHistory · FamilyHistory · Medication · Encounter. Hasta anahtarı: Patient.ID = diğer view'larda Patient.
 Ham dosyalar: data/nabidh/raw/<c1|c2|c3>/ (DHA'nın verdiği hâliyle; dokunulmaz).
 
 İki girdi yolu, aynı eşleme:
@@ -52,13 +53,19 @@ CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"; "horolog" (IRIS)
 HOROLOG_EPOCH = pd.Timestamp("1840-12-31")   # IRIS $HOROLOG: gün 0
 
+# Hasta view'ında doğum tarihi yok, yalnız yaş (Age, tam yıl) var. Doğum tarihi yaştan türetilir:
+# AGE_REFERENCE_DATE − (Age + 0,5) yıl (yaşın verildiği gün yıl ortası varsayımı; hata ≤ ±6 ay).
+# [KARAR BEKLİYOR] D24 — Age hangi tarihe göre (veri çekimi / view'ın oluşturulması / sorgu günü)? DHA'ya
+# sorulacak; doğum yılı ya da tarihi verilebiliyorsa BirthDate sütunu tercih edilir (optional_columns).
+# Geçici değer: view'ların ilk sorgulandığı gün (2026-11-18).
+AGE_REFERENCE_DATE = "2026-11-18"
+
 # IRIS'te kohort başına yer tutucular: `table` / `query` içindeki {schema} vb. buradan, {cohort} kohort adından.
-# ÖRNEK değerler — enclave'de IntelliJ'de görülen namespace / şema adlarıyla değiştir. DHA kohortları tek
-# şemada bir kohort tablosuyla veriyorsa: kaynaklara JOIN'li `query` yaz, buraya da o tablonun adını koy.
+# DHA enclave (namespace HSSBX, 2026-11-18): kohort başına bir HSAA şeması, içinde view'lar.
 IRIS_COHORTS: dict[str, dict[str, str]] = {
-    "c1": {"schema": "NABIDH_C1"},
-    "c2": {"schema": "NABIDH_C2"},
-    "c3": {"schema": "NABIDH_C3"},
+    "c1": {"schema": "SBXV_ENCL447CCD80_HSAA"},
+    "c2": {"schema": "SBXV_ENCL6F10EFBD_HSAA"},
+    "c3": {"schema": "SBXV_ENCL94F43B4B_HSAA"},
 }
 
 # Kaynak tanımı:
@@ -66,55 +73,64 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 #   table             IRIS tablosu, ör. "{schema}.Patient" (IRIS_COHORTS yer tutucuları)
 #   query             (isteğe bağlı) table yerine tam SELECT; sütunları `columns` adlarıyla döndürmeli
 #   kind              yukarıdaki kaynak türlerinden biri
-#   columns           {kanonik_ad: kaynak_sütun} — zorunlu; yoksa KeyError
-#   optional_columns  {kanonik_ad: kaynak_sütun} — varsa alınır
+#   columns           {kanonik_ad: kaynak_sütun} — zorunlu; yoksa KeyError. Kaynak sütun bir liste de
+#                     olabilir: kohortlar arasında ad değişiyorsa mevcut olan ilki alınır
+#   optional_columns  {kanonik_ad: kaynak_sütun (ya da liste)} — varsa alınır
 #   constants         {kanonik_ad: değer} — sütun yoksa veya boşsa bu değer
-#   filter            {kaynak_sütun: [izinli değerler]} — büyük/küçük harf duyarsız satır seçimi
+#   filter            {kaynak_sütun ya da kanonik_ad: [izinli değerler]} — büyük/küçük harf duyarsız seçim
 #   optional          True → dosya / tablo yoksa atlanır (ör. encounter yalnız C3'te)
 #   date_format       bu kaynak için DATE_FORMAT'ı ezer
+#
+# HSAA view'ları (2026-11-18, check_environment [mapping] çıktısı): hasta anahtarı Patient view'ında
+# sayısal `ID`, diğer view'larda aynı değeri taşıyan `Patient` sütunu. Kohort farkları: C2'de
+# SocialHabitCategory_Code yerine _Description var, Medication'da DrugProduct_Code yok; C1'de Encounter'a
+# SELECT yetkisi yok (opsiyonel, atlanır). Kod sistemleri (ICD-10 / LOINC) ve değer sözlükleri henüz
+# doğrulanmadı — enclave.sh values / columns ile bakılacak (docs/gap.md K3).
 SOURCES: dict[str, dict] = {
     "patient_profile": {
         "file": "patients.csv", "table": "{schema}.Patient", "kind": "patients",
-        "columns": {"patient_id": "patient_id", "sex": "sex", "date_of_birth": "date_of_birth",
-                    "nationality": "nationality"},
-        "optional_columns": {"ethnicity_raw": "ethnicity", "facility_id": "facility_id"},
+        "columns": {"patient_id": "ID", "sex": "Gender_Code", "age": "Age"},
+        "optional_columns": {"ethnicity_raw": "EthnicGroup_Description", "nationality": "Nationality",
+                             "date_of_birth": "BirthDate"},
     },
     "diagnoses": {
         "file": "diagnoses.csv", "table": "{schema}.Diagnosis", "kind": "conditions",
-        "columns": {"patient_id": "patient_id", "code": "code", "date": "diagnosis_date"},
-        "optional_columns": {"code_system": "code_system", "description": "description"},
+        "columns": {"patient_id": "Patient", "code": "Diagnosis_Code", "date": "DiagnosisDate"},
+        "optional_columns": {"description": "Diagnosis_Description"},
         "constants": {"code_system": "ICD-10"},
     },
     "observations": {
         "file": "observations.csv", "table": "{schema}.Observation", "kind": "measurements",
-        "columns": {"patient_id": "patient_id", "code": "loinc", "value": "value", "date": "date"},
-        "optional_columns": {"test_name": "name", "unit": "unit", "code_system": "code_system"},
+        "columns": {"patient_id": "Patient", "code": "ObservationCode_Code", "value": "ObservationValue",
+                    "date": "ObservationDate"},
+        "optional_columns": {"test_name": "ObservationCode_Description"},     # birim sütunu yok
         "constants": {"code_system": "LOINC"},
     },
     "social_history": {
         "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
-        "columns": {"patient_id": "patient_id", "value": "value", "date": "date"},
-        "optional_columns": {"code": "code", "item": "item"},
-        # SocialHistory sigara dışı kalemler de içeriyorsa: {"item": ["Tobacco smoking status"]}
+        "columns": {"patient_id": "Patient", "value": "SocialHabitQty_Description", "date": "EnteredOn"},
+        "optional_columns": {"item": ["SocialHabitCategory_Code", "SocialHabitCategory_Description"]},
+        # Sigara dışı kalemler de varsa: {"item": [sigara kaleminin kodu ve açıklaması]}
         "filter": None,
     },
     "family_history": {
         "file": "family_history.csv", "table": "{schema}.FamilyHistory",
         "kind": "family_history",
-        "columns": {"patient_id": "patient_id", "date": "date"},
-        "optional_columns": {"condition": "condition", "status": "status", "relation": "relation"},
+        "columns": {"patient_id": "Patient", "date": "EnteredOn"},
+        "optional_columns": {"condition": "Diagnosis_Code", "condition_text": "Diagnosis_Description",
+                             "relation": "FamilyMember_Description"},
     },
     "medications": {
         "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
-        "columns": {"patient_id": "patient_id", "atc_code": "atc_code", "date": "prescription_date"},
-        "optional_columns": {"drug_name": "drug_name", "route": "route"},
+        "columns": {"patient_id": "Patient", "date": "FromTime"},
+        "optional_columns": {"atc_code": "DrugProduct_Code", "drug_name": "DrugProduct_Description",
+                             "route": "Route_Description"},
     },
     "encounters": {
         "file": "encounters.csv", "table": "{schema}.Encounter", "kind": "encounters",
         "optional": True,
-        "columns": {"patient_id": "patient_id", "date": "encounter_date"},
-        "optional_columns": {"encounter_id": "encounter_id", "facility_id": "facility_id",
-                             "encounter_type": "encounter_type"},
+        "columns": {"patient_id": "Patient", "date": "EncounterStartDate"},
+        "optional_columns": {"encounter_id": "ID", "encounter_type": "EncounterType"},
     },
 }
 
@@ -186,23 +202,48 @@ def _value_counts(source: str, field: str, s: pd.Series, top: int = 50) -> list[
     return [{"source": source, "field": field, "value": str(k), "n_rows": int(v)} for k, v in vc.items()]
 
 
+def alternatives(src) -> list[str]:
+    """Kaynak sütun tanımı (ad ya da ad listesi) → aday adlar."""
+    return [src] if isinstance(src, str) else list(src)
+
+
+def resolve_column(src, available) -> str | None:
+    """Kaynak sütun tanımı → `available` içinde bulunan ilk aday (yoksa None)."""
+    have = set(available)
+    return next((c for c in alternatives(src) if c in have), None)
+
+
+def label(src) -> str:
+    return " | ".join(alternatives(src))
+
+
+def filter_columns(spec: dict) -> dict:
+    """filter anahtarı → kaynak sütun tanımı. Anahtar kanonik bir adsa (ör. "item") o adın kaynak sütunu."""
+    names = {**spec.get("optional_columns", {}), **spec["columns"]}
+    return {key: names.get(key, key) for key in (spec.get("filter") or {})}
+
+
 def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -> tuple[pd.DataFrame, dict]:
     cols, opt = spec["columns"], spec.get("optional_columns", {})
-    missing = [src for src in cols.values() if src not in df.columns]
+    got = {canon: resolve_column(src, df.columns) for canon, src in cols.items()}
+    missing = [label(cols[c]) for c, src in got.items() if src is None]
     if missing:
         raise KeyError(f"{name} ({where or spec.get('file')}): kaynakta bulunmayan zorunlu sütunlar: {missing}. "
                        f"Mevcut: {list(df.columns)}")
     info = {"rows_read": int(len(df))}
-    for src, allowed in (spec.get("filter") or {}).items():
-        if src not in df.columns:
-            raise KeyError(f"{name}: filter sütunu yok: {src}")
+    for key, fsrc in filter_columns(spec).items():
+        src = resolve_column(fsrc, df.columns)
+        if src is None:
+            raise KeyError(f"{name}: filter sütunu yok: {label(fsrc)}")
+        allowed = spec["filter"][key]
         keep = _norm_text(df[src]).isin([a.lower() for a in allowed]).fillna(False).astype(bool)
-        info[f"filtered_out_by_{src}"] = int((~keep).sum())
+        info[f"filtered_out_by_{key}"] = int((~keep).sum())
         df = df[keep]
-    out = pd.DataFrame({canon: df[src] for canon, src in cols.items()})
-    info["absent_optional_columns"] = [c for c, src in opt.items() if src not in df.columns]
-    for canon, src in opt.items():
-        if src in df.columns:
+    out = pd.DataFrame({canon: df[src] for canon, src in got.items()})
+    opt_got = {canon: resolve_column(src, df.columns) for canon, src in opt.items()}
+    info["absent_optional_columns"] = [c for c, src in opt_got.items() if src is None]
+    for canon, src in opt_got.items():
+        if src is not None:
             out[canon] = df[src]
     for k, v in spec.get("constants", {}).items():
         out[k] = out[k].fillna(v) if k in out else v
@@ -247,6 +288,14 @@ def _is_diabetes_condition(cond: pd.Series) -> pd.Series:
 # --------------------------------------------------------------------------
 # Kaynak türü işleyicileri: (df, name, vc) → {kanonik_tablo: df}
 # --------------------------------------------------------------------------
+def dob_from_age(age: pd.Series, reference=AGE_REFERENCE_DATE) -> pd.Series:
+    """Tam yıl yaş → yaklaşık doğum tarihi: reference − (yaş + 0,5) yıl. 0–120 dışı / sayı olmayan → NaT."""
+    a = pd.to_numeric(age.astype("string").str.strip(), errors="coerce")
+    a = a.where((a >= 0) & (a <= 120))
+    out = pd.Timestamp(reference) - pd.to_timedelta((a + 0.5) * 365.25, unit="D")
+    return pd.Series(out, index=age.index).dt.normalize()
+
+
 def _h_patients(df, name, vc):
     vc += _value_counts(name, "sex", df["sex"])
     for col in ("nationality", "ethnicity_raw"):
@@ -254,6 +303,16 @@ def _h_patients(df, name, vc):
             vc += _value_counts(name, col, df[col], top=200)
     raw_sex = df["sex"].astype("string").str.strip()
     df["sex"] = raw_sex.str.upper().map(SEX_MAP).fillna(raw_sex)
+    if "age" in df:
+        derived = dob_from_age(df["age"], AGE_REFERENCE_DATE)
+        given = df["date_of_birth"] if "date_of_birth" in df else pd.Series(pd.NaT, index=df.index)
+        use = given.isna() & derived.notna()
+        bad_age = df["age"].notna() & derived.isna()
+        vc.append({"source": name, "field": "date_of_birth",
+                   "value": f"derived from Age at {AGE_REFERENCE_DATE} (mid-year)", "n_rows": int(use.sum())})
+        if bad_age.any():
+            vc += _value_counts(name, "age not usable (non-numeric or outside 0-120)", df.loc[bad_age, "age"], top=20)
+        df["date_of_birth"] = given.where(~use, derived)
     return {"patients": df}
 
 
@@ -308,9 +367,13 @@ def _h_smoking(df, name, vc):
 
 
 def _h_family_history(df, name, vc):
-    if "condition" in df:
-        is_dm = _is_diabetes_condition(df["condition"])
-        vc += _value_counts(name, "condition (non-diabetes, dropped)", df.loc[~is_dm, "condition"], top=30)
+    cond_cols = [c for c in ("condition", "condition_text") if c in df]
+    if cond_cols:                                   # kod ya da açıklama diyabet diyorsa diyabet kaydı
+        is_dm = pd.Series(False, index=df.index)
+        for c in cond_cols:
+            is_dm |= _is_diabetes_condition(df[c])
+        shown = df[cond_cols].astype("string").fillna("").agg(" | ".join, axis=1)
+        vc += _value_counts(name, f"{' | '.join(cond_cols)} (non-diabetes, dropped)", shown[~is_dm], top=30)
         df = df[is_dm]
     if "status" in df:
         raw = _norm_text(df["status"])
@@ -334,12 +397,18 @@ def _h_family_history(df, name, vc):
 
 
 def _h_medications(df, name, vc):
-    code = df["atc_code"].astype("string").str.strip().str.upper()
-    not_atc = ~code.str.match(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$", na=False)
+    raw = df["atc_code"] if "atc_code" in df else pd.Series(pd.NA, index=df.index)   # C2: kod sütunu yok
+    code = raw.astype("string").str.strip().str.upper().replace("", pd.NA)
+    not_atc = code.notna() & ~code.str.match(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$", na=False)
     vc += _value_counts(name, "atc_code not ATC-like", code[not_atc], top=30)
     vc += _value_counts(name, "atc_code prefix", code.str.slice(0, 3))
+    if "drug_name" in df:                           # ATC'siz kayıtlar: ilaç sınıfı eşlemesi için adlar
+        vc += _value_counts(name, "drug_name without ATC code", df.loc[code.isna() | not_atc, "drug_name"], top=50)
     df["atc_code"] = code
-    return {"medications": df}
+    if code.isna().any():                           # kodsuz satır kanonik tabloya giremez (atc_code zorunlu)
+        vc.append({"source": name, "field": "rows dropped: no drug code", "value": "<missing>",
+                   "n_rows": int(code.isna().sum())})
+    return {"medications": df[code.notna()]}
 
 
 def _passthrough(table):
@@ -388,10 +457,12 @@ def iris_query(conn, spec: dict, name: str, params: dict) -> str:
         raise KeyError(f"{name}: yer tutucu {e} IRIS_COHORTS'ta yok (mevcut: {sorted(params)})") from None
     have = iris.column_names(conn, table)
     by_lower = {c.lower(): c for c in have}
-    missing = [c for c in spec["columns"].values() if c.lower() not in by_lower]
+    missing = [label(src) for src in spec["columns"].values()
+               if not any(c.lower() in by_lower for c in alternatives(src))]
     if missing:
         raise KeyError(f"{name} ({table}): tabloda bulunmayan zorunlu sütunlar: {missing}. Mevcut: {have}")
-    wanted = [*spec["columns"].values(), *spec.get("optional_columns", {}).values(), *(spec.get("filter") or {})]
+    wanted = [c for src in [*spec["columns"].values(), *spec.get("optional_columns", {}).values(),
+                            *filter_columns(spec).values()] for c in alternatives(src)]
     select = [f"{iris.quote_ident(by_lower[c.lower()])} AS {iris.quote_ident(c)}"
               for c in dict.fromkeys(wanted) if c.lower() in by_lower]
     return f"SELECT {', '.join(select)} FROM {table}"
