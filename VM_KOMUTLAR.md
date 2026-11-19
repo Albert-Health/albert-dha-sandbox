@@ -5,6 +5,9 @@ Güncelleme: 2026-11-19 · Tam liste ve açıklamalar: [`docs/faz1_c1_c2.md`](do
 **Kopyala-yapıştır yok.** Bu dosyayı IntelliJ'de aç. Bir `bash` bloğunun solunda ▶ varsa tıklayınca o komut
 çalışır; yoksa komutu terminale elle yaz. Komutların hepsi repo kökünden çalışır.
 
+**Sürüm:** her bloğun başlığında `ingest v1.0.0 | commit …` yazar; NB0 / NB1 bloklarında `Veri: c1 ingest v…`
+satırı, notebook'un hangi ingest'in verisini okuduğunu gösterir.
+
 **Sonuçları gönderme:** her komut sonucu `KOPYALA BAŞ` … `KOPYALA SON` arasında basar. O bloğun fotoğrafını
 çek. Ekrandan kaydıysa son bloğu yeniden bas:
 

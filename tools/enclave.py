@@ -11,7 +11,7 @@ kopyala-yapıştırla; projenin Python'unu tools/enclave.sh bulur:
   bash tools/enclave.sh show nb1 nb01/score_summary.csv | last
 
 Her komutun sonucu iki işaret satırı arasında basılır:
-  ----8<---- KOPYALA BAŞ | <komut> | <zaman> | commit <sha> | <run_id> ----8<----
+  ----8<---- KOPYALA BAŞ | <komut> | <zaman> | ingest v<sürüm> | commit <sha> | python <sürüm> | <run_id> ----8<----
   ...
   ----8<---- KOPYALA SON ----8<----
 Enclave dışına kopyalanacak olan yalnız bu bloktur. Blok yalnız meta veri ve özet içerir: tablo / sütun adları,
@@ -122,6 +122,28 @@ def _git(*args: str) -> str:
         return p.stdout.strip() if p.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
         return ""
+
+
+def ingest_version() -> str:
+    try:
+        from sandbox.io.adapters import nabidh
+        return nabidh.INGEST_VERSION
+    except Exception:                              # paket eksik vb.: başlık yine basılır
+        return "?"
+
+
+def data_versions(source: str) -> str:
+    """Kanonik verinin hangi ingest'ten geldiği (kohort başına ingest.json): NB / KPI bloklarında."""
+    from sandbox.config import CANONICAL_DIR
+
+    parts = []
+    for f in sorted((CANONICAL_DIR / source).glob("*/ingest.json")):
+        try:
+            m = json.loads(f.read_text(encoding="utf-8"))
+            parts.append(f"{f.parent.name} ingest v{m.get('ingest_version')} ({m.get('ingest_run_id')})")
+        except (OSError, ValueError):
+            parts.append(f"{f.parent.name} ingest.json okunamadı")
+    return "; ".join(parts) or "ingest sürümü bilinmiyor (ingest.json yok)"
 
 
 def commit_label() -> str:
@@ -876,7 +898,8 @@ def summary_ingest(d: Path, out: Block, a) -> None:
     for f in sorted((d / "ingest").glob("*_summary.json")):
         s = json.loads(f.read_text(encoding="utf-8"))
         c = f.name.split("_", 1)[0]
-        out(f"== {c.upper()}: {sdc.fmt_count(s.get('n_patients'))} hasta · şema ERROR {s.get('schema_errors')} / "
+        out(f"== {c.upper()} (ingest v{s.get('ingest_version', '?')}): {sdc.fmt_count(s.get('n_patients'))} hasta · "
+            f"şema ERROR {s.get('schema_errors')} / "
             f"WARN {s.get('schema_warnings')} · eşlenemeyen değer satırı {sdc.fmt_count(s.get('unmapped_value_rows'))}")
         out("   satır: " + ", ".join(f"{t}={sdc.fmt_count(n)}" for t, n in (s.get("rows") or {}).items()))
         for name, src in (s.get("sources") or {}).items():
@@ -975,6 +998,8 @@ def cmd_run(a, out: Block, run) -> int:
         run.register_output(log, f"run {a.step} tam ekran çıktısı (enclave içinde kalır)")
     new = sorted(n for n in {p.name for p in OUTPUT_DIR.iterdir()} - before if not (run and n == run.run_id))
     out(f"Adım: run {a.step} · kaynak {a.source} · çıkış kodu {rc} · {time.time() - t0:.0f} sn")
+    if a.step != "ingest":
+        out(f"Veri: {data_versions(a.source)}")
     found = []
     for n in new:
         m = OUTPUT_DIR / n / "run_manifest.json"
@@ -1148,7 +1173,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = safe_argv(argv)
     shown = shlex.join(argv)
     out = Block(f"{MARK} KOPYALA BAŞ | enclave {shown[:120]}{'...' if len(shown) > 120 else ''} | {utc} | "
-                f"commit {commit_label()} | python {platform.python_version()} | {run.run_id if run else 'audit yok'} "
+                f"ingest v{ingest_version()} | commit {commit_label()} | python {platform.python_version()} | "
+                f"{run.run_id if run else 'audit yok'} "
                 f"{MARK}")
     try:
         rc = HANDLERS[a.cmd](a, out, run)

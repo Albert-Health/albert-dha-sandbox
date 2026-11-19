@@ -67,6 +67,8 @@ def main(argv=None) -> int:
     p = dict(PARAMS)
     p.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
     run = Run("ingest_nabidh", params=p, source=a.source)
+    print(f"Ingest v{nabidh.INGEST_VERSION} · run {run.run_id}")
+    run.log("ingest version", ingest_version=nabidh.INGEST_VERSION)
     if use_iris:
         cohorts = a.cohorts or [c for c in COHORTS if c in nabidh.IRIS_COHORTS]
         if a.iris_sqlite:
@@ -139,6 +141,10 @@ def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> in
                     run.register_output(Path(s["snapshot"]), f"IRIS snapshot {c} {name}")
         ds.source = a.source
         out_dir = schema.write_dataset(ds, CANONICAL_DIR)
+        meta = {"ingest_version": nabidh.INGEST_VERSION, "ingest_run_id": run.run_id, "source": a.source,
+                "cohort": c, "input": "file" if conn is None else "iris"}
+        (out_dir / "ingest.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        run.register_output(out_dir / "ingest.json", f"canonical {a.source} {c} ingest sürümü")
         for f in sorted(out_dir.glob("*.csv")):
             run.register_output(f, f"canonical {a.source} {c} {f.stem}")
 
@@ -152,7 +158,7 @@ def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> in
         run.save_table(sdc.suppress_small_counts(vc, ["n_rows"]), f"ingest/{c}_value_counts.csv",
                        f"{c} kaynak değer dağılımları (eşleme sözlükleri için)")
         unmapped = vc[vc["value"].str.contains("unmapped", na=False)]
-        summary = {**rep, "source": a.source, "n_patients": back.n_patients,
+        summary = {**rep, "ingest_version": nabidh.INGEST_VERSION, "source": a.source, "n_patients": back.n_patients,
                    "rows": {t: int(len(df)) for t, df in back.tables.items()},
                    "schema_errors": errors, "schema_warnings": int((val["severity"] == "WARN").sum()),
                    "unmapped_value_rows": int(unmapped["n_rows"].sum())}

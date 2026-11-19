@@ -109,6 +109,9 @@ python tools/build_evidence_package.py
 
 ## Değişiklik yaparken
 - Kohort / outcome / prediktör kuralı değişirse: `tests/` altına el yapımı vaka ekle (tests/fixtures.py).
+- Adapter / ingest davranışı değişirse `io/adapters/nabidh.py → INGEST_VERSION`'ı artır ve kaydına bir satır ekle
+  (MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici · PATCH yalnız rapor). Sürüm her KOPYALA başlığında,
+  ingest özetinde, audit'te ve kanonik `<kohort>/ingest.json`'da görünür; NB blokları okudukları sürümü basar.
 - Skorlayıcı değişirse: `tests/test_scores.py` referans vektörleri (CRAN QDiabetes README değerleri) geçmeli.
 - Metrik eklerken: küçük, elle doğrulanabilir örnekle test (sansürsüzde C-index = AUROC gibi).
 - Uçtan uca: build → NB0 → NB1 → NB2 → kpi_report hatasız; her run manifest'i `status: success`.

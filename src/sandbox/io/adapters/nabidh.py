@@ -56,6 +56,15 @@ from . import ddc
 from ..schema import SCHEMA, TABLES, Dataset, coerce
 from .synthetic import read_raw_csv
 
+# Ingest sürümü: her KOPYALA bloğunun başlığında, ingest çıktısında, ingest özetinde, audit'te ve kanonik verinin
+# yanında (<kohort>/ingest.json → NB0 / NB1 blokları) görünür. Adapter ya da ingest davranışı değişince artır:
+#   MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici (kanonik veri değişebilir) · PATCH yalnız rapor / çıktı.
+# Kayıt (en yeni üstte):
+#   1.0.0  2026-11-19  HSAA view'ları; LabResultItem lab'ları birimiyle (eAG / RBS adından elenir, makullük
+#                      raporu); SocialHistory tütün kalemi filtresi + yoğunluk sözlüğü; aile öyküsü: önce
+#                      ICD-10 / SNOMED kodu sonra metin, olumsuzlama, akraba derecesi, prediyabet atılır; DDC → ATC
+INGEST_VERSION = "1.0.0"
+
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"; "horolog" (IRIS)
 HOROLOG_EPOCH = pd.Timestamp("1840-12-31")   # IRIS $HOROLOG: gün 0
