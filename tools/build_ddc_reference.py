@@ -1,15 +1,15 @@
-"""Dubai Drug Code (DDC) listesi (DHA, .xlsx) → src/sandbox/reference/ddc.csv.gz.
+"""Dubai Drug Code (DDC) list (DHA, .xlsx) → src/sandbox/reference/ddc.csv.gz.
 
-DDC listesinde ATC kodu yok; ürün başına etken madde adları, uygulama yolu ve dozaj formu var. Adapter
-(io/adapters/ddc.py) ilaç sınıfını bu tablodan + codelists.INGREDIENT_ATC'den bulur. Burada yalnızca liste
-sadeleştirilir (fiyat, üretici, ruhsat sahibi atılır); eşleme kuralı kodda kalır → codelists değişince bu
-dosyayı yeniden üretmek gerekmez. Yeni DDC listesi gelince (enclave dışında) yeniden çalıştır ve commit'le.
+The DDC list has no ATC code; per product it has active ingredient names, route of administration and dosage
+form. The adapter (io/adapters/ddc.py) finds the drug class from this table + codelists.INGREDIENT_ATC. Here the
+list is only slimmed down (price, manufacturer, licence holder dropped); the mapping rule stays in code → no need
+to rebuild this file when codelists change. When a new DDC list arrives, run again (outside the enclave) and commit.
 
-Bağımlılık yok: .xlsx standart kütüphaneyle (zipfile + xml) okunur; openpyxl gerekmez.
+No dependencies: the .xlsx is read with the standard library (zipfile + xml); no openpyxl needed.
 
-Kullanım:
+Usage:
   python tools/build_ddc_reference.py ~/Downloads/Dubai_Drug_Code_DDC_List_20261116_193716.xlsx
-  python tools/build_ddc_reference.py <xlsx> --out <yol>       # varsayılan: src/sandbox/reference/ddc.csv.gz
+  python tools/build_ddc_reference.py <xlsx> --out <path>      # default: src/sandbox/reference/ddc.csv.gz
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _col_index(ref: str) -> int:
 
 
 def read_xlsx(path: Path) -> pd.DataFrame:
-    """İlk sayfayı oku; ilk satır başlık. Hücreler metin olarak döner."""
+    """Reads the first sheet; the first row is the header. Cells come back as text."""
     with zipfile.ZipFile(path) as z:
         shared = []
         if "xl/sharedStrings.xml" in z.namelist():
@@ -70,15 +70,15 @@ def read_xlsx(path: Path) -> pd.DataFrame:
 def slim(raw: pd.DataFrame) -> pd.DataFrame:
     missing = [c for c in REQUIRED if c not in raw.columns]
     if missing:
-        raise SystemExit(f"DDC listesinde beklenen sütun yok: {missing}")
+        raise SystemExit(f"Expected columns missing from the DDC list: {missing}")
     s = raw[REQUIRED].apply(lambda x: x.astype("string").str.strip())
     return pd.DataFrame({
         "ddc_code": s["DDC_CODE"],
         "scientific_code": s["SCIENTIFIC_CODE"],
         "trade_name": s["TRADE_NAME"].str.replace(r"\s+", " ", regex=True),
-        # "METFORMIN HCL/SITAGLIPTIN [500 MG|50 MG]" → etken madde adları (miktar köşeli parantezde)
+        # "METFORMIN HCL/SITAGLIPTIN [500 MG|50 MG]" → active ingredient names (strength in square brackets)
         "ingredients": s["INGREDIENT_STRENGTH"].str.replace(r"\s*\[.*$", "", regex=True).str.strip(),
-        # "TABLETS (30'S, BLISTER PACK)" → "TABLETS" (ambalaj atılır)
+        # "TABLETS (30'S, BLISTER PACK)" → "TABLETS" (package dropped)
         "dosage_form": s["DOSAGE_FORM_PACKAGE"].str.replace(r"\s*\(.*$", "", regex=True).str.strip(),
         "route": s["ROUTE_OF_ADMIN"],
         "status": s["STATUS"].str.extract(r"^(\w+)", expand=False),       # Active / Grace / Discontinued
@@ -92,16 +92,16 @@ def main() -> int:
     a = ap.parse_args()
     ref = slim(read_xlsx(a.xlsx))
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    ref.to_csv(a.out, index=False, compression={"method": "gzip", "mtime": 0})   # aynı girdi = aynı dosya
-    print(f"{len(ref)} ürün → {a.out}  ({a.out.stat().st_size // 1024} KB)")
+    ref.to_csv(a.out, index=False, compression={"method": "gzip", "mtime": 0})   # same input = same file
+    print(f"{len(ref)} products → {a.out}  ({a.out.stat().st_size // 1024} KB)")
 
-    # Özet: hangi ürünler hangi ATC grubuna düştü (gözden geçirme için; enclave'e gitmez)
+    # Summary: which products fell into which ATC group (for review; does not go to the enclave)
     table = ddc.load_reference(a.out)
     hit = table[table["atc_codes"].str.len() > 0]
-    print(f"çalışma ilaç sınıflarına eşlenen ürün: {len(hit)}  · yolu sistemik olmadığı için sayılmayan: "
+    print(f"products mapped to study drug classes: {len(hit)}  · not counted because the route is not systemic: "
           f"{int(table['excluded_route'].sum())}")
     by = hit.explode("atc_codes")["atc_codes"].str.slice(0, 3).value_counts().sort_index()
-    print("ATC 3 hane → ürün sayısı:", ", ".join(f"{k} {v}" for k, v in by.items()))
+    print("ATC 3 chars → product count:", ", ".join(f"{k} {v}" for k, v in by.items()))
     return 0
 
 

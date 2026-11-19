@@ -1,6 +1,6 @@
-"""Kohort kuralları için birim testleri (stdlib unittest — enclave'de pytest gerekmez).
+"""Unit tests for the cohort rules (stdlib unittest — no pytest needed in the enclave).
 
-Çalıştırma:  python -m unittest discover -s tests -v
+Run:  python -m unittest discover -s tests -v
 """
 import sys
 import tempfile
@@ -69,7 +69,7 @@ class TestC3(unittest.TestCase):
 
 class TestWashout(unittest.TestCase):
     def test_default_washout_90_days(self):
-        # D1 (2026-11-13): varsayılan washout 90 gün → 45. günde olay = prevalent, hasta çıkarılır
+        # D1 (2026-11-13): default washout 90 days → event on day 45 = prevalent, patient removed
         res = cohorts.build_c3(tiny_dataset())
         self.assertNotIn("P11", res["cohort"].index)
         self.assertLess(res["funnel"]["after_outcome_washout"], res["funnel"]["c3_final"])
@@ -82,7 +82,7 @@ class TestWashout(unittest.TestCase):
 
     def test_washout_removes_early_event(self):
         from sandbox.config import PARAMS
-        p = dict(PARAMS, outcome_washout_days=1000)   # P01 olayı index'ten ~792 gün sonra
+        p = dict(PARAMS, outcome_washout_days=1000)   # P01's event is ~792 days after index
         c3 = cohorts.build_c3(tiny_dataset(), p)["cohort"]
         self.assertNotIn("P01", c3.index)
         self.assertIn("P02", c3.index)
@@ -95,20 +95,20 @@ class TestPositivePool(unittest.TestCase):
         self.assertIn("P08", pool.index)
         self.assertEqual(pool.loc["P08", "status"], "T2DM")
         self.assertEqual(pool.loc["P09", "status"], "Prediabetes")
-        self.assertNotIn("P05", pool.index)          # T1D hariç
-        self.assertNotIn("P07", pool.index)          # yalnızca A10 → statü tanımlamaz
+        self.assertNotIn("P05", pool.index)          # T1D excluded
+        self.assertNotIn("P07", pool.index)          # A10 alone → does not define status
 
     def test_c1_completeness(self):
         sel = cohorts.build_c1_c2(tiny_dataset())
-        self.assertIn("P08", sel["c1_ids"])          # 8 değişken tam
-        self.assertNotIn("P09", sel["c1_ids"])       # sigara yok
+        self.assertIn("P08", sel["c1_ids"])          # all 8 variables complete
+        self.assertNotIn("P09", sel["c1_ids"])       # no smoking record
         self.assertIn("P09", sel["c2_ids"])
 
 
 class TestLeicesterCompleteness(unittest.TestCase):
     def test_ok_lrs_waist_only_for_2010(self):
-        # P08: 8 değişken tam, bel çevresi kaydı yok (NABIDH teslimi gibi) → LPRS (varsayılan) için tam,
-        # LRA 2010 için eksik (K-LRS)
+        # P08: all 8 variables complete, no waist circumference record (like the NABIDH delivery) → complete for
+        # LPRS (default), incomplete for LRA 2010 (K-LRS)
         ds = tiny_dataset()
         pool = cohorts.positive_pool(ds)
         ref = pd.Series(cohorts.data_end_date(ds), index=pool.index)
@@ -119,7 +119,7 @@ class TestLeicesterCompleteness(unittest.TestCase):
         self.assertFalse(s10.loc["P08", "ok_lrs"])
         l12 = lrs.score(s12)
         self.assertTrue(l12.loc["P08", "lrs_computable"])
-        self.assertTrue(s12.loc["P08", "htn_med"])          # enalapril → LPRS antihipertansif katkısı
+        self.assertTrue(s12.loc["P08", "htn_med"])          # enalapril → LPRS antihypertensive contribution
         self.assertAlmostEqual(l12.loc["P08", "lrs_htn"], 0.5498978, places=7)
         self.assertFalse(lrs.score(s10, p=dict(PARAMS, lrs_variant="assessment_2010")).loc["P08", "lrs_computable"])
 
@@ -129,15 +129,15 @@ class TestPositiveReference(unittest.TestCase):
         ds = tiny_dataset()
         pool = cohorts.positive_pool(ds)
         ref = cohorts.positive_reference_dates(ds, pool, "first_evidence")
-        self.assertEqual(ref["P08"], pd.Timestamp("2020-01-01"))   # E11.9 tanısı
-        self.assertEqual(ref["P09"], pd.Timestamp("2021-01-01"))   # prediyabet HbA1c
+        self.assertEqual(ref["P08"], pd.Timestamp("2020-01-01"))   # E11.9 diagnosis
+        self.assertEqual(ref["P09"], pd.Timestamp("2021-01-01"))   # prediabetes HbA1c
         end = cohorts.positive_reference_dates(ds, pool, "data_end")
         self.assertTrue((end == cohorts.data_end_date(ds)).all())
         with self.assertRaises(ValueError):
             cohorts.positive_reference_dates(ds, pool, "index")
 
     def test_post_diagnosis_values_excluded(self):
-        # P08: tanı günü BMI 31; tanıdan 2 yıl sonra BMI 40 → ilk kanıt referansında 31, veri sonunda 40
+        # P08: BMI 31 on the diagnosis day; BMI 40 two years later → 31 at the first-evidence reference, 40 at data end
         ds = tiny_dataset()
         extra = schema.coerce(pd.DataFrame([("P08", "bmi", "LOINC", "39156-5", "40.0", "kg/m2", "2022-01-01")],
                                            columns=["patient_id", "concept", "code_system", "code", "value",
@@ -163,21 +163,21 @@ class TestSchema(unittest.TestCase):
         self.assertFalse((rep["severity"] == "ERROR").any(), rep[rep["severity"] == "ERROR"])
 
     def test_require_cohorts(self):
-        """Notebook'lar yanlış SANDBOX_SOURCE'ta ya da ingest öncesi anlaşılır mesajla durur."""
+        """Notebooks stop with a clear message on a wrong SANDBOX_SOURCE or before ingest."""
         ds = tiny_dataset()
         ds.source, ds.cohort = "nabidh_test", "c1"
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             schema.write_dataset(ds, base)
             self.assertEqual(schema.require_cohorts(base, "nabidh_test", ("c1", "c2", "c3"), require_all=False), ["c1"])
-            with self.assertRaisesRegex(FileNotFoundError, r"c2 kanonik verisi yok"):
-                schema.require_cohorts(base, "nabidh_test", ("c1", "c2"))         # NB1: ikisi de gerekli
+            with self.assertRaisesRegex(FileNotFoundError, r"No canonical data for c2"):
+                schema.require_cohorts(base, "nabidh_test", ("c1", "c2"))         # NB1: both required
             with self.assertRaises(FileNotFoundError) as cm:
                 schema.require_cohorts(base, "synthetic", ("c1", "c2", "c3"), require_all=False)
             msg = str(cm.exception)
             for part in ("SANDBOX_SOURCE='synthetic'", "nabidh_test", "%env SANDBOX_SOURCE=nabidh", "ingest_nabidh"):
                 self.assertIn(part, msg)
-            with self.assertRaisesRegex(FileNotFoundError, "diğer kaynaklar: yok"):
+            with self.assertRaisesRegex(FileNotFoundError, "Other sources with canonical data: none"):
                 schema.require_cohorts(base / "none", "nabidh", ("c1",))
 
     def test_ifcc_conversion(self):
@@ -197,7 +197,7 @@ class TestSDC(unittest.TestCase):
         self.assertEqual(list(out["n"]), [0, "<10", 10, 250])
 
     def test_suppress_rates(self):
-        # pay küçük (3), tümleyen küçük (100-95=5) → oran bastırılır; 0 pay ve büyük hücreler kalır
+        # small numerator (3), small complement (100-95=5) → rate suppressed; 0 numerator and large cells stay
         df = pd.DataFrame({"k": [3, 95, 50, 0], "n": [100, 100, 100, 100], "pct": [3.0, 95.0, 50.0, 0.0]})
         out = sdc.suppress_rates(df, "k", ["n"], ["pct"], threshold=10)
         self.assertEqual(list(out["pct"]), ["suppressed (<10)", "suppressed (<10)", 50.0, 0.0])

@@ -1,28 +1,29 @@
-"""Prova verisi: sentetik kanonik C1 / C2 / C3 → enclave'deki HSAA view'larının biçimi (adapter SOURCES).
+"""Dry-run data: synthetic canonical C1 / C2 / C3 → the shape of the HSAA views in the enclave (adapter SOURCES).
 
-Amaç: tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) zincirini NABIDH adapter'ı üzerinden uçtan uca
-çalıştırmak. Enclave'de görülen view'lara uyulur (2026-11-18):
-- Patient: ID, Age (doğum tarihi yok; yaş AGE_REFERENCE_DATE'e göre), Gender_Code (M/F),
-  EthnicGroup_Description; uyruk yok. Diğer view'larda hasta anahtarı `Patient` (= Patient.ID)
-- Diagnosis (yalnız ICD-10, Z83.3 dahil), Observation (BMI, boy, kilo — LOINC; birim sütunu yok),
-  LabResultItem (HbA1c, FPG, OGTT — LOINC, birimli; C1 DDL'i 2026-11-19), SocialHistory (sigara),
-  FamilyHistory (diyabet), Medication; Encounter yalnız C3
-- C2 farkları: SocialHabitCategory_Description (_Code değil), Medication'da DrugProduct_Code yok
-- Medication: C1'de DrugProduct_Code = DDC ürün kodu, C2'de DrugProduct_Description = DDC ticari adı (sentetik
-  ilaç adına uyan tek etken maddeli, sistemik bir DDC ürünü; io/adapters/ddc.py eşlemesi böylece prova edilir)
-- verilmeyenler: bel çevresi, diğer vital'ler, random glukoz
-SENTETİK — gerçek hasta verisi değildir. Dosyaların ilk satırı bunu belirtir.
+Purpose: run the tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) chain end to end through the NABIDH adapter.
+Follows the views seen in the enclave (2026-11-18):
+- Patient: ID, Age (no date of birth; age as of AGE_REFERENCE_DATE), Gender_Code (M/F),
+  EthnicGroup_Description; no nationality. In the other views the patient key is `Patient` (= Patient.ID)
+- Diagnosis (ICD-10 only, incl. Z83.3), Observation (BMI, height, weight — LOINC; no unit column),
+  LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19), SocialHistory (smoking),
+  FamilyHistory (diabetes), Medication; Encounter only in C3
+- C2 differences: SocialHabitCategory_Description (not _Code), no DrugProduct_Code in Medication
+- Medication: in C1 DrugProduct_Code = DDC product code, in C2 DrugProduct_Description = DDC trade name (a
+  single-ingredient, systemic DDC product matching the synthetic drug name; this exercises the io/adapters/ddc.py
+  mapping)
+- not delivered: waist circumference, other vitals, random glucose
+SYNTHETIC — not real patient data. The first line of each file says so.
 
-Kullanım:
-  python tools/build_synthetic_cohorts.py        # önce (data/canonical/synthetic)
+Usage:
+  python tools/build_synthetic_cohorts.py        # first (data/canonical/synthetic)
   python tools/make_nabidh_dryrun.py             # → data/nabidh_dryrun/raw/<c1|c2|c3>/ (CSV)
-                                                 #   + data/nabidh_dryrun/iris/<c1|c2|c3>.sqlite (IRIS yerine)
+                                                 #   + data/nabidh_dryrun/iris/<c1|c2|c3>.sqlite (instead of IRIS)
   python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun
-  SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py   (NB1, NB2 aynı)
+  SANDBOX_SOURCE=nabidh_dryrun python notebooks/00_data_profile.py   (same for NB1, NB2)
 
-IRIS yolunun provası (adapter'daki `table` adları, IRIS_COHORTS şemaları; sürücü yerine SQLite):
+Dry run of the IRIS path (the adapter's `table` names, IRIS_COHORTS schemas; SQLite instead of the driver):
   python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
-  → kanonik çıktı, dosya yolundakiyle aynı olmalı (data/canonical/nabidh_dryrun vs nabidh_dryrun_iris)
+  → canonical output must match the file path's (data/canonical/nabidh_dryrun vs nabidh_dryrun_iris)
 """
 from __future__ import annotations
 
@@ -59,17 +60,17 @@ def _d(s: pd.Series) -> pd.Series:
 
 
 def _age(dob: pd.Series, ref: pd.Timestamp) -> pd.Series:
-    """Referans günündeki tam yıl yaş."""
+    """Age in whole years on the reference day."""
     before = (dob.dt.month > ref.month) | ((dob.dt.month == ref.month) & (dob.dt.day > ref.day))
     return (ref.year - dob.dt.year - before.astype(int)).astype("Int64")
 
 
 def ddc_products(drug_names: pd.Series) -> pd.DataFrame:
-    """Sentetik ilaç adı ("Insulin glargine") → aynı etken maddeyi içeren tek etken maddeli, sistemik bir DDC
-    ürünü (kod + ticari ad). Bulunamazsa ad için kod ATC olarak kalır."""
+    """Synthetic drug name ("Insulin glargine") → a single-ingredient, systemic DDC product containing the same
+    active ingredient (code + trade name). If none is found, that name keeps its ATC as the code."""
     ref = ddc.load_reference()
     cand = ref[(ref["atc_codes"].str.len() == 1) & ~ref["ingredients"].str.contains("/", na=False)]
-    cand = cand.sort_values(["status", "ddc_code"])            # Active önce, sonra kod sırası (deterministik)
+    cand = cand.sort_values(["status", "ddc_code"])            # Active first, then by code (deterministic)
     rows = []
     for name in sorted(drug_names.dropna().unique()):
         words = name.upper().split()
@@ -118,7 +119,7 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "ID": range(1, len(meds) + 1), "FromTime": _d(meds["date"]), "Patient": meds["patient_id"],
         "ToTime": pd.NA, "DrugProduct_Code": code, "DrugProduct_Description": meds["drug_name"],
         "Route_Description": meds["route"]})
-    if cohort == "c2":                                         # kod yok; ad = DDC ticari adı
+    if cohort == "c2":                                         # no code; name = DDC trade name
         med["DrugProduct_Description"] = meds["drug_name"].map(prod["trade_name"]).fillna(meds["drug_name"])
         med = med.drop(columns=["DrugProduct_Code"])
     out["medications.csv"] = med
@@ -139,18 +140,18 @@ def main() -> None:
             continue
         run.add_inputs([src])
         files = convert(schema.read_dataset(CANONICAL_DIR, "synthetic", c), c)
-        for old in (OUT_ROOT / c).glob("*.csv"):          # önceki provadan kalan dosya karışmasın
+        for old in (OUT_ROOT / c).glob("*.csv"):          # don't mix in files from an earlier dry run
             old.unlink()
         for fname, df in files.items():
             run.register_output(_write(df, OUT_ROOT / c / fname), f"dry run {c} {fname}")
-        # Aynı tablolar, IRIS'teki adlarıyla (SOURCES[...]["table"], şema öneki olmadan) tek SQLite dosyasında
+        # The same tables under their IRIS names (SOURCES[...]["table"], without the schema prefix) in one SQLite file
         table_of = {spec["file"]: spec["table"].split(".", 1)[-1] for spec in nabidh.SOURCES.values()}
         db = iris.write_sqlite_standin(IRIS_ROOT / f"{c}.sqlite", {table_of[f]: df for f, df in files.items()})
         run.register_output(db, f"dry run {c} IRIS stand-in (SQLite)")
         run.log(f"{c} written", files={k: len(v) for k, v in files.items()})
         print(c, {k: len(v) for k, v in files.items()})
     run.finish()
-    print("run:", run.run_id, "→", OUT_ROOT, "ve", IRIS_ROOT)
+    print("run:", run.run_id, "→", OUT_ROOT, "and", IRIS_ROOT)
 
 
 if __name__ == "__main__":

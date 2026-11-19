@@ -1,6 +1,6 @@
-"""NABIDH IRIS girdisi (io/iris.py + nabidh.load_iris). IRIS yerine SQLite kullanılır: kohort dosyası IRIS
-şeması adıyla bağlanır, böylece adapter'daki `{schema}.Tablo` sorguları olduğu gibi çalışır.
-Ana iddia: aynı ham veri dosyadan da IRIS'ten de okunsa kanonik çıktı birebir aynıdır."""
+"""NABIDH IRIS input (io/iris.py + nabidh.load_iris). SQLite stands in for IRIS: the cohort file is attached under
+the IRIS schema name, so the adapter's `{schema}.Table` queries run as they are.
+Main claim: the same raw data gives exactly the same canonical output whether read from files or from IRIS."""
 import copy
 import datetime as dt
 import decimal
@@ -30,7 +30,7 @@ SCHEMA = nabidh.IRIS_COHORTS["c1"]["schema"]
 
 
 def raw_tables(raw_dir: Path, rename=None, extra=None) -> dict[str, pd.DataFrame]:
-    """Ham dosyalar → {IRIS tablo adı: df}. rename: {tablo: {sütun: yeni ad}}, extra: {tablo: {sütun: değer}}."""
+    """Raw files → {IRIS table name: df}. rename: {table: {column: new name}}, extra: {table: {column: value}}."""
     out = {}
     for spec in nabidh.SOURCES.values():
         p = raw_dir / spec["file"]
@@ -55,8 +55,8 @@ class TestFilesVsIris(unittest.TestCase):
         (t / "raw").mkdir()
         write_raw(t / "raw")
         cls.ds_file, cls.rep_file = nabidh.load(t / "raw", "c1")
-        # IRIS tarafında sütun adları büyük harf ve fazladan bir kimlik sütunu: eşleme yine tutmalı,
-        # kimlik sütunu çekilmemeli
+        # On the IRIS side, upper-case column names and an extra identifier column: the mapping must still hold,
+        # and the identifier column must not be pulled
         tables = raw_tables(t / "raw", rename={"Patient": {"ID": "id", "Gender_Code": "GENDER_CODE"}},
                             extra={"Patient": {"full_name": "SHOULD NOT LEAVE IRIS"}})
         cls.conn = standin(t, tables)
@@ -80,7 +80,7 @@ class TestFilesVsIris(unittest.TestCase):
         self.assertEqual(s["rows_read"], self.rep_file["sources"]["patient_profile"]["rows_read"])
         self.assertIn(f"FROM {SCHEMA}.Patient", s["query"])
         self.assertIn('"id" AS "ID"', s["query"])
-        self.assertNotIn("full_name", s["query"])               # yalnız eşlemedeki sütunlar
+        self.assertNotIn("full_name", s["query"])               # only the mapped columns
         self.assertEqual(len(s["sha256"]), 64)
 
     def test_optional_absent_table(self):
@@ -110,7 +110,7 @@ class TestIrisSources(unittest.TestCase):
 
     def test_missing_required_column(self):
         conn = standin(self.t, raw_tables(self.t / "raw", rename={"Diagnosis": {"Diagnosis_Code": "dx"}}))
-        with self.assertRaisesRegex(KeyError, r"diagnoses .*bulunmayan zorunlu.*'Diagnosis_Code'"):
+        with self.assertRaisesRegex(KeyError, r"diagnoses .*required columns missing.*'Diagnosis_Code'"):
             nabidh.load_iris(conn, "c1")
         conn.close()
 
@@ -124,7 +124,7 @@ class TestIrisSources(unittest.TestCase):
         self.assertEqual(sorted(ds["patients"]["patient_id"]), ["A1", "A2", "A3", "A4"])
         self.assertIn("'c1' = 'c1'", rep["sources"]["patient_profile"]["query"])
         src["patient_profile"]["query"] = "SELECT * FROM {nope}.Patient"
-        with self.assertRaisesRegex(KeyError, "yer tutucu"):
+        with self.assertRaisesRegex(KeyError, "placeholder"):
             nabidh.load_iris(conn, "c1", sources=src)
         conn.close()
 
@@ -159,7 +159,7 @@ class TestIrisHelpers(unittest.TestCase):
         t = iris.parse_url("jdbc:IRIS://dhasbx.example:51772/NABIDH")
         self.assertEqual((t.host, t.port, t.namespace), ("dhasbx.example", 51772, "NABIDH"))
         t = iris.parse_url("jdbc:IRIS://10.0.0.5:51772/NABIDH/logfile;user=x;password=secret?ssl=1")
-        self.assertEqual(str(t), "10.0.0.5:51772/NABIDH")            # parametreler (şifre) atılır
+        self.assertEqual(str(t), "10.0.0.5:51772/NABIDH")            # parameters (password) are dropped
         self.assertEqual(iris.parse_url("host/NS").port, iris.DEFAULT_PORT)
         with self.assertRaises(ValueError):
             iris.parse_url("jdbc:sqlserver://host:1433")
@@ -178,7 +178,7 @@ class TestIrisHelpers(unittest.TestCase):
                           columns=list("abcdef"), dtype=object)
         out, text = iris.as_text_table(df)
         self.assertEqual(out.iloc[0].tolist(), ["8517006", "2021-01-02", "2021-01-02 10:30:00", "6.80", "6.8", "x"])
-        self.assertTrue(out.iloc[1].isna().all())                    # NULL ve boş metin → eksik
+        self.assertTrue(out.iloc[1].isna().all())                    # NULL and empty text → missing
         self.assertEqual(len(iris.sha256_text(text)), 64)
 
     def test_parse_horolog(self):
@@ -200,19 +200,19 @@ class TestIrisHelpers(unittest.TestCase):
                 s = iris.connection_settings()
                 self.assertEqual((s["target"], s["user"]), ("h:51772/NS", "reader"))
                 self.assertNotIn("pw", str({k: v for k, v in s.items() if k != "_url"}))
-                os.environ[iris.ENV_USER] = "other"                     # ortam değişkeni dosyayı ezer
+                os.environ[iris.ENV_USER] = "other"                     # environment variable beats the file
                 self.assertEqual(iris.connection_settings()["user"], "other")
-                with mock.patch.dict(sys.modules, {"iris": None}):      # sürücü kurulu değil
+                with mock.patch.dict(sys.modules, {"iris": None}):      # driver not installed
                     with self.assertRaisesRegex(RuntimeError, "intersystems-irispython"):
                         iris.connect()
             with mock.patch.dict(os.environ, {"NABIDH_IRIS_CREDENTIALS": str(Path(d) / "none")}):
                 for k in (iris.ENV_URL, iris.ENV_ODBC):
                     os.environ.pop(k, None)
-                with self.assertRaisesRegex(RuntimeError, "bağlantı dizesi yok"):
+                with self.assertRaisesRegex(RuntimeError, "No IRIS connection string"):
                     iris.connection_settings()
 
     def test_can_prompt(self):
-        """Terminal, IntelliJ 'Emulate terminal' (tty), Jupyter (ipykernel) → sorulabilir; boru / stdin yok → hayır."""
+        """Terminal, IntelliJ 'Emulate terminal' (tty), Jupyter (ipykernel) → can prompt; pipe / no stdin → no."""
         tty, pipe = mock.Mock(isatty=lambda: True), mock.Mock(isatty=lambda: False)
         no_kernel = {k: v for k, v in sys.modules.items() if k != "ipykernel"}
         with mock.patch.dict(sys.modules, no_kernel, clear=True):
@@ -232,7 +232,7 @@ class TestIrisHelpers(unittest.TestCase):
             os.environ.pop(iris.ENV_PASSWORD, None)
             os.environ.pop(iris.ENV_ODBC, None)
             with mock.patch.object(iris, "can_prompt", return_value=False):
-                with self.assertRaisesRegex(RuntimeError, "sorulamıyor.*Emulate terminal"):
+                with self.assertRaisesRegex(RuntimeError, "cannot prompt.*Emulate terminal"):
                     iris.connect()
             fake = mock.Mock(return_value="conn")
             with mock.patch.object(iris, "can_prompt", return_value=True), \
@@ -241,17 +241,17 @@ class TestIrisHelpers(unittest.TestCase):
                 self.assertEqual(iris.connect(), "conn")
             gp.assert_called_once()
             self.assertEqual(fake.call_args.args, ("h", 51772, "NS", "reader", "typed"))
-            # Jupyter'de stdin kapalı (nbconvert / papermill): kernel hatası anlaşılır RuntimeError olur
+            # stdin closed in Jupyter (nbconvert / papermill): the kernel error becomes a readable RuntimeError
             with mock.patch.object(iris, "can_prompt", return_value=True), \
                     mock.patch("getpass.getpass", side_effect=NotImplementedError("stdin")):
-                with self.assertRaisesRegex(RuntimeError, "sorulamadı"):
+                with self.assertRaisesRegex(RuntimeError, "Could not prompt"):
                     iris.connect()
 
 
 
 class TestIngestConnectionFailure(unittest.TestCase):
-    """tools/ingest_nabidh.py --input iris: bağlantı kurulamazsa traceback yerine okunur mesaj, çıkış 2,
-    audit'te `connection_failed`; şifre hiçbir yere yazılmaz."""
+    """tools/ingest_nabidh.py --input iris: if the connection fails, a readable message instead of a traceback, exit 2,
+    `connection_failed` in the audit; the password is written nowhere."""
 
     def test_readable_error_and_audited(self):
         spec = importlib.util.spec_from_file_location("ingest_nabidh", ROOT / "tools" / "ingest_nabidh.py")
@@ -270,7 +270,7 @@ class TestIngestConnectionFailure(unittest.TestCase):
             log = (Path(d) / "audit" / "audit_log.jsonl").read_text(encoding="utf-8")
         self.assertEqual(rc, 2)
         self.assertEqual(manifest["status"], "connection_failed")
-        self.assertIn("IRIS'e bağlanılamadı (h:51772/NS): ConnectionError", out.getvalue())
+        self.assertIn("Could not connect to IRIS (h:51772/NS): ConnectionError", out.getvalue())
         self.assertIn("check_environment.py --iris", out.getvalue())
         self.assertNotIn("topsecret", out.getvalue() + log + json.dumps(manifest))
 

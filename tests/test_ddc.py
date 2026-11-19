@@ -1,5 +1,5 @@
-"""DDC (Dubai Drug Code) → ATC eşlemesi: etken madde araması, uygulama yolu kuralı, kod ve ad ile arama.
-Gerçek referans dosyası (src/sandbox/reference/ddc.csv.gz) kullanılır; kodlar o listedeki ürünlerdir."""
+"""DDC (Dubai Drug Code) → ATC mapping: active ingredient search, route rule, lookup by code and by name.
+Uses the real reference file (src/sandbox/reference/ddc.csv.gz); the codes are products in that list."""
 import re
 import sys
 import unittest
@@ -24,13 +24,13 @@ class TestIngredientTable(unittest.TestCase):
     def test_word_boundaries_and_combinations(self):
         f = ddc.ingredient_atc
         self.assertEqual(f("AMLODIPINE (AS BESYLATE)/VALSARTAN/HYDROCHLOROTHIAZIDE"), ["C08CA01", "C09CA03", "C03AA03"])
-        self.assertEqual(f("LEVAMLODIPINE MALEATE"), ["C08CA"])                 # AMLODIPINE eşleşmez
-        self.assertEqual(f("METHYLPREDNISOLONE ACETATE"), ["H02AB04"])          # PREDNISOLONE eşleşmez
-        self.assertEqual(f("HYDROCORTISONE"), ["H02AB09"])                      # CORTISONE eşleşmez
-        self.assertEqual(f("APRACLONIDINE (AS HCL)"), [])                      # CLONIDINE eşleşmez
+        self.assertEqual(f("LEVAMLODIPINE MALEATE"), ["C08CA"])                 # AMLODIPINE does not match
+        self.assertEqual(f("METHYLPREDNISOLONE ACETATE"), ["H02AB04"])          # PREDNISOLONE does not match
+        self.assertEqual(f("HYDROCORTISONE"), ["H02AB09"])                      # CORTISONE does not match
+        self.assertEqual(f("APRACLONIDINE (AS HCL)"), [])                      # CLONIDINE does not match
         self.assertEqual(f("EZETIMIBE/ROSUVASTATIN (AS CALCIUM)"), ["C10AA07"])
         self.assertEqual(f("NYSTATIN"), [])
-        self.assertEqual(f("INSULIN DELIVERY DEVICE"), [])                     # cihaz
+        self.assertEqual(f("INSULIN DELIVERY DEVICE"), [])                     # device
         self.assertEqual(f("ISOPHANE INSULIN/RECOMBINANT SOLUBLE HUMAN INSULIN"), ["A10A"])
         self.assertEqual(f(None), [])
 
@@ -41,9 +41,9 @@ class TestIngredientTable(unittest.TestCase):
         for r in ("TOPICAL", "OCULAR", "OTIC, OCULAR", "NASAL", "ORAL INHALATION", "LOCAL ORAL", "RECTAL",
                   "INTRA-ARTICULAR", "BUCCAL"):
             self.assertFalse(ddc.route_is_systemic(r), r)
-        self.assertTrue(ddc.route_is_systemic("N/A", "FILM COATED TABLETS"))   # yol yok → forma bakılır
+        self.assertTrue(ddc.route_is_systemic("N/A", "FILM COATED TABLETS"))   # no route → the form decides
         self.assertFalse(ddc.route_is_systemic(None, "EYE DROPS"))
-        self.assertFalse(ddc.route_is_systemic("ORAL", "ORAL PASTE"))           # ağız içi triamsinolon
+        self.assertFalse(ddc.route_is_systemic("ORAL", "ORAL PASTE"))           # oromucosal triamcinolone
 
 
 class TestLookup(unittest.TestCase):
@@ -62,11 +62,11 @@ class TestLookup(unittest.TestCase):
         self.assertEqual(ddc.lookup_code("--"), ("not a DDC code", []))
 
     def test_code_route_rules(self):
-        self.assertEqual(ddc.lookup_code("0169-120501-0371"), ("DDC: non-systemic route", []))   # timolol göz
-        self.assertEqual(ddc.lookup_code("0006-106607-1161"), ("DDC: not a study drug class", []))  # parasetamol
-        self.assertEqual(ddc.lookup_code("0094-622101-0531"), ("DDC: not a study drug class", []))  # insülin kalemi
-        self.assertEqual(ddc.lookup_code("0235-345201-1021"), ("DDC: not a study drug class", []))  # errata (aşı)
-        # ürün IM / eklem içi; satırın yolu eklem içi → sistemik sayılmaz
+        self.assertEqual(ddc.lookup_code("0169-120501-0371"), ("DDC: non-systemic route", []))   # timolol eye
+        self.assertEqual(ddc.lookup_code("0006-106607-1161"), ("DDC: not a study drug class", []))  # paracetamol
+        self.assertEqual(ddc.lookup_code("0094-622101-0531"), ("DDC: not a study drug class", []))  # insulin pen
+        self.assertEqual(ddc.lookup_code("0235-345201-1021"), ("DDC: not a study drug class", []))  # errata (vaccine)
+        # product IM / intra-articular; row route intra-articular → not systemic
         kenacort = ddc.load_reference()
         code = kenacort.loc[kenacort["route"].eq("IM,INTRA-ARTICULAR") & kenacort["ingredients"].str.contains(
             "TRIAMCINOLONE", na=False), "ddc_code"].iloc[0]
@@ -75,14 +75,14 @@ class TestLookup(unittest.TestCase):
 
     def test_names(self):
         f = lambda n, r=None: ddc.lookup_name(n, r)[1]  # noqa: E731
-        self.assertEqual(f("CRESTOR 10 MG"), ["C10AA07"])                      # DDC'de "CRESTOR 10MG"
+        self.assertEqual(f("CRESTOR 10 MG"), ["C10AA07"])                      # "CRESTOR 10MG" in DDC
         self.assertEqual(f("Tab. Lipitor 20mg"), ["C10AA05"])
-        self.assertEqual(f("CONCOR PLUS 5/12.5"), ["C03AA03", "C07AB07"])      # en uzun marka kökü
+        self.assertEqual(f("CONCOR PLUS 5/12.5"), ["C03AA03", "C07AB07"])      # longest brand stem
         self.assertEqual(f("JANUMET 50/1000"), ["A10BH01", "A10BA02"])
         self.assertEqual(f("metformin 500 mg"), ["A10BA02"])
         self.assertEqual(f("Dexamethasone 0.1% eye drops"), [])
         self.assertEqual(f("DEXAMETHASONE 4MG TABLETS"), ["H02AB02"])
-        self.assertEqual(f("Prednisolone", "Ophthalmic"), [])                  # satırın yolu yerel
+        self.assertEqual(f("Prednisolone", "Ophthalmic"), [])                  # row route is local
         self.assertEqual(f("BETNOVATE CREAM"), [])
         self.assertEqual(f("Insulin pen needles"), [])
         self.assertEqual(f("Paracetamol 500mg"), [])

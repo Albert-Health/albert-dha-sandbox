@@ -1,47 +1,47 @@
-"""NABIDH (enclave) ham verisi → kanonik şema.
+"""NABIDH (enclave) raw data → canonical schema.
 
-Teslim yapısı (NABIDH "Data availability", 2026-11-13; enclave'de görülen hâli 2026-11-18; C1 DDL'i
-2026-11-19): kohort başına bir IRIS şeması (HSSBX namespace'i, *_HSAA), içinde HSAA view'ları — Patient (ID,
-Age, Gender_Code, EthnicGroup_Description; doğum tarihi ve uyruk yok) · Diagnosis · Observation (vital; birim
-yok) · LabResultItem (lab; birim var) · SocialHistory · FamilyHistory · Medication · Encounter (C1 DDL'inde
-yok). Hasta anahtarı: Patient.ID = diğer view'larda Patient.
-Ham dosyalar: data/nabidh/raw/<c1|c2|c3>/ (DHA'nın verdiği hâliyle; dokunulmaz).
+Delivery layout (NABIDH "Data availability", 2026-11-13; as seen in the enclave 2026-11-18; C1 DDL
+2026-11-19): one IRIS schema per cohort (HSSBX namespace, *_HSAA) holding HSAA views — Patient (ID,
+Age, Gender_Code, EthnicGroup_Description; no date of birth or nationality) · Diagnosis · Observation (vitals;
+no unit) · LabResultItem (labs; with unit) · SocialHistory · FamilyHistory · Medication · Encounter (not in the
+C1 DDL). Patient key: Patient.ID = Patient in the other views.
+Raw files: data/nabidh/raw/<c1|c2|c3>/ (as delivered by DHA; never modified).
 
-İki girdi yolu, aynı eşleme:
-- ham dosya  `load(raw_dir, kohort)`            her kaynağın `file`'ı okunur (data/nabidh/raw/<kohort>/)
-- IRIS       `load_iris(conn, kohort)`          DHA'daki InterSystems IRIS'ten (io/iris.py) her kaynağın
-             `table`'ı (ya da `query`'si) okunur; sonuç ham dosyadaki gibi metne çevrilir ve
-             `snapshot_dir` verilirse aynı `file` adlarıyla CSV olarak yazılır → o klasör sonra
-             ham dosya yolu ile birebir tekrar okunabilir (tekrarlanabilirlik, audit hash'i).
-Sütun eşlemesi, filtre, tarih, değer sözlükleri ve işleyiciler iki yolda ortaktır.
+Two input paths, one mapping:
+- raw file   `load(raw_dir, cohort)`            reads each source's `file` (data/nabidh/raw/<cohort>/)
+- IRIS       `load_iris(conn, cohort)`          reads each source's `table` (or `query`) from InterSystems
+             IRIS at DHA (io/iris.py); the result is turned into text as in the raw file and, if
+             `snapshot_dir` is given, written as CSV under the same `file` names → that folder can then
+             be read again, identically, through the raw-file path (reproducibility, audit hash).
+Column mapping, filters, dates, value dictionaries and handlers are shared by both paths.
 
-Enclave'de yapılacak iş (kod değişikliği gerekmemeli):
-1. SOURCES'taki dosya / tablo ve sütun adlarını gerçek adlarla değiştir. Aşağıdakiler örnek adlardır;
-   tools/make_nabidh_dryrun.py prova verisini (CSV + IRIS yerine SQLite) bu adlarla üretir.
-   IRIS: IntelliJ Database aracında şemaya bak; `table` = "<ŞEMA>.<Tablo>" ({schema} ve {cohort}
-   yer tutucuları IRIS_COHORTS'tan doldurulur). Sütun adları büyük/küçük harf duyarsız eşlenir ve
-   yalnızca eşlemede geçen sütunlar çekilir (kimlik bilgisi gibi fazlası gelmez). Birleştirme / filtre
-   gerekirse kaynağa tam `query` yaz (yalnız SELECT; sütunları AS ile `columns` adlarına çevir).
-2. Tarih biçimi ISO değilse DATE_FORMAT'ı ayarla (ör. "%d/%m/%Y"; IRIS iç tarih sayısı için
-   "horolog" = 1840-12-31'den gün, "gün,saniye" de olur); ayraç / kodlama CSV_OPTIONS'ta.
-3. tools/ingest_nabidh.py'yi çalıştır (IRIS için --input iris). outputs/<run_id>/ingest/<kohort>_value_counts.csv'de
-   "unmapped" görünen değerler için SMOKING_VALUES, FH_STATUS_VALUES, FH_RELATION_DEGREE ve
-   codelists.NATIONALITY_COUNTRIES'i genişlet; tekrar çalıştır.
+Work to do in the enclave (should need no code change):
+1. Replace the file / table and column names in SOURCES with the real ones. The ones below are examples;
+   tools/make_nabidh_dryrun.py builds the dry-run data (CSV + SQLite in place of IRIS) with these names.
+   IRIS: look at the schema in the IntelliJ Database tool; `table` = "<SCHEMA>.<Table>" (the {schema} and
+   {cohort} placeholders are filled from IRIS_COHORTS). Column names are matched case-insensitively and
+   only the columns named in the mapping are fetched (nothing extra such as identifying data). If a join /
+   filter is needed, give the source a full `query` (SELECT only; rename columns with AS to the `columns` names).
+2. If the date format is not ISO, set DATE_FORMAT (e.g. "%d/%m/%Y"; for the IRIS internal date number
+   "horolog" = days since 1840-12-31, "day,seconds" also works); separator / encoding in CSV_OPTIONS.
+3. Run tools/ingest_nabidh.py (--input iris for IRIS). For values shown as "unmapped" in
+   outputs/<run_id>/ingest/<cohort>_value_counts.csv, extend SMOKING_VALUES, FH_STATUS_VALUES,
+   FH_RELATION_DEGREE and codelists.NATIONALITY_COUNTRIES; run again.
 
-Kaynak türleri (kind) → kanonik tablo:
-  patients        → patients (cinsiyet SEX_MAP ile Male / Female)
-  conditions      → conditions (kod sistemi ICD-10 / SNOMED olarak normalize)
-  measurements    → labs + observations (codelists.LOINC_LAB'daki kodlar lab, diğerleri gözlem)
-  lab_results     → labs (yalnız codelists.LOINC_LAB kodları; diğer testler düşer, gözlem değildir —
-                    kod | birim | ad listesi ve tür | birim başına değer dağılımı raporlanır)
-  medications     → medications; ATC yoksa DDC ürün kodu / ilaç adı → ATC (io/adapters/ddc.py,
-                    src/sandbox/reference/ddc.csv.gz); kombinasyon → etken madde başına satır
-  labs, observations, encounters → doğrudan
-  smoking         → observations, concept = smoking_status; değer SMOKING_VALUES ile
+Source kinds (kind) → canonical table:
+  patients        → patients (sex → Male / Female via SEX_MAP)
+  conditions      → conditions (code system normalised to ICD-10 / SNOMED)
+  measurements    → labs + observations (codes in codelists.LOINC_LAB are labs, the rest observations)
+  lab_results     → labs (codelists.LOINC_LAB codes only; other tests are dropped, they are not observations —
+                    a code | unit | name list and the value distribution per kind | unit are reported)
+  medications     → medications; without ATC, DDC product code / drug name → ATC (io/adapters/ddc.py,
+                    src/sandbox/reference/ddc.csv.gz); combination → one row per active ingredient
+  labs, observations, encounters → as is
+  smoking         → observations, concept = smoking_status; value via SMOKING_VALUES
                     never / ex / current / light / moderate / heavy / unknown
-  family_history  → observations, concept = family_history_dm; değer positive / negative /
-                    positive_non_first_degree / unknown (yalnız diyabet kayıtları)
-Bir kanonik tabloyu birden çok kaynak besleyebilir (ör. Observation + SocialHistory → observations).
+  family_history  → observations, concept = family_history_dm; value positive / negative /
+                    positive_non_first_degree / unknown (diabetes records only)
+Several sources can feed one canonical table (e.g. Observation + SocialHistory → observations).
 """
 from __future__ import annotations
 
@@ -56,29 +56,30 @@ from . import ddc
 from ..schema import SCHEMA, TABLES, Dataset, coerce
 from .synthetic import read_raw_csv
 
-# Ingest sürümü: her KOPYALA bloğunun başlığında, ingest çıktısında, ingest özetinde, audit'te ve kanonik verinin
-# yanında (<kohort>/ingest.json → NB0 / NB1 blokları) görünür. Adapter ya da ingest davranışı değişince artır:
-#   MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici (kanonik veri değişebilir) · PATCH yalnız rapor / çıktı.
-# Kayıt (en yeni üstte):
-#   1.1.0  2026-11-19  IRIS_COHORTS: C2 ve C3 şemaları yer değiştirdi (önceki "C2" verisi aslında C3'tü)
-#   1.0.0  2026-11-19  HSAA view'ları; LabResultItem lab'ları birimiyle (eAG / RBS adından elenir, makullük
-#                      raporu); SocialHistory tütün kalemi filtresi + yoğunluk sözlüğü; aile öyküsü: önce
-#                      ICD-10 / SNOMED kodu sonra metin, olumsuzlama, akraba derecesi, prediyabet atılır; DDC → ATC
-INGEST_VERSION = "1.1.0"
+# Ingest version: shown in every COPY block header, the ingest output, the ingest summary, the audit and next to
+# the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
+#   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
+# Log (newest first):
+#   1.1.1  2026-11-19  English comments, messages and report text (output wording only; mapping unchanged)
+#   1.1.0  2026-11-19  IRIS_COHORTS: C2 and C3 schemas swapped (the earlier "C2" data was really C3)
+#   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
+#                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
+#                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
+INGEST_VERSION = "1.1.1"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
-DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"; "horolog" (IRIS)
-HOROLOG_EPOCH = pd.Timestamp("1840-12-31")   # IRIS $HOROLOG: gün 0
+DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
+HOROLOG_EPOCH = pd.Timestamp("1840-12-31")   # IRIS $HOROLOG: day 0
 
-# Hasta view'ında doğum tarihi yok, yalnız yaş (Age, tam yıl) var. Doğum tarihi yaştan türetilir:
-# AGE_REFERENCE_DATE − (Age + 0,5) yıl (yaşın verildiği gün yıl ortası varsayımı; hata ≤ ±6 ay).
-# [KARAR BEKLİYOR] D24 — Age hangi tarihe göre (veri çekimi / view'ın oluşturulması / sorgu günü)? DHA'ya
-# sorulacak; doğum yılı ya da tarihi verilebiliyorsa BirthDate sütunu tercih edilir (optional_columns).
-# Geçici değer: view'ların ilk sorgulandığı gün (2026-11-18).
+# The patient view has no date of birth, only age (Age, whole years). Date of birth is derived from age:
+# AGE_REFERENCE_DATE − (Age + 0.5) years (assumes mid-year on the day age was given; error ≤ ±6 months).
+# [DECISION PENDING] D24 — Age as of which date (data extract / view creation / query day)? To ask DHA;
+# if birth year or date can be provided, the BirthDate column is preferred (optional_columns).
+# Interim value: the day the views were first queried (2026-11-18).
 AGE_REFERENCE_DATE = "2026-11-18"
 
-# IRIS'te kohort başına yer tutucular: `table` / `query` içindeki {schema} vb. buradan, {cohort} kohort adından.
-# DHA enclave (namespace HSSBX, 2026-11-18): kohort başına bir HSAA şeması, içinde view'lar.
+# Per-cohort placeholders in IRIS: {schema} etc. in `table` / `query` come from here, {cohort} from the cohort name.
+# DHA enclave (namespace HSSBX, 2026-11-18): one HSAA schema per cohort, holding views.
 # C2 and C3 were swapped until 2026-11-19 (ingest < 1.1.0): what was read as "C2" was the C3 schema.
 IRIS_COHORTS: dict[str, dict[str, str]] = {
     "c1": {"schema": "SBXV_ENCL447CCD80_HSAA"},
@@ -86,25 +87,25 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
     "c3": {"schema": "SBXV_ENCL6F10EFBD_HSAA"},
 }
 
-# Kaynak tanımı:
-#   file              kohort klasöründeki dosya adı (IRIS'te: snapshot dosyasının adı)
-#   table             IRIS tablosu, ör. "{schema}.Patient" (IRIS_COHORTS yer tutucuları)
-#   query             (isteğe bağlı) table yerine tam SELECT; sütunları `columns` adlarıyla döndürmeli
-#   kind              yukarıdaki kaynak türlerinden biri
-#   columns           {kanonik_ad: kaynak_sütun} — zorunlu; yoksa KeyError. Kaynak sütun bir liste de
-#                     olabilir: kohortlar arasında ad değişiyorsa mevcut olan ilki alınır
-#   optional_columns  {kanonik_ad: kaynak_sütun (ya da liste)} — varsa alınır
-#   constants         {kanonik_ad: değer} — sütun yoksa veya boşsa bu değer
-#   filter            {kaynak_sütun ya da kanonik_ad: [izinli değerler]} — büyük/küçük harf duyarsız seçim
-#   optional          True → dosya / tablo yoksa atlanır (ör. encounter yalnız C3'te)
-#   date_format       bu kaynak için DATE_FORMAT'ı ezer
+# Source definition:
+#   file              file name in the cohort folder (for IRIS: the snapshot file name)
+#   table             IRIS table, e.g. "{schema}.Patient" (IRIS_COHORTS placeholders)
+#   query             (optional) a full SELECT instead of table; must return columns under the `columns` names
+#   kind              one of the source kinds above
+#   columns           {canonical_name: source_column} — required; KeyError if absent. The source column can
+#                     also be a list: if the name differs between cohorts, the first one present is taken
+#   optional_columns  {canonical_name: source_column (or list)} — taken if present
+#   constants         {canonical_name: value} — this value if the column is absent or empty
+#   filter            {source_column or canonical_name: [allowed values]} — case-insensitive selection
+#   optional          True → skipped if the file / table is absent (e.g. encounter only in C3)
+#   date_format       overrides DATE_FORMAT for this source
 #
-# HSAA view'ları (2026-11-18, check_environment [mapping] çıktısı): hasta anahtarı Patient view'ında
-# sayısal `ID`, diğer view'larda aynı değeri taşıyan `Patient` sütunu. Kohort farkları: C2'de
-# SocialHabitCategory_Code yerine _Description var, Medication'da DrugProduct_Code yok; C1'de Encounter'a
-# SELECT yetkisi yok (opsiyonel, atlanır). Kod sistemleri (ICD-10 / LOINC) ve değer sözlükleri henüz
-# doğrulanmadı — enclave.sh values / columns ile bakılacak (docs/gap.md K3).
-# C1 DDL'inde (2026-11-19) olup eşlenmeyenler: Diagnosis.DiagnosisGroup (değerleri bilinmiyor), Medication
+# HSAA views (2026-11-18, check_environment [mapping] output): the patient key is the numeric `ID` in the
+# Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C2 has
+# SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in Medication; C1 has no SELECT
+# permission on Encounter (optional, skipped). Code systems (ICD-10 / LOINC) and value dictionaries are not
+# verified yet — to be checked with enclave.sh values / columns (docs/gap.md K3).
+# In the C1 DDL (2026-11-19) but not mapped: Diagnosis.DiagnosisGroup (values unknown), Medication
 # ToTime / DoseQuantity / DoseUoM_Description, Observation.Encounter, LabResultItem ID / Encounter.
 SOURCES: dict[str, dict] = {
     "patient_profile": {
@@ -123,14 +124,14 @@ SOURCES: dict[str, dict] = {
         "file": "observations.csv", "table": "{schema}.Observation", "kind": "measurements",
         "columns": {"patient_id": "Patient", "code": "ObservationCode_Code", "value": "ObservationValue",
                     "date": "ObservationDate"},
-        "optional_columns": {"test_name": "ObservationCode_Description"},     # birim sütunu yok
+        "optional_columns": {"test_name": "ObservationCode_Description"},     # no unit column
         "constants": {"code_system": "LOINC"},
     },
     # LabResultItem (C1 DDL, 2026-11-19): ID, Encounter, Patient, ResultDate, ResultValue, ResultValueUnits,
-    # TestItemCode_Code, TestItemCode_Description. İlk ingest'te labs = 0 idi (Observation'da lab kodu yok) →
-    # lab'lar bu view'da. TestItemCode_Code'un LOINC olduğu henüz doğrulanmadı: LOINC_LAB dışında kalan testler
-    # düşer ve raporlanır ("glycaemic-looking tests (dropped)" listesi yerel kodlu HbA1c / glukozu gösterir).
-    # Opsiyonel: C2 / C3'te view yoksa ya da SELECT yetkisi yoksa (C1 Encounter gibi) o kohort atlanır.
+    # TestItemCode_Code, TestItemCode_Description. The first ingest had labs = 0 (no lab codes in Observation) →
+    # labs live in this view. TestItemCode_Code being LOINC is not verified yet: tests outside LOINC_LAB are
+    # dropped and reported (the "glycaemic-looking tests (dropped)" list shows locally coded HbA1c / glucose).
+    # Optional: if C2 / C3 lack the view or SELECT permission (like C1 Encounter), that cohort is skipped.
     "lab_results": {
         "file": "lab_results.csv", "table": "{schema}.LabResultItem", "kind": "lab_results",
         "optional": True,
@@ -142,10 +143,10 @@ SOURCES: dict[str, dict] = {
         "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
         "columns": {"patient_id": "Patient", "value": "SocialHabitQty_Description", "date": "EnteredOn"},
         "optional_columns": {"item": ["SocialHabitCategory_Code", "SocialHabitCategory_Description"]},
-        # Kalemler (C1 ingest, 2026-11-19): ALCOHOL, Beverages, Cigarettes, "Cigarettes,Cigars", Cigars, Other,
-        # Smoking, Unknown. Sigara = tütün içimi kalemleri; "Tobacco" prova verisi ve olası C2 adı için.
-        # [KARAR BEKLİYOR] D7 — "Other" (shisha / midwakh olabilir) ve "Unknown" dışarıda; medikal ekip.
-        # Filtre bir kohortun bütün satırlarını elerse ingest durur ve kaynaktaki kalemleri basar.
+        # Items (C1 ingest, 2026-11-19): ALCOHOL, Beverages, Cigarettes, "Cigarettes,Cigars", Cigars, Other,
+        # Smoking, Unknown. Smoking = tobacco-smoking items; "Tobacco" for the dry-run data and a possible C2 name.
+        # [DECISION PENDING] D7 — "Other" (may be shisha / midwakh) and "Unknown" are left out; medical team.
+        # If the filter removes every row of a cohort, ingest stops and prints the items found in the source.
         "filter": {"item": ["Smoking", "Cigarettes", "Cigars", "Cigarettes,Cigars", "Tobacco"]},
     },
     "family_history": {
@@ -158,7 +159,7 @@ SOURCES: dict[str, dict] = {
     "medications": {
         "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
         "columns": {"patient_id": "Patient", "date": "FromTime"},
-        # atc_code ← DrugProduct_Code: ATC ya da DDC ürün kodu (C1); C2'de yok → ad (DrugProduct_Description)
+        # atc_code ← DrugProduct_Code: ATC or DDC product code (C1); absent in C2 → name (DrugProduct_Description)
         "optional_columns": {"atc_code": "DrugProduct_Code", "drug_name": "DrugProduct_Description",
                              "route": "Route_Description"},
     },
@@ -172,11 +173,11 @@ SOURCES: dict[str, dict] = {
 
 SEX_MAP = {"M": "Male", "MALE": "Male", "1": "Male", "F": "Female", "FEMALE": "Female", "2": "Female"}
 
-# Sigara değeri (küçük harf metin veya SNOMED kodu) → kanonik değer. Önce metin, sonra kod denenir.
-# "yes" / "no" yalnızca kaynak (veya filter) sigaraya özgüyse anlamlıdır.
-# NABIDH SocialHabitQty (C1 / C2 ingest, 2026-11-19): low / medium / high = yoğunluk → light / moderate / heavy.
-# occasional / rare (günlük değil, < 10 / gün) → light [KARAR BEKLİYOR] D7; seçenek: current (→ D7 kategorisi).
-# "other" eşlenmedi (C1 428, C2 531 satır): diğer tütün (shisha / midwakh?) olabilir → eksik sayılır, D7.
+# Smoking value (lower-case text or SNOMED code) → canonical value. Text is tried first, then the code.
+# "yes" / "no" are meaningful only if the source (or filter) is specific to smoking.
+# NABIDH SocialHabitQty (C1 / C2 ingest, 2026-11-19): low / medium / high = intensity → light / moderate / heavy.
+# occasional / rare (not daily, < 10 / day) → light [DECISION PENDING] D7; alternative: current (→ D7 category).
+# "other" not mapped (C1 428, C2 531 rows): may be other tobacco (shisha / midwakh?) → counted as missing, D7.
 SMOKING_VALUES = {
     **{k: "never" for k in ["never", "never smoker", "never smoked", "never smoked tobacco", "non-smoker",
                             "non smoker", "nonsmoker", "non", "no", "lifetime non-smoker"]},
@@ -190,7 +191,7 @@ SMOKING_VALUES = {
     **{k: "moderate" for k in ["moderate", "moderate smoker", "medium"]},
     **{k: "heavy" for k in ["heavy", "heavy smoker", "heavy tobacco smoker", "high"]},
     **{k: "unknown" for k in ["unknown", "unknown if ever smoked", "not asked", "declined", "not known"]},
-    # SNOMED (ONC sigara durumu değer seti)
+    # SNOMED (ONC smoking status value set)
     "266919005": "never",           # Never smoked tobacco
     "8517006": "ex",                # Ex-smoker
     "449868002": "current",         # Smokes tobacco daily
@@ -201,15 +202,15 @@ SMOKING_VALUES = {
     "266927001": "unknown",         # Tobacco smoking consumption unknown
 }
 
-# Aile öyküsü durum değeri → positive / negative / unknown
+# Family history status value → positive / negative / unknown
 FH_STATUS_VALUES = {
     **{k: "positive" for k in ["yes", "y", "true", "1", "positive", "pos", "present", "confirmed"]},
     **{k: "negative" for k in ["no", "n", "false", "0", "negative", "neg", "absent", "none", "denied",
                                "not present", "no known family history"]},
     **{k: "unknown" for k in ["unknown", "not known", "not asked", "unsure", "declined"]},
 }
-# Akrabalık → derece. QDiabetes ve LRS birinci derece akrabayı (anne, baba, kardeş, çocuk) sayar.
-# İkinci derece → positive_non_first_degree (kayıt var, pozitif sayılmaz). Boş / bilinmeyen akrabalık → pozitif.
+# Relationship → degree. QDiabetes and LRS count first-degree relatives (mother, father, sibling, child).
+# Second degree → positive_non_first_degree (recorded, not counted positive). Empty / unknown relationship → positive.
 FH_RELATION_DEGREE = {
     **{k: "first" for k in ["mother", "father", "parent", "parents", "brother", "sister", "sibling", "siblings",
                             "son", "daughter", "child", "children", "first degree", "first-degree",
@@ -219,9 +220,9 @@ FH_RELATION_DEGREE = {
                             "2nd degree relative", "second degree relative", "3rd degree relative"]},
 }
 FH_DIABETES_SNOMED = {"160303001", "73211009", "44054006", "46635009"}
-# Açıklama metni (NABIDH FamilyHistory.Diagnosis_Description, 2026-11-19): durum sütunu yok, olumsuz kayıt
-# metinde ("No History Of Diabetes mellitus type 2 (disorder)") → negative. Metin ikinci derece akraba
-# söylüyorsa ("Maternal aunt and uncle have Diabetes mellitus", FamilyMember = Parent) metin geçerli.
+# Description text (NABIDH FamilyHistory.Diagnosis_Description, 2026-11-19): there is no status column; a negative
+# record is in the text ("No History Of Diabetes mellitus type 2 (disorder)") → negative. If the text names a
+# second-degree relative ("Maternal aunt and uncle have Diabetes mellitus", FamilyMember = Parent) the text wins.
 FH_DIABETES_TEXT = re.compile(r"diabet|\b(?:t[12])?dm\b", re.IGNORECASE)
 FH_PREDIABETES_SNOMED = {"714628002", "9414007"}       # Prediabetes; impaired glucose tolerance
 FH_PREDIABETES_TEXT = re.compile(r"\bpre[- ]?diabet|\bimpaired (?:fasting )?glucose|\bborderline diabet",
@@ -234,14 +235,14 @@ FH_TEXT_FIRST_DEGREE = re.compile(r"\b(?:mother|father|parents?|brothers?|sister
 
 
 # --------------------------------------------------------------------------
-# Yardımcılar
+# Helpers
 # --------------------------------------------------------------------------
 def _norm_text(s: pd.Series) -> pd.Series:
     return s.astype("string").str.strip().str.lower()
 
 
 def norm_code_system(s: pd.Series) -> pd.Series:
-    """HL7 / FHIR / serbest kod sistemi adları → ICD-10 / SNOMED / LOINC / ATC."""
+    """HL7 / FHIR / free-text code system names → ICD-10 / SNOMED / LOINC / ATC."""
     u = s.astype("string").str.strip().str.upper()
     out = u.copy()
     out[u.str.contains("ICD", na=False) | u.isin(["I10", "I10C", "I10CM"])] = "ICD-10"
@@ -257,24 +258,24 @@ def _value_counts(source: str, field: str, s: pd.Series, top: int = 50) -> list[
 
 
 def _labels(s: pd.Series, top: int = 15, k: int = 10) -> str:
-    """Kategori etiketleri (ör. SocialHistory kalemi) ve satır sayıları; < k satırlık etiket adı basılmaz."""
-    vc = s.astype("string").fillna("<boş>").str.slice(0, 40).value_counts()
+    """Category labels (e.g. SocialHistory item) and row counts; a label with < k rows is not printed by name."""
+    vc = s.astype("string").fillna("<empty>").str.slice(0, 40).value_counts()
     big, small = vc[vc >= k], vc[vc < k]
     out = ", ".join(f"{v} ({n})" for v, n in big.head(top).items())
     if len(big) > top:
-        out += f", +{len(big) - top} etiket"
+        out += f", +{len(big) - top} labels"
     if len(small):
-        out += f"{', ' if out else ''}+{len(small)} etiket < {k} satır"
-    return out or "yok"
+        out += f"{', ' if out else ''}+{len(small)} labels < {k} rows"
+    return out or "none"
 
 
 def alternatives(src) -> list[str]:
-    """Kaynak sütun tanımı (ad ya da ad listesi) → aday adlar."""
+    """Source column definition (a name or a list of names) → candidate names."""
     return [src] if isinstance(src, str) else list(src)
 
 
 def resolve_column(src, available) -> str | None:
-    """Kaynak sütun tanımı → `available` içinde bulunan ilk aday (yoksa None)."""
+    """Source column definition → the first candidate found in `available` (None if none)."""
     have = set(available)
     return next((c for c in alternatives(src) if c in have), None)
 
@@ -284,7 +285,7 @@ def label(src) -> str:
 
 
 def filter_columns(spec: dict) -> dict:
-    """filter anahtarı → kaynak sütun tanımı. Anahtar kanonik bir adsa (ör. "item") o adın kaynak sütunu."""
+    """filter key → source column definition. A canonical-name key (e.g. "item") means that name's source column."""
     names = {**spec.get("optional_columns", {}), **spec["columns"]}
     return {key: names.get(key, key) for key in (spec.get("filter") or {})}
 
@@ -294,19 +295,19 @@ def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -
     got = {canon: resolve_column(src, df.columns) for canon, src in cols.items()}
     missing = [label(cols[c]) for c, src in got.items() if src is None]
     if missing:
-        raise KeyError(f"{name} ({where or spec.get('file')}): kaynakta bulunmayan zorunlu sütunlar: {missing}. "
-                       f"Mevcut: {list(df.columns)}")
+        raise KeyError(f"{name} ({where or spec.get('file')}): required columns missing in the source: {missing}. "
+                       f"Available: {list(df.columns)}")
     info = {"rows_read": int(len(df))}
     for key, fsrc in filter_columns(spec).items():
         src = resolve_column(fsrc, df.columns)
         if src is None:
-            raise KeyError(f"{name}: filter sütunu yok: {label(fsrc)}")
+            raise KeyError(f"{name}: filter column missing: {label(fsrc)}")
         allowed = spec["filter"][key]
         keep = _norm_text(df[src]).isin([a.lower() for a in allowed]).fillna(False).astype(bool)
         info[f"filtered_out_by_{key}"] = int((~keep).sum())
         if len(df) and not keep.any():
-            raise ValueError(f"{name}: filter {key} = {allowed} bütün satırları eledi. Kaynaktaki değerler: "
-                             f"{_labels(df[src])}. SOURCES['{name}']['filter'] güncellenmeli.")
+            raise ValueError(f"{name}: filter {key} = {allowed} removed every row. Values in the source: "
+                             f"{_labels(df[src])}. Update SOURCES['{name}']['filter'].")
         if (~keep).any():
             info[f"filtered_out_values_{key}"] = _labels(df.loc[~keep, src])
         df = df[keep]
@@ -339,21 +340,21 @@ def _parse_dates(df: pd.DataFrame, spec: dict, info: dict) -> pd.DataFrame:
 
 
 def parse_horolog(raw: pd.Series) -> pd.Series:
-    """IRIS iç tarihi ($HOROLOG): "gün" ya da "gün,saniye" (gün 0 = 1840-12-31) → datetime."""
+    """IRIS internal date ($HOROLOG): "day" or "day,seconds" (day 0 = 1840-12-31) → datetime."""
     parts = raw.astype("string").str.strip().str.split(",", n=1)
     day = pd.to_numeric(parts.str[0], errors="coerce")
     sec = pd.to_numeric(parts.str[1], errors="coerce").fillna(0)
-    day = day.where(day.isna() | (day == day.round()))          # kesirli gün = geçersiz
+    day = day.where(day.isna() | (day == day.round()))          # fractional day = invalid
     out = HOROLOG_EPOCH + pd.to_timedelta(day, unit="D") + pd.to_timedelta(sec, unit="s")
     return pd.Series(out, index=raw.index)
 
 
 def _fh_diabetes(df: pd.DataFrame, cond_cols: list[str]) -> tuple[pd.Series, pd.Series]:
-    """Aile öyküsü kaydı diyabet mi? → (tanıma yolu: "ICD-10 code" / "SNOMED code" / "text only" / NA,
-    prediyabet mi). Önce kod: ICD-10 E08–E14 / Z83.3, diyabet SNOMED'i. Kod bunlardan biri değilse (yerel numara,
-    kod sütununa yazılmış metin) metin: "diabet", "DM". Prediyabet (R73, SNOMED 714628002 / 9414007, metin)
-    diyabet aile öyküsü sayılmaz. NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): ~%62 SNOMED / ICD-10,
-    ~%20 kod sütununda metin ("DIABETES"), ~%17 yerel numara."""
+    """Is the family history record diabetes? → (how recognised: "ICD-10 code" / "SNOMED code" / "text only" / NA,
+    is prediabetes). Code first: ICD-10 E08–E14 / Z83.3, diabetes SNOMED. If the code is none of these (local
+    number, text written into the code column), the text: "diabet", "DM". Prediabetes (R73, SNOMED 714628002 /
+    9414007, text) does not count as a diabetes family history. NABIDH C1 FamilyHistory.Diagnosis_Code
+    (2026-11-19): ~62% SNOMED / ICD-10, ~20% text in the code column ("DIABETES"), ~17% local number."""
     icd = pd.Series(False, index=df.index)
     snomed = pd.Series(False, index=df.index)
     text = pd.Series(False, index=df.index)
@@ -375,10 +376,10 @@ def _fh_diabetes(df: pd.DataFrame, cond_cols: list[str]) -> tuple[pd.Series, pd.
 
 
 # --------------------------------------------------------------------------
-# Kaynak türü işleyicileri: (df, name, vc) → {kanonik_tablo: df}
+# Source kind handlers: (df, name, vc) → {canonical_table: df}
 # --------------------------------------------------------------------------
 def dob_from_age(age: pd.Series, reference=AGE_REFERENCE_DATE) -> pd.Series:
-    """Tam yıl yaş → yaklaşık doğum tarihi: reference − (yaş + 0,5) yıl. 0–120 dışı / sayı olmayan → NaT."""
+    """Age in whole years → approximate date of birth: reference − (age + 0.5) years. Not 0–120 / not a number → NaT."""
     a = pd.to_numeric(age.astype("string").str.strip(), errors="coerce")
     a = a.where((a >= 0) & (a <= 120))
     out = pd.Timestamp(reference) - pd.to_timedelta((a + 0.5) * 365.25, unit="D")
@@ -412,7 +413,7 @@ def _h_conditions(df, name, vc):
 
 
 def split_measurements(m: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Tek ölçüm tablosunu LOINC'e göre labs ve observations'a ayırır."""
+    """Splits a single measurement table into labs and observations by LOINC."""
     code = m["code"].astype("string").str.strip()
     system = norm_code_system(m["code_system"]) if "code_system" in m else pd.Series("LOINC", index=m.index)
     is_lab = code.isin(list(codelists.LOINC_LAB)).fillna(False).astype(bool)
@@ -434,24 +435,24 @@ def _h_measurements(df, name, vc):
     return {"labs": labs, "observations": obs}
 
 
-# Kodu LOINC_LAB'da olmayan ama adı glisemik testi andıran testler (yerel kodlu HbA1c / glukoz) ayrıca listelenir.
+# Tests with a code outside LOINC_LAB but a glycaemic-looking name (locally coded HbA1c / glucose) are listed apart.
 GLYCAEMIC_NAME = re.compile(r"a1c|glyc|gluc|ogtt|sugar", re.IGNORECASE)
-# Çalışma koduyla gelen ama adı başka test diyen satırlar (C1 LabResultItem, 2026-11-19) düşer:
-#   4548-4 + "EAG (ESTIMATED AVERAGE GLUCOSE)": mg/dL ortalama glukoz; HbA1c sanılırsa ~%140 → yanlış DM kanıtı
-#   1558-6 + "BLOOD SUGAR -RBS" / "GLUCOSE (RANDOM)": açlık değil, rastgele glukoz
-# 1521-4 + "GLUCOSE POST PRANDIAL (PPBS)" / "POSTPRANDIAL BLOOD SUGAR - 2 HRS" tutulur (OGTT değil; medikal ekip).
+# Rows that carry a study code but whose name says another test (C1 LabResultItem, 2026-11-19) are dropped:
+#   4548-4 + "EAG (ESTIMATED AVERAGE GLUCOSE)": mean glucose in mg/dL; read as HbA1c it is ~140% → false DM evidence
+#   1558-6 + "BLOOD SUGAR -RBS" / "GLUCOSE (RANDOM)": random, not fasting, glucose
+# 1521-4 + "GLUCOSE POST PRANDIAL (PPBS)" / "POSTPRANDIAL BLOOD SUGAR - 2 HRS" are kept (not OGTT; medical team).
 LAB_EAG_NAME = re.compile(r"\beag\b|estimated average glucose", re.IGNORECASE)
 LAB_RANDOM_NAME = re.compile(r"\brbs\b|random", re.IGNORECASE)
-LAB_STATS_MIN_PATIENTS = 10                         # değer dağılımı yalnız ≥ 10 hastalı tür | birim grubunda
-# Akla yatkın değer aralığı — yalnız rapor: değer tutulur ve statüye girer (eleme kararı medikal ekipte, K11).
-# Birim yoksa % / mg/dL varsayılır (phenotype.glycaemic_events); birimsiz mmol/mol HbA1c (ör. 48) ya da mmol/L
-# glukoz (ör. 6,1) burada aralık dışı görünür.
+LAB_STATS_MIN_PATIENTS = 10                         # value distribution only in kind | unit groups of ≥ 10 patients
+# Plausible value range — report only: the value is kept and counts towards status (exclusion is the medical
+# team's call, K11). Without a unit % / mg/dL is assumed (phenotype.glycaemic_events); a unitless mmol/mol HbA1c
+# (e.g. 48) or mmol/L glucose (e.g. 6.1) shows up here as out of range.
 LAB_PLAUSIBLE = {"hba1c %": (3, 20), "hba1c mmol/mol": (10, 200), "glucose mg/dL": (20, 1000),
                  "glucose mmol/L": (1, 55)}
 
 
 def lab_range_class(kind: pd.Series, unit: pd.Series) -> pd.Series:
-    """Tür + birim → LAB_PLAUSIBLE anahtarı (phenotype.glycaemic_events'in birim kuralıyla aynı)."""
+    """Kind + unit → LAB_PLAUSIBLE key (same unit rule as phenotype.glycaemic_events)."""
     u = unit.astype("string").str.lower().fillna("")
     a1c = kind.isin(["hba1c", "hba1c_ifcc"]).fillna(False).astype(bool)
     out = pd.Series("glucose mg/dL", index=kind.index, dtype=object)
@@ -462,9 +463,9 @@ def lab_range_class(kind: pd.Series, unit: pd.Series) -> pd.Series:
 
 
 def lab_value_stats(labs: pd.DataFrame, kind: pd.Series, unit: pd.Series) -> list[tuple[str, int]]:
-    """Tür | birim başına sayısal değer dağılımı (birim doğrulaması, K11) → [(etiket, satır sayısı)], ör.
-    "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1". < LAB_STATS_MIN_PATIENTS hastalı grupta dağılım
-    basılmaz (tek hastanın değerleri görünmesin)."""
+    """Numeric value distribution per kind | unit (unit check, K11) → [(label, row count)], e.g.
+    "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1". No distribution is printed for a group with
+    < LAB_STATS_MIN_PATIENTS patients (so no single patient's values show)."""
     g = pd.DataFrame({"kind": kind.astype("string").fillna("?"), "unit": unit.astype("string").fillna("<no unit>"),
                       "pid": labs["patient_id"], "v": pd.to_numeric(labs["value"], errors="coerce")})
     out = []
@@ -480,10 +481,10 @@ def lab_value_stats(labs: pd.DataFrame, kind: pd.Series, unit: pd.Series) -> lis
 
 
 def _h_lab_results(df, name, vc):
-    """Lab view'ı (NABIDH LabResultItem): yalnız çalışmanın glisemik lab'ları (codelists.LOINC_LAB) → labs. Diğer
-    testler (kolesterol, hemogram …) düşer; gözlem değildir. Rapor: tutulan ve düşen kod | birim | ad, adı glisemik
-    görünen düşen testler, tür | birim başına değer dağılımı (birim → phenotype.glycaemic_events dönüşümü) ve
-    akla yatkın aralık dışındaki değer sayısı (LAB_PLAUSIBLE; yalnız rapor)."""
+    """Lab view (NABIDH LabResultItem): only the study's glycaemic labs (codelists.LOINC_LAB) → labs. Other tests
+    (cholesterol, blood count …) are dropped; they are not observations. Report: kept and dropped code | unit | name,
+    dropped tests whose name looks glycaemic, value distribution per kind | unit (unit → phenotype.glycaemic_events
+    conversion) and the number of values outside the plausible range (LAB_PLAUSIBLE; report only)."""
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = df["code"].astype("string").str.strip()
     test = (df["test_name"] if "test_name" in df else empty).astype("string").str.strip()
@@ -494,7 +495,7 @@ def _h_lab_results(df, name, vc):
     other_by_name = ((kind.eq("hba1c") & txt.str.contains(LAB_EAG_NAME))
                      | (kind.eq("fpg") & txt.str.contains(LAB_RANDOM_NAME))).fillna(False).astype(bool)
     keep = in_list & ~other_by_name
-    shown = code.fillna("<empty>") + " | " + unit.fillna("") + " | " + test.fillna("")   # ad sona: 80 karakterde kesilir
+    shown = code.fillna("<empty>") + " | " + unit.fillna("") + " | " + test.fillna("")   # name last: cut at 80 chars
     vc += _value_counts(name, "study lab: code | unit | name", shown[keep], top=40)
     if other_by_name.any():
         vc += _value_counts(name, "study code, other test by name (dropped): code | unit | name", shown[other_by_name])
@@ -523,12 +524,12 @@ def _h_lab_results(df, name, vc):
 
 
 def _h_smoking(df, name, vc, item_filtered: bool = False):
-    """item_filtered: SOURCES'ta kalem filtresi var → seçilen kalemlerin hepsi sigara sayılır. Yoksa birden çok
-    kalem (ör. sigara + alkol) görülürse durur: hangi kalemin sigara olduğu bilinmez."""
+    """item_filtered: SOURCES has an item filter → every selected item counts as smoking. Otherwise, if several
+    items (e.g. smoking + alcohol) are seen, it stops: which item is smoking is unknown."""
     if "item" in df and not item_filtered and df["item"].nunique(dropna=True) > 1:
-        raise ValueError(f"{name}: SocialHistory birden çok kalem içeriyor "
+        raise ValueError(f"{name}: SocialHistory holds several items "
                          f"({sorted(df['item'].dropna().unique())[:10]}). "
-                         f"SOURCES['{name}']['filter'] ile sigara kalemini seç.")
+                         f"Select the smoking item with SOURCES['{name}']['filter'].")
     if "item" in df:
         vc += _value_counts(name, "item", df["item"])
     key = _norm_text(df["value"])
@@ -538,8 +539,8 @@ def _h_smoking(df, name, vc, item_filtered: bool = False):
     has_any = key.notna() | code.notna()
     value = mapped.astype(object).where(mapped.notna(), "unmapped:" + key.fillna(code).astype(object).astype(str))
     shown = key.fillna("<empty>").astype(str) + " → " + value.astype(str)
-    if "item" in df:                                # birden çok kalemde değerin hangi kalemden geldiği
-        shown = df["item"].astype("string").fillna("<boş>").astype(str) + " | " + shown
+    if "item" in df:                                # with several items: which item the value came from
+        shown = df["item"].astype("string").fillna("<empty>").astype(str) + " | " + shown
     vc += _value_counts(name, "value → canonical", shown)
     out = pd.DataFrame({"patient_id": df["patient_id"], "concept": "smoking_status",
                         "code_system": code.where(code.isna(), "SNOMED"), "code": code,
@@ -549,7 +550,7 @@ def _h_smoking(df, name, vc, item_filtered: bool = False):
 
 def _h_family_history(df, name, vc):
     cond_cols = [c for c in ("condition", "condition_text") if c in df]
-    if cond_cols:                                   # kod (ICD-10 / SNOMED), yoksa metin diyabet diyorsa diyabet kaydı
+    if cond_cols:                                   # diabetes record: the code (ICD-10 / SNOMED), else the text, says so
         how, pre = _fh_diabetes(df, cond_cols)
         is_dm = how.notna()
         shown = df[cond_cols].astype("string").fillna("").agg(" | ".join, axis=1)
@@ -592,8 +593,8 @@ ATC_LIKE = re.compile(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$")
 
 
 def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
-    """Tek ilaç kaydı → (yöntem, ATC listesi). Kod ATC biçimindeyse olduğu gibi; DDC ürün / bilimsel koduysa
-    DDC referansından (kod tanınırsa son söz koddadır); kod yoksa ya da tanınmazsa ilaç adından."""
+    """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code via the
+    DDC reference (a recognised code has the final say); no code or an unrecognised one → from the drug name."""
     if code is not None:
         if ATC_LIKE.match(code):
             return "ATC code", [code]
@@ -610,9 +611,10 @@ def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
 
 
 def _h_medications(df, name, vc):
-    """İlaç → ATC (io/adapters/ddc.py). C1: DrugProduct_Code = DDC ürün kodu; C2: kod yok, DrugProduct_Description
-    (ad) → DDC ticari adı + etken madde. Kombinasyon ürünü → etken madde başına bir satır. Çalışma ilaç sınıfına
-    düşmeyen kayıt kanonik tabloya girmez (atc_code zorunlu); kaçının neden düştüğü value_counts'ta."""
+    """Drug → ATC (io/adapters/ddc.py). C1: DrugProduct_Code = DDC product code; C2: no code, DrugProduct_Description
+    (name) → DDC trade name + active ingredient. Combination product → one row per active ingredient. A record
+    outside the study drug classes does not enter the canonical table (atc_code is required); how many dropped and
+    why is in value_counts."""
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = (df["atc_code"] if "atc_code" in df else empty).astype("string").str.strip().str.upper().replace("", pd.NA)
     drug = (df["drug_name"] if "drug_name" in df else empty).astype("string").str.strip().replace("", pd.NA)
@@ -633,7 +635,7 @@ def _h_medications(df, name, vc):
     if (n_atc > 1).any():
         vc.append({"source": name, "field": "combination products (rows → several ATC rows)", "value": "<n rows>",
                    "n_rows": int((n_atc > 1).sum())})
-    if (n_atc == 0).any():                          # atc_code zorunlu → sınıfsız kayıt kanonik tabloya girmez
+    if (n_atc == 0).any():                          # atc_code is required → a record without a class stays out
         vc.append({"source": name, "field": "rows dropped: no study drug class", "value": "<no ATC>",
                    "n_rows": int((n_atc == 0).sum())})
     out = df.assign(atc_code=atcs).explode("atc_code")
@@ -655,14 +657,14 @@ HANDLERS = {
 
 
 # --------------------------------------------------------------------------
-# Yükleme
+# Loading
 # --------------------------------------------------------------------------
 def load(raw_dir: Path, cohort: str, sources: dict | None = None) -> tuple[Dataset, dict]:
-    """Ham dosya yolu: bir kohort klasörünü okur. Dönüş: (kanonik Dataset, rapor).
+    """Raw-file path: reads one cohort folder. Returns (canonical Dataset, report).
 
-    Rapor: {"input": "files", "sources": {ad: {file, rows_read, rows_out, unparseable_*,
+    Report: {"input": "files", "sources": {name: {file, rows_read, rows_out, unparseable_*,
             absent_optional_columns, ...}}, "value_counts": [{source, field, value, n_rows}, ...]}
-            — eşleme sözlüklerini genişletmek için.
+            — for extending the mapping dictionaries.
     """
     raw_dir = Path(raw_dir)
 
@@ -678,20 +680,20 @@ def load(raw_dir: Path, cohort: str, sources: dict | None = None) -> tuple[Datas
 
 
 def iris_query(conn, spec: dict, name: str, params: dict) -> str:
-    """Kaynağın IRIS sorgusu: tam `query`, ya da `table`'dan yalnızca eşlemede geçen sütunları
-    (büyük/küçük harf duyarsız) `columns` adlarıyla çeken SELECT."""
+    """The source's IRIS query: the full `query`, or a SELECT fetching from `table` only the columns named in the
+    mapping (case-insensitive) under the `columns` names."""
     try:
         if spec.get("query"):
             return spec["query"].format(**params)
         table = spec["table"].format(**params)
     except KeyError as e:
-        raise KeyError(f"{name}: yer tutucu {e} IRIS_COHORTS'ta yok (mevcut: {sorted(params)})") from None
+        raise KeyError(f"{name}: placeholder {e} not in IRIS_COHORTS (available: {sorted(params)})") from None
     have = iris.column_names(conn, table)
     by_lower = {c.lower(): c for c in have}
     missing = [label(src) for src in spec["columns"].values()
                if not any(c.lower() in by_lower for c in alternatives(src))]
     if missing:
-        raise KeyError(f"{name} ({table}): tabloda bulunmayan zorunlu sütunlar: {missing}. Mevcut: {have}")
+        raise KeyError(f"{name} ({table}): required columns missing in the table: {missing}. Available: {have}")
     wanted = [c for src in [*spec["columns"].values(), *spec.get("optional_columns", {}).values(),
                             *filter_columns(spec).values()] for c in alternatives(src)]
     select = [f"{iris.quote_ident(by_lower[c.lower()])} AS {iris.quote_ident(c)}"
@@ -701,11 +703,11 @@ def iris_query(conn, spec: dict, name: str, params: dict) -> str:
 
 def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dict | None = None,
               snapshot_dir: Path | None = None) -> tuple[Dataset, dict]:
-    """IRIS yolu: DB-API bağlantısından (io/iris.connect) bir kohortu okur. Dönüş `load` ile aynı;
-    rapordaki her kaynakta ayrıca çalıştırılan `query` ve sonucun `sha256`'sı (audit girdisi) bulunur.
+    """IRIS path: reads one cohort from a DB-API connection (io/iris.connect). Returns the same as `load`;
+    each source in the report also carries the `query` that ran and the result's `sha256` (audit input).
 
-    snapshot_dir: her kaynağın sonucu `file` adıyla CSV olarak yazılır — `load(snapshot_dir, kohort)`
-    aynı Dataset'i verir. Eşleme sözlükleri değişince IRIS'e yeniden gitmeden tekrar ingest edilebilir.
+    snapshot_dir: each source's result is written as CSV under its `file` name — `load(snapshot_dir, cohort)`
+    gives the same Dataset. When the mapping dictionaries change, ingest can be redone without going back to IRIS.
     """
     params = {"cohort": cohort, **(IRIS_COHORTS.get(cohort, {}) if cohort_params is None else cohort_params)}
     snap = Path(snapshot_dir) if snapshot_dir else None
@@ -717,12 +719,12 @@ def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dic
             sql = iris_query(conn, spec, name, params)
             df, text = iris.fetch(conn, sql)
         except (KeyError, ValueError):
-            raise                                   # eşleme / sorgu hatası: opsiyonel kaynakta da sessiz geçme
-        except Exception as e:                      # sürücü hatası (ör. tablo yok)
+            raise                                   # mapping / query error: never silent, even for an optional source
+        except Exception as e:                      # driver error (e.g. no such table)
             if not spec.get("optional"):
                 raise
             if snap and (snap / spec["file"]).exists():
-                (snap / spec["file"]).unlink()      # önceki snapshot'tan kalan dosya karışmasın
+                (snap / spec["file"]).unlink()      # don't mix in a file left over from an earlier snapshot
             return None, {"status": "absent (optional)", "error": f"{type(e).__name__}: {str(e)[:300]}"}
         info = {"query": sql, "sha256": iris.sha256_text(text)}
         if snap:

@@ -1,29 +1,29 @@
-"""NABIDH verisi (ham dosya ya da IRIS) → kanonik şema (enclave'deki ilk adım; Faz 1 ve Faz 2 bunu okur).
+"""NABIDH data (raw file or IRIS) → canonical schema (the first step in the enclave; Phase 1 and Phase 2 read it).
 
-Kullanım — ham dosya:
+Usage — raw file:
   python tools/ingest_nabidh.py                          # data/nabidh/raw/<c1|c2|c3> → data/canonical/nabidh/<…>
-  python tools/ingest_nabidh.py --cohorts c1 c2          # Faz 1
-  python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun   # prova
+  python tools/ingest_nabidh.py --cohorts c1 c2          # Phase 1
+  python tools/ingest_nabidh.py --raw-root data/nabidh_dryrun/raw --source nabidh_dryrun   # dry run
 
-Kullanım — InterSystems IRIS (DHA; bağlantı ayarları src/sandbox/io/iris.py başında):
+Usage — InterSystems IRIS (DHA; connection settings at the top of src/sandbox/io/iris.py):
   python tools/ingest_nabidh.py --input iris --cohorts c1 c2
-      → data/nabidh_iris/raw/<kohort>/*.csv (snapshot) + data/canonical/nabidh/<kohort>/
-  python tools/ingest_nabidh.py --raw-root data/nabidh_iris/raw        # snapshot'tan, IRIS'e gitmeden
+      → data/nabidh_iris/raw/<cohort>/*.csv (snapshot) + data/canonical/nabidh/<cohort>/
+  python tools/ingest_nabidh.py --raw-root data/nabidh_iris/raw        # from the snapshot, without going to IRIS
   python tools/ingest_nabidh.py --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
-      # prova: IRIS yerine SQLite (tools/make_nabidh_dryrun.py üretir)
+      # dry run: SQLite instead of IRIS (built by tools/make_nabidh_dryrun.py)
 
-Ardından:  SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py  (NB1, NB2 aynı)
+Then:  SANDBOX_SOURCE=nabidh python notebooks/00_data_profile.py  (same for NB1, NB2)
 
-Çıktı:
-  data/<source>_iris/raw/<kohort>/*.csv                  (IRIS) sorgu sonuçları, ham dosya biçiminde (audit'e kayıtlı)
-  data/canonical/<source>/<kohort>/*.csv                 kanonik tablolar (audit'e kayıtlı)
-  outputs/<run_id>/ingest/<kohort>_summary.json          kaynak bazında okunan / üretilen satırlar,
-                                                         çözülemeyen tarihler, eksik opsiyonel sütunlar
-  outputs/<run_id>/ingest/<kohort>_validation.csv        şema kontrolleri (schema.validate)
-  outputs/<run_id>/ingest/<kohort>_value_counts.csv      cinsiyet, uyruk, sigara, aile öyküsü, kod|birim,
-                                                         ATC dışı ilaç kodları … (< 10 bastırılmış)
-"unmapped" değerler → src/sandbox/io/adapters/nabidh.py sözlüklerini genişlet, tekrar çalıştır.
-Şema ERROR varsa kanonik veri yine yazılır (inceleme için) ama çıkış kodu 1 olur.
+Output:
+  data/<source>_iris/raw/<cohort>/*.csv                  (IRIS) query results in raw-file form (recorded in the audit)
+  data/canonical/<source>/<cohort>/*.csv                 canonical tables (recorded in the audit)
+  outputs/<run_id>/ingest/<cohort>_summary.json          rows read / produced per source,
+                                                         unparseable dates, absent optional columns
+  outputs/<run_id>/ingest/<cohort>_validation.csv        schema checks (schema.validate)
+  outputs/<run_id>/ingest/<cohort>_value_counts.csv      sex, nationality, smoking, family history, code|unit,
+                                                         non-ATC drug codes … (< 10 suppressed)
+"unmapped" values → extend the dictionaries in src/sandbox/io/adapters/nabidh.py and run again.
+With a schema ERROR the canonical data is still written (for inspection) but the exit code is 1.
 """
 from __future__ import annotations
 
@@ -45,21 +45,21 @@ from sandbox.io.adapters import ddc, nabidh  # noqa: E402
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="NABIDH verisi (ham dosya ya da IRIS) → kanonik şema")
+    ap = argparse.ArgumentParser(description="NABIDH data (raw file or IRIS) → canonical schema")
     ap.add_argument("--input", choices=["files", "iris"], default="files",
-                    help="files: --raw-root altındaki dosyalar; iris: DHA InterSystems IRIS (io/iris.py)")
+                    help="files: the files under --raw-root; iris: DHA InterSystems IRIS (io/iris.py)")
     ap.add_argument("--raw-root", type=Path, default=RAW_DIR["nabidh"],
-                    help="(files) kohort klasörlerini (c1, c2, c3) içeren dizin")
-    ap.add_argument("--source", default="nabidh", help="kanonik çıktı adı: data/canonical/<source>/")
+                    help="(files) directory holding the cohort folders (c1, c2, c3)")
+    ap.add_argument("--source", default="nabidh", help="canonical output name: data/canonical/<source>/")
     ap.add_argument("--cohorts", nargs="+", choices=COHORTS, default=None,
-                    help="varsayılan: files → raw-root altında bulunanlar; iris → IRIS_COHORTS'takiler")
+                    help="default: files → those found under raw-root; iris → those in IRIS_COHORTS")
     ap.add_argument("--iris-url", default=None,
-                    help=f"(iris) jdbc:IRIS://host:port/NAMESPACE; varsayılan {iris.ENV_URL} / ~/.nabidh_iris")
+                    help=f"(iris) jdbc:IRIS://host:port/NAMESPACE; default {iris.ENV_URL} / ~/.nabidh_iris")
     ap.add_argument("--iris-sqlite", type=Path, default=None,
-                    help="(iris, prova) IRIS yerine <dizin>/<kohort>.sqlite dosyaları")
+                    help="(iris, dry run) <dir>/<cohort>.sqlite files instead of IRIS")
     ap.add_argument("--snapshot-root", type=Path, default=None,
-                    help="(iris) sorgu sonuçlarının yazılacağı dizin; varsayılan data/<source>_iris/raw (nabidh → nabidh_iris)")
-    ap.add_argument("--no-snapshot", action="store_true", help="(iris) snapshot yazma")
+                    help="(iris) directory for the query results; default data/<source>_iris/raw (nabidh → nabidh_iris)")
+    ap.add_argument("--no-snapshot", action="store_true", help="(iris) do not write a snapshot")
     a = ap.parse_args(argv)
     raw_root = a.raw_root.resolve()
     use_iris = a.input == "iris"
@@ -77,7 +77,7 @@ def main(argv=None) -> int:
         cohorts = a.cohorts or [c for c in COHORTS if (raw_root / c).is_dir()]
     if not cohorts:
         where = (a.iris_sqlite or "IRIS_COHORTS") if use_iris else f"{raw_root}/<c1|c2|c3>"
-        print(f"Kohort bulunamadı: {where}")
+        print(f"No cohort found: {where}")
         run.log("ingest start", input=a.input, cohorts=[])
         run.finish("no_input")
         return 2
@@ -87,7 +87,7 @@ def main(argv=None) -> int:
         default_snap = DATA_DIR / f"{a.source.removesuffix('_iris')}_iris" / "raw"      # nabidh → nabidh_iris
         snap_root = None if a.no_snapshot else (a.snapshot_root or default_snap).resolve()
         if snap_root is not None and snap_root in (raw_root, RAW_DIR["nabidh"].resolve()):
-            print(f"--snapshot-root ham teslim klasörüyle aynı olamaz: {snap_root}")
+            print(f"--snapshot-root cannot be the raw delivery folder: {snap_root}")
             run.finish("bad_arguments")
             return 2
         if a.iris_sqlite:
@@ -100,10 +100,10 @@ def main(argv=None) -> int:
                 s = iris.connection_settings(a.iris_url)
                 target, user, driver = s["target"], s["user"], s["driver"]
                 conn = iris.connect(a.iris_url)
-            except Exception as e:                  # ayar / sürücü / ağ / giriş — şifre mesajda yok
+            except Exception as e:                  # settings / driver / network / login — no password in the message
                 err = f"{type(e).__name__}: {str(e)[:300]}"
-                print(f"IRIS'e bağlanılamadı ({target or 'bağlantı ayarı yok'}): {err}\n"
-                      f"Ayrıntılı tanı: python tools/check_environment.py --iris")
+                print(f"Could not connect to IRIS ({target or 'no connection settings'}): {err}\n"
+                      f"Detailed diagnosis: python tools/check_environment.py --iris")
                 run.log("iris connect failed", target=target, user=user, driver=driver, error=err)
                 run.finish("connection_failed")
                 return 2
@@ -112,7 +112,7 @@ def main(argv=None) -> int:
     else:
         run.log("ingest start", input="files", raw_root=str(raw_root), cohorts=cohorts)
 
-    run.add_inputs([ddc.REFERENCE_PATH])           # ilaç kodu / adı → ATC referansı (DDC listesi)
+    run.add_inputs([ddc.REFERENCE_PATH])           # drug code / name → ATC reference (DDC list)
     try:
         n_errors = _ingest(run, a, cohorts, raw_root, conn, target, snap_root)
     finally:
@@ -121,7 +121,7 @@ def main(argv=None) -> int:
 
     status = "success" if n_errors == 0 else "schema_errors"
     run.finish(status)
-    print(f"\nRun: {run.run_id}  durum: {status}")
+    print(f"\nRun: {run.run_id}  status: {status}")
     return 0 if n_errors == 0 else 1
 
 
@@ -144,41 +144,41 @@ def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> in
         meta = {"ingest_version": nabidh.INGEST_VERSION, "ingest_run_id": run.run_id, "source": a.source,
                 "cohort": c, "input": "file" if conn is None else "iris"}
         (out_dir / "ingest.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
-        run.register_output(out_dir / "ingest.json", f"canonical {a.source} {c} ingest sürümü")
+        run.register_output(out_dir / "ingest.json", f"canonical {a.source} {c} ingest version")
         for f in sorted(out_dir.glob("*.csv")):
             run.register_output(f, f"canonical {a.source} {c} {f.stem}")
 
-        back = schema.read_dataset(CANONICAL_DIR, a.source, c)       # NB0'ın göreceği hâli doğrula
+        back = schema.read_dataset(CANONICAL_DIR, a.source, c)       # validate what NB0 will see
         val = schema.validate(back)
         errors = int((val["severity"] == "ERROR").sum())
         n_errors += errors
-        run.save_table(val, f"ingest/{c}_validation.csv", f"{c} şema kontrolleri")
+        run.save_table(val, f"ingest/{c}_validation.csv", f"{c} schema checks")
 
         vc = pd.DataFrame(rep.pop("value_counts"), columns=["source", "field", "value", "n_rows"])
         run.save_table(sdc.suppress_small_counts(vc, ["n_rows"]), f"ingest/{c}_value_counts.csv",
-                       f"{c} kaynak değer dağılımları (eşleme sözlükleri için)")
+                       f"{c} source value distributions (for the mapping dictionaries)")
         unmapped = vc[vc["value"].str.contains("unmapped", na=False)]
         summary = {**rep, "ingest_version": nabidh.INGEST_VERSION, "source": a.source, "n_patients": back.n_patients,
                    "rows": {t: int(len(df)) for t, df in back.tables.items()},
                    "schema_errors": errors, "schema_warnings": int((val["severity"] == "WARN").sum()),
                    "unmapped_value_rows": int(unmapped["n_rows"].sum())}
-        run.save_json(summary, f"ingest/{c}_summary.json", f"{c} ingest özeti")
+        run.save_json(summary, f"ingest/{c}_summary.json", f"{c} ingest summary")
         run.log(f"{c} ingested", n_patients=back.n_patients, rows=summary["rows"], schema_errors=errors,
                 unmapped_value_rows=summary["unmapped_value_rows"])
 
-        print(f"\n== {c.upper()}: {back.n_patients} hasta → {out_dir}")
-        print("   satır: " + ", ".join(f"{t}={n}" for t, n in summary["rows"].items()))
+        print(f"\n== {c.upper()}: {back.n_patients} patients → {out_dir}")
+        print("   rows: " + ", ".join(f"{t}={n}" for t, n in summary["rows"].items()))
         for name, s in rep["sources"].items():
             bad = {k: v for k, v in s.items() if k.startswith("unparseable_") and v}
-            extra = f"  çözülemeyen tarih: {bad}" if bad else ""
+            extra = f"  unparseable dates: {bad}" if bad else ""
             if s.get("error"):
                 extra += f"  ({s['error'][:120]})"
-            print(f"   {name:16s} {s.get('status')}  okunan={s.get('rows_read', '—')}{extra}")
+            print(f"   {name:16s} {s.get('status')}  rows_read={s.get('rows_read', '—')}{extra}")
         issues = val[val["severity"] != "INFO"]
         if len(issues):
             print(issues.to_string(index=False))
         if len(unmapped):
-            print("   eşlenemeyen değerler (adapter sözlüklerine eklenecek):")
+            print("   unmapped values (to add to the adapter dictionaries):")
             print(unmapped.head(20).to_string(index=False))
     return n_errors
 

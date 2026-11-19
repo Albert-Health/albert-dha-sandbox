@@ -1,16 +1,17 @@
-"""Dubai Drug Code (DDC) → ATC: Medication view'ındaki ilaç kodu ya da ilaç adı → çalışma ilaç sınıfları.
+"""Dubai Drug Code (DDC) → ATC: drug code or drug name in the Medication view → study drug classes.
 
-NABIDH Medication view'ında ATC yok: C1'de DrugProduct_Code (DDC ürün kodu, ör. "0005-379302-1171"), C2'de
-yalnız DrugProduct_Description (ilaç adı). DDC listesinde de ATC yok; ürün başına etken madde adları
-("METFORMIN HCL/SITAGLIPTIN"), uygulama yolu ve dozaj formu var. Eşleme:
+The NABIDH Medication view has no ATC: C1 has DrugProduct_Code (DDC product code, e.g. "0005-379302-1171"), C2
+only DrugProduct_Description (drug name). The DDC list has no ATC either; per product it has active ingredient
+names ("METFORMIN HCL/SITAGLIPTIN"), route of administration and dosage form. Mapping:
 
-  ürün → etken maddeler → codelists.INGREDIENT_ATC (kelime sınırıyla arama) → ATC kodları
-  kombinasyon ürünü → her etken madde ayrı ATC (bir Medication satırı → birden çok kanonik satır)
-  yol sistemik değilse (göz damlası, krem, burun spreyi, inhaler, rektal, eklem içi) → sınıf yok
-  (insülin hariç: codelists.INGREDIENT_ANY_ROUTE); satırın kendi yolu (Route_Description) da bakılır
+  product → active ingredients → codelists.INGREDIENT_ATC (whole-word search) → ATC codes
+  combination product → one ATC per active ingredient (one Medication row → several canonical rows)
+  non-systemic route (eye drops, cream, nasal spray, inhaler, rectal, intra-articular) → no class
+  (except insulin: codelists.INGREDIENT_ANY_ROUTE); the row's own route (Route_Description) is checked too
 
-Kod yoksa ad: (1) adın başı DDC ticari adıyla eşleşirse o ürünlerin ATC'leri, (2) adda geçen etken madde
-adları. İkisinin birleşimi alınır. Referans: src/sandbox/reference/ddc.csv.gz (tools/build_ddc_reference.py).
+Without a code, the name: (1) if the start of the name matches a DDC trade name, those products' ATCs, (2) the
+active ingredient names found in the name. The union of both is taken. Reference: src/sandbox/reference/ddc.csv.gz
+(tools/build_ddc_reference.py).
 """
 from __future__ import annotations
 
@@ -24,16 +25,16 @@ from ... import codelists
 
 REFERENCE_PATH = Path(__file__).resolve().parents[2] / "reference" / "ddc.csv.gz"
 
-# DDC ROUTE_OF_ADMIN'deki sistemik yollar (virgülle ayrılmış listede biri yeterli: "IM,INTRA-ARTICULAR" → IM)
+# Systemic routes in DDC ROUTE_OF_ADMIN (one is enough in a comma-separated list: "IM,INTRA-ARTICULAR" → IM)
 SYSTEMIC_ROUTES = {
     "ORAL", "IV", "IV INFUSION", "IV BOLUS", "IM", "SC", "SC INFUSION", "SUBLINGUAL", "TRANSDERMAL",
     "PARENTERAL", "ENTERAL", "INTRAVENOUS", "INTRAMUSCULAR", "SUBCUTANEOUS",
-}   # BUCCAL yok: listede yalnız ağız içi hidrokortizon (yerel)
-# DDC listesindeki bilinen hatalar: ürün kodu → neden sınıfsız sayıldığı
+}   # no BUCCAL: the list only has oromucosal hydrocortisone (local)
+# Known errors in the DDC list: product code → why it is treated as having no class
 REFERENCE_ERRATA = {
-    "0235-345201-1021": "MMR aşısı; DDC'de etken maddeler arasında SAXAGLIPTIN yazılı",
+    "0235-345201-1021": "MMR vaccine; DDC lists SAXAGLIPTIN among its active ingredients",
 }
-# Serbest metinde (satırın yolu, ilaç adı) sistemik olmayan kullanımı gösteren kelimeler
+# Words in free text (the row's route, drug name) that indicate non-systemic use
 _LOCAL_WORDS = (r"TOPICAL|CUTANEOUS|DERMAL|EXTERNAL|CREAM|OINTMENT|GEL|LOTION|SHAMPOO|FOAM|OCULAR|OPHTHALMIC|"
                 r"EYE|EAR|OTIC|DROPS|NASAL|INHALATION|INHALER|INHALED|NEBULI[SZ]ER|RECTAL|ENEMA|SUPPOSITOR(Y|IES)|"
                 r"VAGINAL|INTRA-?ARTICULAR|INTRAVITREAL|INTRALESIONAL|MOUTHWASH|LOCAL")
@@ -49,7 +50,7 @@ _ANY_ROUTE_ATC = {codelists.INGREDIENT_ATC[k] for k in codelists.INGREDIENT_ANY_
 
 
 def norm_code(s: pd.Series) -> pd.Series:
-    """Kod karşılaştırması: büyük harf, yalnız harf + rakam ("0005-379302-1171" = "00053793021171")."""
+    """Code comparison: upper case, letters + digits only ("0005-379302-1171" = "00053793021171")."""
     return s.astype("string").str.upper().str.replace(r"[^0-9A-Z]", "", regex=True).replace("", pd.NA)
 
 
@@ -62,8 +63,8 @@ _LEADING_FORM_WORDS = {"TAB", "TABS", "TABLET", "TABLETS", "CAP", "CAPS", "CAPSU
 
 
 def _brand_stem(norm: str) -> str:
-    """Normalize ad → marka kökü: baştaki form kelimeleri atılır, ilk rakamlı kelimeden sonrası atılır
-    ("TAB CRESTOR 10 MG" → "CRESTOR", "CONCOR AM 5MG 5MG" → "CONCOR AM")."""
+    """Normalised name → brand stem: leading form words are dropped, everything from the first word with a digit on
+    is dropped ("TAB CRESTOR 10 MG" → "CRESTOR", "CONCOR AM 5MG 5MG" → "CONCOR AM")."""
     words = norm.split()
     while words and words[0] in _LEADING_FORM_WORDS:
         words = words[1:]
@@ -76,8 +77,8 @@ def _brand_stem(norm: str) -> str:
 
 
 def ingredient_atc(text) -> list[str]:
-    """Etken madde metni ("AMLODIPINE (AS BESYLATE)/VALSARTAN") → ATC kodları (sıra korunur, tekrarsız).
-    "/" ile ayrılan parçalardan cihaz olanlar (insülin pompası vb.) atlanır."""
+    """Active ingredient text ("AMLODIPINE (AS BESYLATE)/VALSARTAN") → ATC codes (order kept, no duplicates).
+    "/"-separated parts that are devices (insulin pump etc.) are skipped."""
     if text is None or pd.isna(text):
         return []
     out: list[str] = []
@@ -92,19 +93,19 @@ def ingredient_atc(text) -> list[str]:
 
 
 def route_is_systemic(route, dosage_form=None) -> bool:
-    """DDC ürün yolu → sistemik mi. Yol yoksa / "N/A" ise dozaj formuna bakılır."""
+    """DDC product route → is it systemic. Without a route / with "N/A" the dosage form decides."""
     r = "" if route is None or pd.isna(route) else str(route).upper()
     tokens = {re.sub(r"\s+", " ", t.replace(".", "")).strip() for t in re.split(r"[,&]| - ", r)}
     form = "" if dosage_form is None or pd.isna(dosage_form) else str(dosage_form).upper()
     if tokens & SYSTEMIC_ROUTES:
-        return not LOCAL_FORM.search(form)          # "ORAL" + ağız içi pasta (ADCORTYL IN ORABASE) → yerel
+        return not LOCAL_FORM.search(form)          # "ORAL" + oromucosal paste (ADCORTYL IN ORABASE) → local
     if tokens - {"", "N/A", "MISCELLANEOUS"}:
         return False
     return bool(SYSTEMIC_TEXT.search(form)) and not LOCAL_TEXT.search(form)
 
 
 def text_is_local(text) -> bool:
-    """Serbest metin (satır yolu ya da ilaç adı) açıkça yerel kullanım mı (sistemik kelime yoksa)."""
+    """Does free text (row route or drug name) clearly say local use (with no systemic word)."""
     if text is None or pd.isna(text):
         return False
     t = str(text).upper()
@@ -117,8 +118,8 @@ def _systemic_filter(atcs: list[str], systemic: bool) -> list[str]:
 
 @lru_cache(maxsize=4)
 def load_reference(path: Path | None = None) -> pd.DataFrame:
-    """DDC referansı + ürün başına `atc_codes` (sistemik kurala göre) ve `excluded_route` (etken madde
-    çalışma sınıfında ama yol sistemik değil)."""
+    """DDC reference + per product `atc_codes` (by the systemic rule) and `excluded_route` (active ingredient
+    in a study class but the route is not systemic)."""
     ref = pd.read_csv(path or REFERENCE_PATH, dtype="string", keep_default_na=False, na_values=[""])
     raw_atc = [[] if c in REFERENCE_ERRATA else ingredient_atc(i) for c, i in zip(ref["ddc_code"], ref["ingredients"])]
     systemic = [route_is_systemic(r, f) for r, f in zip(ref["route"], ref["dosage_form"])]
@@ -137,9 +138,9 @@ def _indexes(path: Path | None = None):
     by_sci = {}
     for k, a, e in zip(ref["sci_key"], ref["atc_codes"], ref["excluded_route"]):
         by_sci.setdefault(k, (a, e))
-    # Ticari ad anahtarları: tam ad ("CRESTOR 10MG") + marka kökü ("CRESTOR"). Bir anahtar çalışma dışı bir
-    # ürüne de aitse (aynı ad, başka ilaç) belirsizdir → kullanılmaz. Yalnız yolu yerel olan aynı marka
-    # (göz damlası vb.) belirsizlik sayılmaz; o ayrımı satırın kendi metni (text_is_local) yapar.
+    # Trade name keys: full name ("CRESTOR 10MG") + brand stem ("CRESTOR"). A key that also belongs to a non-study
+    # product (same name, another drug) is ambiguous → not used. The same brand with only a local route (eye
+    # drops etc.) is not ambiguity; the row's own text (text_is_local) makes that distinction.
     kinds: dict[str, set[str]] = {}
     atc_by: dict[str, list[str]] = {}
     for full, a, e in zip(ref["trade_key"], ref["atc_codes"], ref["excluded_route"]):
@@ -155,8 +156,8 @@ def _indexes(path: Path | None = None):
 
 
 def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
-    """DDC ürün kodu (ya da DDC bilimsel kodu) → (durum, ATC listesi).
-    durum: "DDC code" · "DDC scientific code" · "DDC: not a study drug class" · "DDC: non-systemic route" ·
+    """DDC product code (or DDC scientific code) → (status, ATC list).
+    status: "DDC code" · "DDC scientific code" · "DDC: not a study drug class" · "DDC: non-systemic route" ·
     "not a DDC code"."""
     by_code, by_sci, _ = _indexes(path)
     key = norm_code(pd.Series([code])).iloc[0]
@@ -176,8 +177,8 @@ def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, li
 
 
 def lookup_name(name, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
-    """İlaç adı (serbest metin) → (durum, ATC listesi). Ticari ad (DDC, adın başı) + adda geçen etken maddeler.
-    durum: "name: trade name" · "name: ingredient" · "name: trade name + ingredient" · "name: non-systemic" ·
+    """Drug name (free text) → (status, ATC list). Trade name (DDC, start of the name) + active ingredients named.
+    status: "name: trade name" · "name: ingredient" · "name: trade name + ingredient" · "name: non-systemic" ·
     "name: no study drug class"."""
     if name is None or pd.isna(name) or not str(name).strip():
         return "no name", []
@@ -185,7 +186,7 @@ def lookup_name(name, row_route=None, path: Path | None = None) -> tuple[str, li
     norm = _norm_text(name)
     trade: list[str] = by_trade.get(norm, [])
     words = _brand_stem(norm).split()
-    for k in range(min(len(words), 6), 0, -1):          # en uzun marka kökü önce ("CONCOR PLUS" > "CONCOR")
+    for k in range(min(len(words), 6), 0, -1):          # longest brand stem first ("CONCOR PLUS" > "CONCOR")
         if trade:
             break
         trade = by_trade.get(" ".join(words[:k]), [])

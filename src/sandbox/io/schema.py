@@ -1,11 +1,11 @@
-"""Kanonik veri şeması, okuma/yazma ve doğrulama.
+"""Canonical data schema, reading/writing and validation.
 
-Kaynak formatı ne olursa olsun (NABIDH ham CSV, hasta-başı düz dosya, sentetik),
-adapter'lar veriyi buradaki 6 uzun-format tabloya çevirir. Analiz kodu YALNIZCA
-bu şemayı okur.
+Whatever the source format (NABIDH raw CSV, one-row-per-patient flat file, synthetic),
+the adapters turn the data into the 6 long-format tables defined here. Analysis code reads
+ONLY this schema.
 
-Dosya kuralları: UTF-8 CSV, ISO-8601 tarih (YYYY-MM-DD), kodlar text.
-Konum: data/canonical/<source>/<cohort>/<table>.csv
+File rules: UTF-8 CSV, ISO-8601 dates (YYYY-MM-DD), codes as text.
+Location: data/canonical/<source>/<cohort>/<table>.csv
 """
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from pathlib import Path
 
 import pandas as pd
 
-# tip: "str" | "date" | "float"
+# type: "str" | "date" | "float"
 SCHEMA: dict[str, dict[str, tuple[str, bool]]] = {
-    # sütun: (tip, zorunlu)
+    # column: (type, required)
     "patients": {
         "patient_id": ("str", True),
         "sex": ("str", True),                # Male / Female
         "date_of_birth": ("date", True),
-        "ethnicity_raw": ("str", False),     # kaynaktaki en granüler kategori
+        "ethnicity_raw": ("str", False),     # most granular category in the source
         "nationality": ("str", False),
         "facility_id": ("str", False),
     },
@@ -52,7 +52,7 @@ SCHEMA: dict[str, dict[str, tuple[str, bool]]] = {
         "concept": ("str", True),            # bmi, height_cm, weight_kg, waist_cm, smoking_status ...
         "code_system": ("str", False),
         "code": ("str", False),
-        "value": ("str", True),              # sayısal veya kategorik (smoking) → str saklanır
+        "value": ("str", True),              # numeric or categorical (smoking) → stored as str
         "unit": ("str", False),
         "date": ("date", True),
     },
@@ -70,7 +70,7 @@ OPTIONAL_TABLES = ("encounters",)
 
 @dataclass
 class Dataset:
-    """Bir kohortun kanonik tabloları."""
+    """The canonical tables of one cohort."""
     source: str
     cohort: str
     tables: dict[str, pd.DataFrame]
@@ -88,7 +88,7 @@ def cohort_dir(base: Path, source: str, cohort: str) -> Path:
 
 
 def coerce(df: pd.DataFrame, table: str) -> pd.DataFrame:
-    """Sütunları şema tiplerine çevirir; eksik opsiyonel sütunları boş ekler, fazlaları atar."""
+    """Casts columns to the schema types; adds missing optional columns as empty, drops extra ones."""
     out = pd.DataFrame(index=df.index)
     for col, (typ, _req) in SCHEMA[table].items():
         s = df[col] if col in df.columns else pd.Series(pd.NA, index=df.index)
@@ -114,11 +114,11 @@ def write_dataset(ds: Dataset, base: Path) -> Path:
 
 
 def require_cohorts(base: Path, source: str, cohorts, *, require_all: bool = True) -> list[str]:
-    """Kanonik verisi olan kohortlar (`<base>/<source>/<kohort>/patients.csv`).
+    """Cohorts that have canonical data (`<base>/<source>/<cohort>/patients.csv`).
 
-    require_all=True: biri eksikse hata; False: en az biri yeterli (NB0 — Faz 1'de C3 yok). Hata mesajı ne
-    yapılacağını söyler: SANDBOX_SOURCE yanlış (varsayılan 'synthetic'; enclave'de 'nabidh') ya da veri henüz
-    ingest edilmemiş. Böylece notebook ilk hücrede anlaşılır biçimde durur.
+    require_all=True: error if any is missing; False: at least one is enough (NB0 — no C3 in Phase 1). The error
+    message says what to do: SANDBOX_SOURCE is wrong (default 'synthetic'; 'nabidh' in the enclave) or the data
+    has not been ingested yet. So a notebook stops in its first cell with a clear message.
     """
     cohorts = list(cohorts)
     present = [c for c in cohorts if (cohort_dir(base, source, c) / "patients.csv").is_file()]
@@ -128,12 +128,13 @@ def require_cohorts(base: Path, source: str, cohorts, *, require_all: bool = Tru
     base = Path(base)
     others = sorted(p.name for p in base.iterdir() if p.is_dir() and p.name != source) if base.is_dir() else []
     raise FileNotFoundError(
-        f"{base / source} altında {', '.join(missing)} kanonik verisi yok (SANDBOX_SOURCE={source!r}). "
-        f"Kanonik verisi olan diğer kaynaklar: {', '.join(others) or 'yok'}.\n"
-        f"  Kaynak yanlışsa (enclave'de 'nabidh'): terminalde `SANDBOX_SOURCE=nabidh python notebooks/<nb>.py`; "
-        f"Jupyter'de en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekleyip baştan çalıştır; "
-        f"IntelliJ'de '(enclave)' run configuration'ları.\n"
-        f"  Veri henüz yoksa önce: `python tools/ingest_nabidh.py --input iris` (docs/faz1_c1_c2.md).")
+        f"No canonical data for {', '.join(missing)} under {base / source} (SANDBOX_SOURCE={source!r}). "
+        f"Other sources with canonical data: {', '.join(others) or 'none'}.\n"
+        f"  If the source is wrong ('nabidh' in the enclave): in a terminal "
+        f"`SANDBOX_SOURCE=nabidh python notebooks/<nb>.py`; "
+        f"in Jupyter add a `%env SANDBOX_SOURCE=nabidh` cell at the top and run from the start; "
+        f"in IntelliJ the '(enclave)' run configurations.\n"
+        f"  If there is no data yet, first: `python tools/ingest_nabidh.py --input iris` (docs/faz1_c1_c2.md).")
 
 
 def read_dataset(base: Path, source: str, cohort: str) -> Dataset:
@@ -152,12 +153,12 @@ def read_dataset(base: Path, source: str, cohort: str) -> Dataset:
 
 
 # --------------------------------------------------------------------------
-# Doğrulama
+# Validation
 # --------------------------------------------------------------------------
 def validate(ds: Dataset) -> pd.DataFrame:
-    """Şema ve temel veri kalitesi kontrolleri. Her satır bir kontrol sonucudur.
+    """Schema and basic data quality checks. Each row is one check result.
 
-    severity: ERROR (analizi durdurur) / WARN (raporlanır) / INFO
+    severity: ERROR (stops the analysis) / WARN (reported) / INFO
     """
     rows: list[dict] = []
 

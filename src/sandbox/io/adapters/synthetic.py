@@ -1,7 +1,7 @@
-"""Sentetik NABIDH-benzeri ham CSV'ler → kanonik şema.
+"""Synthetic NABIDH-like raw CSVs → canonical schema.
 
-Ham dosyalar (data/synthetic/raw/): patients, encounters, conditions,
-medications, observations, labs. İlk satırda "# SYNTHETIC ..." bandı olabilir.
+Raw files (data/synthetic/raw/): patients, encounters, conditions,
+medications, observations, labs. The first line may carry a "# SYNTHETIC ..." banner.
 """
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from ... import codelists
 from ..schema import Dataset, coerce
 
 
-# Sentetik veride uyruk yok. PARAMS["ethnicity_source"] = "nationality" ile pipeline'ı sınamak için
-# sentetik etnisiteden temsili bir uyruk türetilir (yalnız test; eşleme codelists'te aynı gruba döner).
+# Synthetic data has no nationality. To exercise the pipeline with PARAMS["ethnicity_source"] = "nationality",
+# a representative nationality is derived from the synthetic ethnicity (test only; codelists maps it back to the
+# same group).
 SYNTHETIC_ETHNICITY_TO_NATIONALITY = {
     "Emirati": "United Arab Emirates", "Gulf Arab (non-Emirati)": "Saudi Arabia", "Arab (non-Gulf)": "Egypt",
     "Indian": "India", "Pakistani": "Pakistan", "Bangladeshi": "Bangladesh", "Filipino": "Philippines",
@@ -24,8 +25,8 @@ SYNTHETIC_ETHNICITY_TO_NATIONALITY = {
 
 
 def read_raw_csv(path: Path, sep: str = ",", encoding: str = "utf-8-sig") -> pd.DataFrame:
-    """Başta '#' ile başlayan banner satır(lar)ını atlayarak CSV okur; her şey text.
-    utf-8-sig: Excel'den çıkan dosyalardaki BOM'u temizler (düz UTF-8'i de okur)."""
+    """Reads a CSV, skipping leading banner line(s) starting with '#'; everything as text.
+    utf-8-sig: strips the BOM from files exported by Excel (plain UTF-8 reads too)."""
     skip = 0
     with open(path, encoding=encoding) as fh:
         for line in fh:
@@ -38,7 +39,7 @@ def read_raw_csv(path: Path, sep: str = ",", encoding: str = "utf-8-sig") -> pd.
 
 
 def read_raw_csv_text(text: str, sep: str = ",") -> pd.DataFrame:
-    """read_raw_csv ile aynı kurallar, bellekteki CSV metni için (IRIS sorgu sonucu, io/iris.py)."""
+    """Same rules as read_raw_csv, for CSV text in memory (IRIS query result, io/iris.py)."""
     return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False, na_values=[""], sep=sep)
 
 
@@ -49,7 +50,7 @@ def load(raw_dir: Path) -> Dataset:
 
     enc = r["encounters"].rename(columns={"encounter_date": "date"})
 
-    # Hasta başına en sık tesis (tesis temsili raporu için)
+    # Most frequent facility per patient (for the facility representation report)
     if len(enc):
         main_fac = (enc.dropna(subset=["facility_id"])
                     .groupby(["patient_id", "facility_id"]).size()

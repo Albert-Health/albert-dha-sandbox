@@ -1,5 +1,5 @@
-"""NABIDH adapter'ı (teslim yapısı: Patient, tanı, Observation, SocialHistory, FamilyHistory, Medication)
-ve uyruk → etnik grup eşlemesi için testler. Ham dosyalar geçici klasörde elle üretilir."""
+"""Tests for the NABIDH adapter (delivery layout: Patient, diagnosis, Observation, SocialHistory, FamilyHistory,
+Medication) and the nationality → ethnic group mapping. Raw files are hand-made in a temporary folder."""
 import copy
 import sys
 import tempfile
@@ -25,14 +25,14 @@ def _csv(d: Path, name: str, header: str, rows: list[str], encoding="utf-8"):
 
 def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="SocialHabitCategory_Code",
               drug_code=True):
-    """HSAA view'larının biçimi (enclave, 2026-11-18): Patient.ID = diğer view'larda Patient; yaş var, doğum
-    tarihi yok. social_item / drug_code: C2'deki farklar (kategori açıklaması, ilaç kodu yok)."""
-    # BOM'lu dosya (Excel çıktısı) + karışık cinsiyet yazımı
+    """Shape of the HSAA views (enclave, 2026-11-18): Patient.ID = Patient in the other views; age present, no date
+    of birth. social_item / drug_code: the C2 differences (category description, no drug code)."""
+    # File with a BOM (Excel export) + mixed sex spellings
     _csv(d, "patients.csv", "ID,Age,Gender_Code,EthnicGroup_Description,Nationality", [
         "A1,56,M,,United Arab Emirates",
         "A2,46,female,,IND",
         "A3,51,F,,Iran",
-        "A4,abc,MALE,,",                             # yaş sayı değil → doğum tarihi yok
+        "A4,abc,MALE,,",                             # age not a number → no date of birth
     ], encoding="utf-8-sig")
     _csv(d, "diagnoses.csv", "Patient,Diagnosis_Code,Diagnosis_Description,DiagnosisDate", [
         f"A1,E11.9,T2D,{diag_date}",
@@ -51,32 +51,32 @@ def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="So
     ])
     _csv(d, "social_history.csv", f"Patient,{social_item},SocialHabitQty_Description,EnteredOn", social_rows or [
         "A1,Smoking,Never smoker,2018-01-01",
-        "A1,Smoking,unknown,2020-01-01",             # bilgisiz → önceki 'never' korunur
+        "A1,Smoking,unknown,2020-01-01",             # uninformative → the earlier 'never' is kept
         "A2,Smoking,Current every day smoker,2019-01-01",
         "A3,Smoking,Ex-smoker,2019-01-01",
-        "A4,Smoking,weird value,2019-01-01",         # eşlenemez
+        "A4,Smoking,weird value,2019-01-01",         # cannot be mapped
     ])
     _csv(d, "family_history.csv", "Patient,Diagnosis_Code,Diagnosis_Description,FamilyMember_Description,EnteredOn", [
         "A1,E11,Diabetes mellitus type 2,Mother,2018-01-01",
-        "A1,I10,Hypertension,Father,2018-01-01",     # diyabet değil → atılır
-        "A2,,Diabetes,Uncle,2018-01-01",             # yalnız açıklama; ikinci derece → pozitif sayılmaz
-        "A3,E11.9,,,2018-01-01",                     # yalnız kod; akrabalık yok → birinci derece sayılır
+        "A1,I10,Hypertension,Father,2018-01-01",     # not diabetes → dropped
+        "A2,,Diabetes,Uncle,2018-01-01",             # description only; second degree → not counted positive
+        "A3,E11.9,,,2018-01-01",                     # code only; no relationship → counted as first degree
     ])
     if drug_code:
         _csv(d, "medications.csv", "Patient,DrugProduct_Code,DrugProduct_Description,FromTime,Route_Description", [
-            "A2,c09aa02,Enalapril,2019-02-01,Oral",                  # ATC biçiminde (küçük harf)
-            "A1,0321-164101-0391,GLUCOPHAGE,2021-02-01,Oral",         # DDC ürün kodu → metformin
-            "A3,00136271010391,IMPRIDA 5MG/160MG,2020-03-01,Oral",    # DDC (tiresiz), kombinasyon → 2 satır
-            "A3,0169-120501-0371,APIMOL,2020-03-01,Ocular",           # timolol göz damlası → sınıf yok
-            "A2,0006-106607-1161,PANADOL,2019-02-01,Oral",            # parasetamol → çalışma sınıfı değil
-            "A1,Metformin,Metformin,2021-02-01,Oral",                 # kod tanınmaz → addan
-            "A4,XYZ-1,Unknown tablet,2021-02-01,Oral",                # ne kod ne ad → raporlanır, düşer
+            "A2,c09aa02,Enalapril,2019-02-01,Oral",                  # ATC-shaped (lower case)
+            "A1,0321-164101-0391,GLUCOPHAGE,2021-02-01,Oral",         # DDC product code → metformin
+            "A3,00136271010391,IMPRIDA 5MG/160MG,2020-03-01,Oral",    # DDC (no dashes), combination → 2 rows
+            "A3,0169-120501-0371,APIMOL,2020-03-01,Ocular",           # timolol eye drops → no class
+            "A2,0006-106607-1161,PANADOL,2019-02-01,Oral",            # paracetamol → not a study class
+            "A1,Metformin,Metformin,2021-02-01,Oral",                 # code not recognised → from the name
+            "A4,XYZ-1,Unknown tablet,2021-02-01,Oral",                # neither code nor name → reported, dropped
         ])
     else:
         _csv(d, "medications.csv", "Patient,DrugProduct_Description,FromTime,Route_Description", [
-            "A2,Enalapril,2019-02-01,Oral",                          # etken madde adı
-            "A1,GLUCOPHAGE XR 500MG,2021-02-01,Oral",                # DDC ticari adı (marka kökü)
-            "A3,BETNOVATE CREAM,2020-01-01,Topical",                 # yerel steroid → sınıf yok
+            "A2,Enalapril,2019-02-01,Oral",                          # active ingredient name
+            "A1,GLUCOPHAGE XR 500MG,2021-02-01,Oral",                # DDC trade name (brand stem)
+            "A3,BETNOVATE CREAM,2020-01-01,Topical",                 # topical steroid → no class
         ])
 
 
@@ -103,7 +103,7 @@ class TestAdapter(unittest.TestCase):
         self.assertEqual(p["A1"], (ref - pd.Timedelta(days=56.5 * 365.25)).normalize())
         age_at_ref = (ref - p["A1"]).days / 365.25
         self.assertTrue(56 <= age_at_ref < 57)
-        self.assertTrue(pd.isna(p["A4"]))                         # "abc" → NaT, raporlanır
+        self.assertTrue(pd.isna(p["A4"]))                         # "abc" → NaT, reported
         vc = pd.DataFrame(self.rep["value_counts"])
         derived = vc[vc["field"] == "date_of_birth"]
         self.assertEqual(int(derived["n_rows"].iloc[0]), 3)
@@ -159,10 +159,10 @@ class TestAdapter(unittest.TestCase):
     def test_snapshot_uses_family_and_social_history(self):
         ref = pd.Series(pd.Timestamp("2022-12-31"), index=["A1", "A2", "A3", "A4"])
         s = phenotype.core_snapshot(self.ds, ref, None, dict(PARAMS, c1_require_fh_record=True))
-        self.assertEqual(s.loc["A1", "smoking_raw"], "never")       # sonraki 'unknown' ezmez
+        self.assertEqual(s.loc["A1", "smoking_raw"], "never")       # a later 'unknown' does not override
         self.assertEqual(s.loc["A2", "smoking_raw"], "current")
         self.assertEqual(s.loc["A3", "smoking_raw"], "ex")
-        self.assertFalse(s.loc["A4", "ok_smoking"])                 # eşlenemeyen değer = eksik
+        self.assertFalse(s.loc["A4", "ok_smoking"])                 # unmapped value = missing
         self.assertEqual(list(s["family_history"]), [True, False, True, False])
         self.assertEqual(list(s["family_history_recorded"]), [True, True, True, False])
         self.assertEqual(list(s["ok_family_history"]), [True, True, True, False])
@@ -192,10 +192,10 @@ class TestAdapterOptions(unittest.TestCase):
             ds, _ = nabidh.load(d, "c1")
         p = ds["patients"].set_index("patient_id")["date_of_birth"]
         self.assertEqual(p["A1"], pd.Timestamp("1970-01-01"))
-        self.assertTrue(pd.notna(p["A2"]))                         # BirthDate boş → yaştan
+        self.assertTrue(pd.notna(p["A2"]))                         # BirthDate empty → from age
 
     def test_c2_shape(self):
-        """C2: sigara kategorisi açıklama sütununda, ilaç kodu yok. Eşleme yine çalışmalı."""
+        """C2: smoking category in the description column, no drug code. The mapping must still work."""
         rows = ["A1,Tobacco,Never smoker,2018-01-01", "A1,Alcohol,Yes,2018-01-01"]
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -206,7 +206,7 @@ class TestAdapterOptions(unittest.TestCase):
         sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"]
         self.assertEqual(list(sm["value"]), ["never"])
         self.assertEqual(rep["sources"]["social_history"]["filtered_out_by_item"], 1)
-        m = ds["medications"]                                       # kod yok → ilaç adından (DDC + etken madde)
+        m = ds["medications"]                                       # no code → from the drug name (DDC + active ingredient)
         self.assertEqual(sorted(zip(m["patient_id"], m["atc_code"])), [("A1", "A10BA02"), ("A2", "C09AA02")])
         self.assertIn("atc_code", rep["sources"]["medications"]["absent_optional_columns"])
         vc = pd.DataFrame(rep["value_counts"])
@@ -231,7 +231,7 @@ class TestAdapterOptions(unittest.TestCase):
             write_raw(d, social_rows=rows)
             src = copy.deepcopy(nabidh.SOURCES)
             src["social_history"]["filter"] = None
-            with self.assertRaises(ValueError):                    # filtre yok → hangi kalem sigara, bilinmez
+            with self.assertRaises(ValueError):                    # no filter → which item is smoking is unknown
                 nabidh.load(d, "c1", src)
             src["social_history"]["filter"] = {"item": ["smoking"]}
             ds, rep = nabidh.load(d, "c1", src)
@@ -240,11 +240,11 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertEqual(rep["sources"]["social_history"]["filtered_out_by_item"], 1)
 
     def test_social_history_c1_categories(self):
-        """C1 kalemleri (enclave ingest, 2026-11-19): varsayılan filtre tütün kalemlerini birlikte alır."""
+        """C1 items (enclave ingest, 2026-11-19): the default filter takes the tobacco items together."""
         rows = ["A1,Smoking,Never smoker,2018-01-01", "A2,Cigarettes,Current smoker,2019-01-01",
                 "A3,\"Cigarettes,Cigars\",Ex-smoker,2019-01-01", "A4,Cigars,10 per day,2019-01-01",
                 "A2,Other,Yes,2019-01-01", "A3,Unknown,Yes,2019-01-01", "A4,Beverages,Tea,2019-01-01"]
-        rows += [f"A1,ALCOHOL,No,2018-01-{i:02d}" for i in range(1, 13)]           # 12 satır: etiket adı basılır
+        rows += [f"A1,ALCOHOL,No,2018-01-{i:02d}" for i in range(1, 13)]           # 12 rows: label name is printed
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d, social_rows=rows)
@@ -254,13 +254,13 @@ class TestAdapterOptions(unittest.TestCase):
                          {"A1": "never", "A2": "current", "A3": "ex", "A4": "unmapped:10 per day"})
         info = rep["sources"]["social_history"]
         self.assertEqual(info["filtered_out_by_item"], 15)
-        self.assertEqual(info["filtered_out_values_item"], "ALCOHOL (12), +3 etiket < 10 satır")
+        self.assertEqual(info["filtered_out_values_item"], "ALCOHOL (12), +3 labels < 10 rows")
         vc = pd.DataFrame(rep["value_counts"])
         shown = set(vc.loc[vc["field"] == "value → canonical", "value"])
-        self.assertIn("Cigars | 10 per day → unmapped:10 per day", shown)   # eşlenemeyen değerin kalemi görünür
+        self.assertIn("Cigars | 10 per day → unmapped:10 per day", shown)   # the item of the unmapped value is shown
 
     def test_smoking_intensity_values(self):
-        """NABIDH SocialHabitQty (2026-11-19): yoğunluk değerleri; 'other' eşlenmez (eksik, D7)."""
+        """NABIDH SocialHabitQty (2026-11-19): intensity values; 'other' is not mapped (missing, D7)."""
         vals = {"A1": "Low", "A2": "medium", "A3": "HIGH", "A4": "occasional"}
         rows = [f"{p},Smoking,{v},2019-01-01" for p, v in vals.items()]
         rows += ["A1,Smoking,rare,2019-02-01", "A2,Smoking,other,2019-02-01"]
@@ -275,14 +275,14 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertEqual(nabidh.FH_RELATION_DEGREE["1st degree relative"], "first")
 
     def test_family_history_text(self):
-        """FamilyHistory'de durum sütunu yok: olumsuzlama ve akraba derecesi açıklama metninden (2026-11-19)."""
+        """FamilyHistory has no status column: negation and relative degree from the description text (2026-11-19)."""
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d)
             _csv(d, "family_history.csv", "Patient,Diagnosis_Code,Diagnosis_Description,FamilyMember_Description,EnteredOn", [
                 "A1,44054006,No History Of Diabetes mellitus type 2 (disorder),Father,2020-01-01",
                 "A2,88750,Maternal aunt and uncle have Diabetes mellitus,Parent,2020-01-01",
-                "A3,Diabetes,Diabetes,Mother,",                       # kod sütununda metin, tarih yok
+                "A3,Diabetes,Diabetes,Mother,",                       # text in the code column, no date
                 "A4,2,DIABETIC,Father,2020-01-01",
                 "A4,73211009,Diabetes mellitus (disorder),Grandmother and mother,2020-01-01",
             ])
@@ -290,12 +290,12 @@ class TestAdapterOptions(unittest.TestCase):
         fh = ds["observations"][ds["observations"]["concept"] == "family_history_dm"]
         self.assertEqual(list(zip(fh["patient_id"], fh["value"])),
                          [("A1", "negative"), ("A2", "positive_non_first_degree"), ("A3", "positive"),
-                          ("A4", "positive"), ("A4", "positive")])               # metinde anne de var → birinci
+                          ("A4", "positive"), ("A4", "positive")])               # text also names the mother → first degree
         vc = pd.DataFrame(rep["value_counts"])
         self.assertEqual(set(vc.loc[vc["field"] == "condition_text negated → negative", "value"]),
                          {"No History Of Diabetes mellitus type 2 (disorder)"})
 
-        # D27 (2026-11-19): aile öyküsü var / yok — tarihsiz ve referans sonrası kayıt da sayılır
+        # D27 (2026-11-19): family history yes / no — undated and post-reference records count too
         ref = pd.Series(pd.Timestamp("2019-12-31"), index=["A1", "A2", "A3", "A4"])
         s = phenotype.core_snapshot(ds, ref, None)
         self.assertEqual(list(s["family_history"]), [False, False, True, True])
@@ -308,8 +308,8 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertEqual((obs_date["severity"], obs_date["n_affected"]), ("INFO", 0))
 
     def test_family_history_code_first(self):
-        """NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): SNOMED, ICD-10, kod sütununda metin, yerel numara.
-        Önce kod, sonra metin; prediyabet diyabet aile öyküsü değil."""
+        """NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): SNOMED, ICD-10, text in the code column, local number.
+        Code first, then text; prediabetes is not a diabetes family history."""
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d)
@@ -338,7 +338,7 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertEqual(list(non["value"]), ["5 | Hypertension"])
 
     def test_filter_that_drops_everything_stops(self):
-        """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""
+        """If C2 item names differ, smoking must not end up silently empty: ingest stops and prints the items."""
         rows = [f"A{1 + i % 4},Tobacco use,Never,2018-01-{1 + i:02d}" for i in range(11)] + ["A1,Alcohol,No,2018-02-01"]
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -346,13 +346,13 @@ class TestAdapterOptions(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 nabidh.load(d, "c2")
         msg = str(cm.exception)
-        self.assertIn("bütün satırları eledi", msg)
+        self.assertIn("removed every row", msg)
         self.assertIn("Tobacco use (11)", msg)
-        self.assertIn("+1 etiket < 10 satır", msg)                    # Alcohol: 1 satır, adı basılmaz
+        self.assertIn("+1 labels < 10 rows", msg)                     # Alcohol: 1 row, name not printed
 
 
 class TestLabResults(unittest.TestCase):
-    """LabResultItem view'ı (C1 DDL, 2026-11-19): lab'lar birimiyle burada; Observation'da lab kodu yok."""
+    """LabResultItem view (C1 DDL, 2026-11-19): labs with units live here; Observation has no lab codes."""
 
     @classmethod
     def setUpClass(cls):
@@ -362,15 +362,15 @@ class TestLabResults(unittest.TestCase):
         hba1c = [f"P{i},Encounter{i},2021-0{1 + i % 9}-01,{5.0 + 0.2 * i:.1f},%,4548-4,HbA1c" for i in range(12)]
         _csv(d, "lab_results.csv", "Patient,Encounter,ResultDate,ResultValue,ResultValueUnits,TestItemCode_Code,"
                                    "TestItemCode_Description", hba1c + [
-            "A3,E1,2020-02-01,42,mmol/mol,59261-8,HbA1c IFCC",          # IFCC → % (6,0)
-            "A2,E2,2020-02-01,6.1,mmol/L,1558-6,Glucose fasting",       # mmol/L → mg/dL (109,9)
-            "A2,E2,2020-02-01,190,mg/dL,2093-3,Cholesterol",            # çalışma lab'ı değil → düşer
-            "A1,E3,2021-04-01,6.9,%,LOC-77,Glycated haemoglobin",       # yerel kodlu HbA1c → düşer, ayrı listede
-            "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # sayı değil, birim yok
-            "A1,E5,2021-05-01,140,mg/dL,4548-4,EAG (ESTIMATED AVERAGE GLUCOSE)",   # HbA1c kodu, eAG → düşer
-            "A2,E6,2021-05-01,180,mg/dL,1558-6,BLOOD SUGAR -RBS",       # açlık kodu, rastgele → düşer
-            "P1,E7,2021-05-01,150,mg/dL,1521-4,GLUCOSE POST PRANDIAL (PPBS)",      # tutulur (not: OGTT değil)
-            "A4,E8,2021-06-01,48,,4548-4,HbA1c",                        # birimsiz, mmol/mol gibi → aralık dışı, tutulur
+            "A3,E1,2020-02-01,42,mmol/mol,59261-8,HbA1c IFCC",          # IFCC → % (6.0)
+            "A2,E2,2020-02-01,6.1,mmol/L,1558-6,Glucose fasting",       # mmol/L → mg/dL (109.9)
+            "A2,E2,2020-02-01,190,mg/dL,2093-3,Cholesterol",            # not a study lab → dropped
+            "A1,E3,2021-04-01,6.9,%,LOC-77,Glycated haemoglobin",       # locally coded HbA1c → dropped, listed apart
+            "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # not a number, no unit
+            "A1,E5,2021-05-01,140,mg/dL,4548-4,EAG (ESTIMATED AVERAGE GLUCOSE)",   # HbA1c code, eAG → dropped
+            "A2,E6,2021-05-01,180,mg/dL,1558-6,BLOOD SUGAR -RBS",       # fasting code, random → dropped
+            "P1,E7,2021-05-01,150,mg/dL,1521-4,GLUCOSE POST PRANDIAL (PPBS)",      # kept (note: not OGTT)
+            "A4,E8,2021-06-01,48,,4548-4,HbA1c",                        # no unit, looks like mmol/mol → out of range, kept
         ])
         cls.ds, cls.rep = nabidh.load(d, "c1")
         cls.vc = pd.DataFrame(cls.rep["value_counts"])
@@ -391,7 +391,7 @@ class TestLabResults(unittest.TestCase):
         self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 17})
         self.assertNotIn("2093-3", set(labs["loinc"]))
         self.assertNotIn("LOC-77", set(labs["loinc"]))
-        self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # gözlem değil
+        self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # not an observation
 
     def test_units_converted_in_phenotype(self):
         g = phenotype.glycaemic_events(self.ds).set_index(["patient_id", "date"])
@@ -411,13 +411,13 @@ class TestLabResults(unittest.TestCase):
                          {"4548-4 | mg/dL | EAG (ESTIMATED AVERAGE GLUCOSE)", "1558-6 | mg/dL | BLOOD SUGAR -RBS"})
         self.assertEqual(self.field("rows dropped: study code, other test by name"), {"<n rows>": 2})
         g = phenotype.glycaemic_events(self.ds)
-        self.assertFalse((g["kind"].eq("hba1c") & g["value"].eq(140)).any())   # eAG HbA1c sanılmadı
+        self.assertFalse((g["kind"].eq("hba1c") & g["value"].eq(140)).any())   # eAG not taken for HbA1c
         self.assertEqual(self.field("lab value non-numeric (raw)"), {"<2.8": 1})
 
     def test_value_outside_plausible_range_is_reported_and_kept(self):
         self.assertEqual(self.field("value outside plausible range"), {"hba1c | <no unit> : outside 3–20 % (kept)": 1})
         labs = self.ds["labs"]
-        self.assertTrue((labs["patient_id"].eq("A4") & labs["value"].eq(48)).any())    # eleme kararı yok, K11
+        self.assertTrue((labs["patient_id"].eq("A4") & labs["value"].eq(48)).any())    # no exclusion decision, K11
         rng = nabidh.lab_range_class(pd.Series(["hba1c", "hba1c", "hba1c_ifcc", "fpg", "ogtt_2h"]),
                                      pd.Series(["%", "mmol/mol", None, "mmol/L", None]))
         self.assertEqual(list(rng), ["hba1c %", "hba1c mmol/mol", "hba1c mmol/mol", "glucose mmol/L", "glucose mg/dL"])
@@ -449,12 +449,12 @@ class TestNationality(unittest.TestCase):
         snap = pd.DataFrame({"sex": "Male", "age": 45, "ethnicity": g, "family_history": False,
                              "waist_cm": 95, "bmi": 27, "htn_lrs": False, "htn_med": False})
         pts = lrs.score_assessment_2010(snap)["lrs_ethnicity"]
-        self.assertEqual(list(pts.fillna(-1)), [6, 6, 6, 0, -1])     # kayıtsız → LRS hesaplanmaz
-        bme = lrs.score(snap)["lrs_ethnicity"]                         # varsayılan LPRS: BME katsayısı
+        self.assertEqual(list(pts.fillna(-1)), [6, 6, 6, 0, -1])     # not recorded → LRS not computed
+        bme = lrs.score(snap)["lrs_ethnicity"]                         # default LPRS: BME coefficient
         self.assertEqual(list(bme.fillna(-1).round(7)), [0.7565977] * 3 + [0.0, -1])
 
     def test_qd_unchanged_for_group_labels(self):
-        # Aynı etnik grup etiketi → aynı QDiabetes riski (uyruk yolu skoru değiştirmez)
+        # Same ethnic group label → same QDiabetes risk (the nationality path does not change the score)
         base = dict(sex="Female", age=50, bmi=30, smoking_cat=0.0, smoking_raw="never", family_history=False,
                     cvd=False, htn_treated_qd=False, corticosteroid=False, apsy=False, statin=False, psy=False,
                     learn=False, gdm=False, pcos=False)
