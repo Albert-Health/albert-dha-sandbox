@@ -808,6 +808,29 @@ def failure_lines(lines: list[str]) -> list[str]:
     return out
 
 
+# İlaç → ATC özeti (ingest value_counts, kaynak "medications"): (alan, en çok satır, küçük değeri gizle).
+# Kod / ad listelerinde < 10 satırda geçen değer basılmaz; sayımlar dosyada zaten bastırılmış.
+MED_FIELDS = [
+    ("drug → ATC method", 20, False), ("rows dropped: no study drug class", 1, False),
+    ("combination products (rows → several ATC rows)", 1, False), ("ATC (3 chars) after mapping", 20, False),
+    ("drug code not ATC/DDC", 10, True), ("ATC ← drug_name (name match)", 15, True),
+    ("drug_name without study drug class", 15, True),
+]
+
+
+def medication_summary(v):
+    import pandas as pd
+
+    v = v[v["source"].eq("medications")]
+    parts = []
+    for field, top, hide_small in MED_FIELDS:
+        x = v[v["field"].eq(field)]
+        if hide_small:
+            x = x[~x["n_rows"].astype(str).str.startswith("<")]
+        parts.append(x.head(top))
+    return pd.concat(parts)[["field", "value", "n_rows"]] if parts else v
+
+
 def summary_ingest(d: Path, out: Block, a) -> None:
     import pandas as pd
     from sandbox import sdc
@@ -835,11 +858,15 @@ def summary_ingest(d: Path, out: Block, a) -> None:
                 out.table(safe_table(v), a.max_rows)
         vc = d / "ingest" / f"{c}_value_counts.csv"
         if vc.is_file():
-            v = pd.read_csv(vc, dtype=str)
-            v = v[v["value"].str.contains("unmapped", na=False)]
+            v_all = pd.read_csv(vc, dtype=str)
+            v = v_all[v_all["value"].str.contains("unmapped", na=False)]
             if len(v):
                 out("   eşlenemeyen değerler (adapter sözlüklerine eklenecek; < 10 bastırılmış):")
                 out.table(v, a.max_rows)
+            m = medication_summary(v_all)
+            if len(m):
+                out("   ilaç → ATC (DDC kodu / ilaç adı; kod ve ad listelerinde < 10 satırlık değer yok):")
+                out.table(m, a.max_rows)
 
 
 def summary_tables(step: str):

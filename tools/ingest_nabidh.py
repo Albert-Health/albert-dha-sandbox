@@ -41,7 +41,7 @@ from sandbox import sdc  # noqa: E402
 from sandbox.audit import Run  # noqa: E402
 from sandbox.config import CANONICAL_DIR, COHORTS, DATA_DIR, PARAMS, RAW_DIR  # noqa: E402
 from sandbox.io import iris, schema  # noqa: E402
-from sandbox.io.adapters import nabidh  # noqa: E402
+from sandbox.io.adapters import ddc, nabidh  # noqa: E402
 
 
 def main(argv=None) -> int:
@@ -110,6 +110,7 @@ def main(argv=None) -> int:
     else:
         run.log("ingest start", input="files", raw_root=str(raw_root), cohorts=cohorts)
 
+    run.add_inputs([ddc.REFERENCE_PATH])           # ilaç kodu / adı → ATC referansı (DDC listesi)
     try:
         n_errors = _ingest(run, a, cohorts, raw_root, conn, target, snap_root)
     finally:

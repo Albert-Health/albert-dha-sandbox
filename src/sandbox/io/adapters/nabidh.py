@@ -31,7 +31,9 @@ Kaynak türleri (kind) → kanonik tablo:
   patients        → patients (cinsiyet SEX_MAP ile Male / Female)
   conditions      → conditions (kod sistemi ICD-10 / SNOMED olarak normalize)
   measurements    → labs + observations (codelists.LOINC_LAB'daki kodlar lab, diğerleri gözlem)
-  labs, observations, medications, encounters → doğrudan
+  medications     → medications; ATC yoksa DDC ürün kodu / ilaç adı → ATC (io/adapters/ddc.py,
+                    src/sandbox/reference/ddc.csv.gz); kombinasyon → etken madde başına satır
+  labs, observations, encounters → doğrudan
   smoking         → observations, concept = smoking_status; değer SMOKING_VALUES ile
                     never / ex / current / light / moderate / heavy / unknown
   family_history  → observations, concept = family_history_dm; değer positive / negative /
@@ -40,12 +42,14 @@ Bir kanonik tabloyu birden çok kaynak besleyebilir (ör. Observation + SocialHi
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
 
 from ... import codelists
 from .. import iris
+from . import ddc
 from ..schema import SCHEMA, TABLES, Dataset, coerce
 from .synthetic import read_raw_csv
 
@@ -123,6 +127,7 @@ SOURCES: dict[str, dict] = {
     "medications": {
         "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
         "columns": {"patient_id": "Patient", "date": "FromTime"},
+        # atc_code ← DrugProduct_Code: ATC ya da DDC ürün kodu (C1); C2'de yok → ad (DrugProduct_Description)
         "optional_columns": {"atc_code": "DrugProduct_Code", "drug_name": "DrugProduct_Description",
                              "route": "Route_Description"},
     },
@@ -396,19 +401,58 @@ def _h_family_history(df, name, vc):
     return {"observations": out}
 
 
+ATC_LIKE = re.compile(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$")
+
+
+def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
+    """Tek ilaç kaydı → (yöntem, ATC listesi). Kod ATC biçimindeyse olduğu gibi; DDC ürün / bilimsel koduysa
+    DDC referansından (kod tanınırsa son söz koddadır); kod yoksa ya da tanınmazsa ilaç adından."""
+    if code is not None:
+        if ATC_LIKE.match(code):
+            return "ATC code", [code]
+        how, atcs = ddc.lookup_code(code, route)
+        if how != "not a DDC code":
+            return how, atcs
+        if drug is None:
+            return "code not ATC/DDC, no name", []
+        how, atcs = ddc.lookup_name(drug, route)
+        return "code not ATC/DDC → " + how, atcs
+    if drug is None:
+        return "no code, no name", []
+    return ddc.lookup_name(drug, route)
+
+
 def _h_medications(df, name, vc):
-    raw = df["atc_code"] if "atc_code" in df else pd.Series(pd.NA, index=df.index)   # C2: kod sütunu yok
-    code = raw.astype("string").str.strip().str.upper().replace("", pd.NA)
-    not_atc = code.notna() & ~code.str.match(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$", na=False)
-    vc += _value_counts(name, "atc_code not ATC-like", code[not_atc], top=30)
-    vc += _value_counts(name, "atc_code prefix", code.str.slice(0, 3))
-    if "drug_name" in df:                           # ATC'siz kayıtlar: ilaç sınıfı eşlemesi için adlar
-        vc += _value_counts(name, "drug_name without ATC code", df.loc[code.isna() | not_atc, "drug_name"], top=50)
-    df["atc_code"] = code
-    if code.isna().any():                           # kodsuz satır kanonik tabloya giremez (atc_code zorunlu)
-        vc.append({"source": name, "field": "rows dropped: no drug code", "value": "<missing>",
-                   "n_rows": int(code.isna().sum())})
-    return {"medications": df[code.notna()]}
+    """İlaç → ATC (io/adapters/ddc.py). C1: DrugProduct_Code = DDC ürün kodu; C2: kod yok, DrugProduct_Description
+    (ad) → DDC ticari adı + etken madde. Kombinasyon ürünü → etken madde başına bir satır. Çalışma ilaç sınıfına
+    düşmeyen kayıt kanonik tabloya girmez (atc_code zorunlu); kaçının neden düştüğü value_counts'ta."""
+    empty = pd.Series(pd.NA, index=df.index, dtype="string")
+    code = (df["atc_code"] if "atc_code" in df else empty).astype("string").str.strip().str.upper().replace("", pd.NA)
+    drug = (df["drug_name"] if "drug_name" in df else empty).astype("string").str.strip().replace("", pd.NA)
+    route = (df["route"] if "route" in df else empty).astype("string").str.strip().replace("", pd.NA)
+    keys = list(zip(*([None if pd.isna(x) else str(x) for x in s] for s in (code, drug, route))))
+    cache = {k: _resolve_drug(*k) for k in set(keys)}
+    how = pd.Series([cache[k][0] for k in keys], index=df.index, dtype="string")
+    atcs = pd.Series([cache[k][1] for k in keys], index=df.index, dtype=object)
+    n_atc = atcs.map(len)
+
+    vc += _value_counts(name, "drug → ATC method", how)
+    unknown = how.str.startswith("code not ATC/DDC").fillna(False).astype(bool)
+    vc += _value_counts(name, "drug code not ATC/DDC", code[unknown], top=30)
+    by_name = how.str.contains("name: ", regex=False).fillna(False).astype(bool)
+    hit = by_name & (n_atc > 0)
+    vc += _value_counts(name, "ATC ← drug_name (name match)", atcs[hit].str.join("+") + " ← " + drug[hit], top=50)
+    vc += _value_counts(name, "drug_name without study drug class", drug[by_name & (n_atc == 0)], top=50)
+    if (n_atc > 1).any():
+        vc.append({"source": name, "field": "combination products (rows → several ATC rows)", "value": "<n rows>",
+                   "n_rows": int((n_atc > 1).sum())})
+    if (n_atc == 0).any():                          # atc_code zorunlu → sınıfsız kayıt kanonik tabloya girmez
+        vc.append({"source": name, "field": "rows dropped: no study drug class", "value": "<no ATC>",
+                   "n_rows": int((n_atc == 0).sum())})
+    out = df.assign(atc_code=atcs).explode("atc_code")
+    out = out[out["atc_code"].notna()].reset_index(drop=True)
+    vc += _value_counts(name, "ATC (3 chars) after mapping", out["atc_code"].astype("string").str.slice(0, 3))
+    return {"medications": out}
 
 
 def _passthrough(table):

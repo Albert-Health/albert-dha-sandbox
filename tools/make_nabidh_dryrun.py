@@ -7,6 +7,8 @@ Amaç: tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) zincirini NABIDH adapter
 - Diagnosis (yalnız ICD-10, Z83.3 dahil), Observation (HbA1c, FPG, OGTT, BMI, boy, kilo — LOINC; birim
   sütunu yok), SocialHistory (sigara), FamilyHistory (diyabet), Medication; Encounter yalnız C3
 - C2 farkları: SocialHabitCategory_Description (_Code değil), Medication'da DrugProduct_Code yok
+- Medication: C1'de DrugProduct_Code = DDC ürün kodu, C2'de DrugProduct_Description = DDC ticari adı (sentetik
+  ilaç adına uyan tek etken maddeli, sistemik bir DDC ürünü; io/adapters/ddc.py eşlemesi böylece prova edilir)
 - verilmeyenler: bel çevresi, diğer vital'ler, random glukoz
 SENTETİK — gerçek hasta verisi değildir. Dosyaların ilk satırı bunu belirtir.
 
@@ -34,7 +36,7 @@ from sandbox import codelists  # noqa: E402
 from sandbox.audit import Run  # noqa: E402
 from sandbox.config import CANONICAL_DIR, COHORTS, DATA_DIR  # noqa: E402
 from sandbox.io import iris, schema  # noqa: E402
-from sandbox.io.adapters import nabidh  # noqa: E402
+from sandbox.io.adapters import ddc, nabidh  # noqa: E402
 
 OUT_ROOT = DATA_DIR / "nabidh_dryrun" / "raw"
 IRIS_ROOT = DATA_DIR / "nabidh_dryrun" / "iris"
@@ -59,6 +61,21 @@ def _age(dob: pd.Series, ref: pd.Timestamp) -> pd.Series:
     """Referans günündeki tam yıl yaş."""
     before = (dob.dt.month > ref.month) | ((dob.dt.month == ref.month) & (dob.dt.day > ref.day))
     return (ref.year - dob.dt.year - before.astype(int)).astype("Int64")
+
+
+def ddc_products(drug_names: pd.Series) -> pd.DataFrame:
+    """Sentetik ilaç adı ("Insulin glargine") → aynı etken maddeyi içeren tek etken maddeli, sistemik bir DDC
+    ürünü (kod + ticari ad). Bulunamazsa ad için kod ATC olarak kalır."""
+    ref = ddc.load_reference()
+    cand = ref[(ref["atc_codes"].str.len() == 1) & ~ref["ingredients"].str.contains("/", na=False)]
+    cand = cand.sort_values(["status", "ddc_code"])            # Active önce, sonra kod sırası (deterministik)
+    rows = []
+    for name in sorted(drug_names.dropna().unique()):
+        words = name.upper().split()
+        m = cand[cand["ingredients"].map(lambda i: all(w in i.split() or w in i for w in words))]
+        if len(m):
+            rows.append({"drug_name": name, "ddc_code": m["ddc_code"].iloc[0], "trade_name": m["trade_name"].iloc[0]})
+    return pd.DataFrame(rows, columns=["drug_name", "ddc_code", "trade_name"])
 
 
 def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
@@ -95,11 +112,16 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "ID": range(1, len(fh) + 1), "EnteredOn": _d(fh["date"]), "Patient": fh["patient_id"],
         "Diagnosis_Code": fh["code"], "Diagnosis_Description": "Diabetes mellitus", "FamilyMember_Description": pd.NA})
 
+    prod = ddc_products(meds["drug_name"]).set_index("drug_name")
+    code = meds["drug_name"].map(prod["ddc_code"]).fillna(meds["atc_code"])
     med = pd.DataFrame({
         "ID": range(1, len(meds) + 1), "FromTime": _d(meds["date"]), "Patient": meds["patient_id"],
-        "ToTime": pd.NA, "DrugProduct_Code": meds["atc_code"], "DrugProduct_Description": meds["drug_name"],
+        "ToTime": pd.NA, "DrugProduct_Code": code, "DrugProduct_Description": meds["drug_name"],
         "Route_Description": meds["route"]})
-    out["medications.csv"] = med.drop(columns=["DrugProduct_Code"]) if cohort == "c2" else med
+    if cohort == "c2":                                         # kod yok; ad = DDC ticari adı
+        med["DrugProduct_Description"] = meds["drug_name"].map(prod["trade_name"]).fillna(meds["drug_name"])
+        med = med.drop(columns=["DrugProduct_Code"])
+    out["medications.csv"] = med
 
     if cohort == "c3":
         enc = ds["encounters"]

@@ -63,12 +63,19 @@ def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="So
     ])
     if drug_code:
         _csv(d, "medications.csv", "Patient,DrugProduct_Code,DrugProduct_Description,FromTime,Route_Description", [
-            "A2,c09aa02,Enalapril,2019-02-01,Oral",
-            "A1,Metformin,Metformin,2021-02-01,Oral",    # ATC değil → raporlanır
+            "A2,c09aa02,Enalapril,2019-02-01,Oral",                  # ATC biçiminde (küçük harf)
+            "A1,0321-164101-0391,GLUCOPHAGE,2021-02-01,Oral",         # DDC ürün kodu → metformin
+            "A3,00136271010391,IMPRIDA 5MG/160MG,2020-03-01,Oral",    # DDC (tiresiz), kombinasyon → 2 satır
+            "A3,0169-120501-0371,APIMOL,2020-03-01,Ocular",           # timolol göz damlası → sınıf yok
+            "A2,0006-106607-1161,PANADOL,2019-02-01,Oral",            # parasetamol → çalışma sınıfı değil
+            "A1,Metformin,Metformin,2021-02-01,Oral",                 # kod tanınmaz → addan
+            "A4,XYZ-1,Unknown tablet,2021-02-01,Oral",                # ne kod ne ad → raporlanır, düşer
         ])
     else:
         _csv(d, "medications.csv", "Patient,DrugProduct_Description,FromTime,Route_Description", [
-            "A2,Enalapril,2019-02-01,Oral",
+            "A2,Enalapril,2019-02-01,Oral",                          # etken madde adı
+            "A1,GLUCOPHAGE XR 500MG,2021-02-01,Oral",                # DDC ticari adı (marka kökü)
+            "A3,BETNOVATE CREAM,2020-01-01,Topical",                 # yerel steroid → sınıf yok
         ])
 
 
@@ -126,15 +133,26 @@ class TestAdapter(unittest.TestCase):
         fh = o[o["concept"] == "family_history_dm"].groupby("patient_id")["value"].apply(sorted).to_dict()
         self.assertEqual(fh, {"A1": ["positive"], "A2": ["positive_non_first_degree"], "A3": ["positive"]})
 
-    def test_medications_uppercased(self):
-        self.assertIn("C09AA02", set(self.ds["medications"]["atc_code"]))
+    def test_medications_atc_ddc_and_name(self):
+        m = self.ds["medications"]
+        self.assertEqual(sorted(zip(m["patient_id"], m["atc_code"])),
+                         [("A1", "A10BA02"), ("A1", "A10BA02"), ("A2", "C09AA02"), ("A3", "C08CA01"),
+                          ("A3", "C09CA03")])
 
     def test_report(self):
         self.assertEqual(self.rep["sources"]["diagnoses"]["unparseable_date"], 1)
         self.assertEqual(self.rep["sources"]["encounters"]["status"], "absent (optional)")
         vc = pd.DataFrame(self.rep["value_counts"])
         self.assertTrue(vc["value"].str.contains("unmapped:weird value").any())
-        self.assertIn("METFORMIN", set(vc.loc[vc["field"] == "atc_code not ATC-like", "value"]))
+        self.assertEqual(set(vc.loc[vc["field"] == "drug code not ATC/DDC", "value"]), {"METFORMIN", "XYZ-1"})
+        how = vc[vc["field"] == "drug → ATC method"].set_index("value")["n_rows"]
+        self.assertEqual(how["DDC code"], 2)
+        self.assertEqual(how["DDC: non-systemic route"], 1)
+        self.assertEqual(how["DDC: not a study drug class"], 1)
+        self.assertEqual(how["code not ATC/DDC → name: trade name + ingredient"], 1)
+        dropped = vc.loc[vc["field"] == "rows dropped: no study drug class", "n_rows"]
+        self.assertEqual(int(dropped.iloc[0]), 3)
+        self.assertEqual(self.rep["sources"]["medications"]["rows_out"], {"medications": 5})
 
     def test_snapshot_uses_family_and_social_history(self):
         ref = pd.Series(pd.Timestamp("2022-12-31"), index=["A1", "A2", "A3", "A4"])
@@ -186,12 +204,13 @@ class TestAdapterOptions(unittest.TestCase):
         sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"]
         self.assertEqual(list(sm["value"]), ["never"])
         self.assertEqual(rep["sources"]["social_history"]["filtered_out_by_item"], 1)
-        self.assertEqual(len(ds["medications"]), 0)                 # kodsuz satır kanonik tabloya girmez
+        m = ds["medications"]                                       # kod yok → ilaç adından (DDC + etken madde)
+        self.assertEqual(sorted(zip(m["patient_id"], m["atc_code"])), [("A1", "A10BA02"), ("A2", "C09AA02")])
         self.assertIn("atc_code", rep["sources"]["medications"]["absent_optional_columns"])
-        self.assertEqual(rep["sources"]["medications"]["rows_out"], {"medications": 0})
         vc = pd.DataFrame(rep["value_counts"])
-        self.assertIn("Enalapril", set(vc.loc[vc["field"] == "drug_name without ATC code", "value"]))
-        self.assertEqual(int(vc.loc[vc["field"] == "rows dropped: no drug code", "n_rows"].iloc[0]), 1)
+        self.assertIn("C09AA02 ← Enalapril", set(vc.loc[vc["field"] == "ATC ← drug_name (name match)", "value"]))
+        self.assertEqual(set(vc.loc[vc["field"] == "drug_name without study drug class", "value"]), {"BETNOVATE CREAM"})
+        self.assertEqual(int(vc.loc[vc["field"] == "rows dropped: no study drug class", "n_rows"].iloc[0]), 1)
 
     def test_missing_required_column(self):
         with tempfile.TemporaryDirectory() as tmp:

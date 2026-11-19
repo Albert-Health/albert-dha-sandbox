@@ -51,10 +51,12 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
 ```
 src/sandbox/
   config.py            PARAMS + yollar
-  codelists.py         ICD-10 / SNOMED / ATC / LOINC + uyruk → etnik grup → QDiabetes / LRS eşlemeleri
+  codelists.py         ICD-10 / SNOMED / ATC / LOINC + etken madde → ATC + uyruk → etnik grup → QDiabetes / LRS
   io/schema.py         kanonik şema (6 tablo), okuma/yazma, validate()
   io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, SocialHistory,
-                       FamilyHistory, Medication, Encounter → kanonik; load = ham dosya, load_iris = IRIS)
+                       FamilyHistory, Medication, Encounter → kanonik; load = ham dosya, load_iris = IRIS),
+                       ddc.py (Dubai Drug Code ürün kodu / ilaç adı → etken madde → ATC; yerel yol sayılmaz)
+  reference/ddc.csv.gz DHA DDC listesinin sade hâli (tools/build_ddc_reference.py; hasta verisi değil)
   io/iris.py           IRIS bağlantısı (jdbc:IRIS:// dizesi, ~/.nabidh_iris), SELECT koruması, sorgu → metin
                        tablosu; prova için SQLite stand-in
   io/explore.py        terminalden IRIS keşfi (INFORMATION_SCHEMA / SQLite): şema, tablo, sütun profili, değer
@@ -70,8 +72,9 @@ src/sandbox/
   audit.py, sdc.py
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
-                       build_evidence_package, positive_control, py2ipynb, enclave.sh + enclave.py (terminal-only
-                       enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run; çıktı KOPYALA bloğu)
+                       build_evidence_package, build_ddc_reference, positive_control, py2ipynb, enclave.sh + enclave.py
+                       (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run;
+                       çıktı KOPYALA bloğu)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)

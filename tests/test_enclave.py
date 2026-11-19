@@ -324,6 +324,16 @@ class TestOutputTables(unittest.TestCase):
         got = enclave.safe_argv(["iris-setup", "--url", "jdbc:IRIS://h:1/NS;password=x", "--url=jdbc:IRIS://h:1/NS?p=y"])
         self.assertEqual(got, ["iris-setup", "--url", "jdbc:IRIS://h:1/NS", "--url=jdbc:IRIS://h:1/NS"])
 
+    def test_medication_summary_hides_rare_names(self):
+        v = pd.DataFrame({"source": ["medications"] * 5 + ["patient_profile"],
+                          "field": ["drug → ATC method", "drug → ATC method", "drug_name without study drug class",
+                                    "drug_name without study drug class", "rows dropped: no study drug class", "sex"],
+                          "value": ["DDC code", "name: ingredient", "PANADOL", "RARE BRAND X", "<no ATC>", "M"],
+                          "n_rows": ["1200", "<10", "340", "<10", "350", "900"]})
+        got = enclave.medication_summary(v)
+        self.assertEqual(got["value"].tolist(), ["DDC code", "name: ingredient", "<no ATC>", "PANADOL"])
+        self.assertNotIn("RARE BRAND X", got["value"].tolist())                 # < 10 satırlık ad basılmaz
+
     def test_fmt_count(self):
         self.assertEqual([sdc.fmt_count(x) for x in (0, 3, 10, "-", None)], ["0", "<10", "10", "-", "None"])
 

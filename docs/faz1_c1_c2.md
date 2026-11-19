@@ -118,8 +118,10 @@ hastada geçen değerleri ya da yüzdelikleri basar.
   ```
 
   Ne çıkar: Diagnosis_Code gerçekten ICD-10 mu, noktalı mı (`a99.9`); ObservationCode_Code LOINC mi
-  (`9999-9`); `FH_RELATION_DEGREE`; DrugProduct_Code ATC mi (`a99aa99`). C2'de ilaç kodu yok: antihipertansif
-  ve diyabet ilaçları addan ATC'ye eşlenmeli (A4). Eşlenmezse C2'de LPRS'in antihipertansif girdisi hep 0 kalır.
+  (`9999-9`); `FH_RELATION_DEGREE`. DrugProduct_Code DDC ürün kodu mu: şekil `9999-999999-9999` (tiresiz
+  `99999999999999` ya da bilimsel kod `999999-999` de olur), ATC (`a99aa99`) gelirse o da çalışır. C2'de kod yok:
+  ad DDC ticari adıyla (marka kökü, ör. `CRESTOR 10 MG` → rosuvastatin) ya da adda geçen etken maddeyle eşlenir
+  (K12). Adların biçimi (ticari ad mı, etken madde + doz mu) bu blokta görünür.
 
 - [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
 
@@ -150,8 +152,13 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   ```
 
   Beklenen: `success`. C1 ≈ 2.600, C2 ≈ 2.600 hasta (Data availability). Blokta bakılacaklar: eşlenemeyen
-  değerler, düşen satırlar (kodsuz ilaç, diyabet dışı aile öyküsü, kullanılamayan yaş), `unparseable_*`
-  tarihler.
+  değerler, düşen satırlar (diyabet dışı aile öyküsü, kullanılamayan yaş), `unparseable_*` tarihler ve
+  **"ilaç → ATC" bölümü** (K12):
+  - `drug → ATC method`: C1'de çoğunluk `DDC code` olmalı; `code not ATC/DDC` çoksa kod biçimi farklıdır
+    (`drug code not ATC/DDC` satırlarındaki örneklere bak).
+  - `DDC: not a study drug class` ve `rows dropped` normaldir (antibiyotik, vitamin vb. çalışma sınıfı değil).
+  - C2: `ATC ← drug_name` eşleşmeleri doğru mu; `drug_name without study drug class` listesinde bilinen bir
+    diyabet / tansiyon / statin / steroid / antipsikotik markası varsa bloğu gönder (eşleme genişletilir).
 
 - [ ] Eşlenemeyen değer varsa bloğu gönder. Sözlük güncellenip `git pull` yapılınca IRIS'e gitmeden
   snapshot'tan tekrarla:
@@ -238,7 +245,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 - [ ] `Patient.Age` hangi güne göre hesaplandı? Doğum yılı ya da tarihi verilebilir mi? (D24)
 - [ ] Uyruk sütunu verilebilir mi? (D6)
 - [ ] Observation için birim sütunu var mı, ya da lab birimleri teyit edilebilir mi?
-- [ ] C2 Medication'da `DrugProduct_Code` yok. Verilebilir mi?
+- [ ] C1 `DrugProduct_Code` DDC ürün kodu mu? C2 Medication'da neden yok, verilebilir mi? (K12)
 - [ ] C1 "complete case" tanımı nedir? C2'nin N'i ve örnekleme yöntemi nedir? C1 ile C2 örtüşüyor mu?
 - [ ] Veri çekim tarihi nedir? (Referans tarihi "veri sonu" için, D22.)
 - [ ] Çıktı çıkarma kuralları: küçük hücre eşiği, figür onayı, izinli formatlar.
@@ -250,6 +257,8 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 - [ ] D5: QDiabetes eşiği. D23: LPRS eşiği. C1 duyarlılığı bu ikisine bağlı.
 - [ ] D22: birincil referans tarihi (veri sonu mu, ilk kanıt günü mü).
 - [ ] D7: yoğunluğu belirtilmemiş "current" sigara. D17: aile öyküsü kaydı olmaması negatif mi sayılır?
+- [ ] D26: ilaç sınıfı sınırları — lurasidon / ziprasidon atipik antipsikotik sayılsın mı; obezite GLP-1'i
+  (Saxenda, Wegovy) diyabet ilacı sayılsın mı.
 
 ## Faz 1 "tamam" tanımı
 
@@ -272,7 +281,8 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 | Sigara | ✓ | — | SocialHistory (kalem + Qty) + F17.2 / Z72.0 / Z87.891 | Kalem filtresi (1a) |
 | Aile öyküsü (diyabet) | ✓ | ✓ | FamilyHistory (Diagnosis_Code / _Description, FamilyMember) + Z83.3 | Yalnız birinci derece pozitif |
 | KVH | ✓ | — | Diagnosis I20–I25, I50, I6x, G45 | — |
-| Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication | C2'de ilaç kodu yok (1d, A4) |
+| Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication (DDC → ATC) | C2'de kod yok → addan (1d, K12) |
+| Statin, kortikosteroid, atipik antipsikotik | ✓ | — | Medication (DDC → ATC: C10AA, H02AB, N05AH / AX / AL) | Yalnız sistemik yol; D26 |
 | Glisemik lab (yalnız statü, model girdisi değil) | — | — | Observation 4548-4, 1558-6, 1521-4 | Birim yok (1c) |
 
 NABIDH Data availability listesindeki hasta sayıları ve oranları (C1 = 2.600, C2 = 2.600, C3 = 1.000):

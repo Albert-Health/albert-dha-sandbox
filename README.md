@@ -17,9 +17,10 @@ data/
   canonical/<source>/<c1|c2|c3>/   adapter çıktısı — kanonik şema (git dışı)
 src/sandbox/
   config.py               tüm parametreler (lookback, horizon, eşikler, cap, seed)
-  codelists.py            ICD-10 / SNOMED / ATC / LOINC listeleri
+  codelists.py            ICD-10 / SNOMED / ATC / LOINC listeleri, etken madde → ATC
   io/schema.py            kanonik şema, okuma/yazma, doğrulama
-  io/adapters/            synthetic.py, nabidh.py (kaynak → kanonik)
+  io/adapters/            synthetic.py, nabidh.py (kaynak → kanonik), ddc.py (DDC ilaç kodu / adı → ATC)
+  reference/ddc.csv.gz    Dubai Drug Code listesi (DHA, sade; hasta verisi değil) — tools/build_ddc_reference.py
   io/iris.py, io/explore.py  IRIS bağlantısı (yalnız SELECT); terminalden şema / tablo / sütun / değer keşfi
   phenotype.py            glisemik ölçümler, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
   cohorts.py              pozitif havuz (C1/C2), C3 (v2 incident kuralları, washout)
@@ -34,8 +35,8 @@ src/sandbox/
 notebooks/                .py (percent format) — Jupyter/VS Code'da hücre hücre açılır
 tools/                    enclave.sh + enclave.py (terminal-only enclave: R1–R9, iris-setup, keşif, run),
                           ingest_nabidh.py (NABIDH ham → kanonik), make_nabidh_dryrun.py (prova verisi),
-                          build_synthetic_cohorts.py, kpi_report.py, build_evidence_package.py,
-                          positive_control.py, py2ipynb.py
+                          build_synthetic_cohorts.py, build_ddc_reference.py (DDC .xlsx → reference/),
+                          kpi_report.py, build_evidence_package.py, positive_control.py, py2ipynb.py
 docs/evidence_package/    model card, validasyon, veri kalite, kohort türetme şablonları
 tests/                    unittest (pytest gerekmez)
 outputs/                  <run_id>/... + audit/audit_log.jsonl (git dışı)
