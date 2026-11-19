@@ -272,6 +272,27 @@ class TestAdapterOptions(unittest.TestCase):
                           ("A3", "heavy"), ("A4", "light")])
         self.assertEqual(nabidh.FH_RELATION_DEGREE["1st degree relative"], "first")
 
+    def test_family_history_text(self):
+        """FamilyHistory'de durum sütunu yok: olumsuzlama ve akraba derecesi açıklama metninden (2026-11-19)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d)
+            _csv(d, "family_history.csv", "Patient,Diagnosis_Code,Diagnosis_Description,FamilyMember_Description,EnteredOn", [
+                "A1,44054006,No History Of Diabetes mellitus type 2 (disorder),Father,2020-01-01",
+                "A2,88750,Maternal aunt and uncle have Diabetes mellitus,Parent,2020-01-01",
+                "A3,Diabetes,Diabetes,Mother,",                       # kod sütununda metin, tarih yok
+                "A4,2,DIABETIC,Father,2020-01-01",
+                "A4,73211009,Diabetes mellitus (disorder),Grandmother and mother,2020-01-01",
+            ])
+            ds, rep = nabidh.load(d, "c1")
+        fh = ds["observations"][ds["observations"]["concept"] == "family_history_dm"]
+        self.assertEqual(list(zip(fh["patient_id"], fh["value"])),
+                         [("A1", "negative"), ("A2", "positive_non_first_degree"), ("A3", "positive"),
+                          ("A4", "positive"), ("A4", "positive")])               # metinde anne de var → birinci
+        vc = pd.DataFrame(rep["value_counts"])
+        self.assertEqual(set(vc.loc[vc["field"] == "condition_text negated → negative", "value"]),
+                         {"No History Of Diabetes mellitus type 2 (disorder)"})
+
     def test_filter_that_drops_everything_stops(self):
         """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""
         rows = [f"A{1 + i % 4},Tobacco use,Never,2018-01-{1 + i:02d}" for i in range(11)] + ["A1,Alcohol,No,2018-02-01"]

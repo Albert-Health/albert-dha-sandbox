@@ -191,6 +191,14 @@ FH_RELATION_DEGREE = {
                             "2nd degree relative", "second degree relative", "3rd degree relative"]},
 }
 FH_DIABETES_SNOMED = {"160303001", "73211009", "44054006", "46635009"}
+# Açıklama metni (NABIDH FamilyHistory.Diagnosis_Description, 2026-11-19): durum sütunu yok, olumsuz kayıt
+# metinde ("No History Of Diabetes mellitus type 2 (disorder)") → negative. Metin ikinci derece akraba
+# söylüyorsa ("Maternal aunt and uncle have Diabetes mellitus", FamilyMember = Parent) metin geçerli.
+FH_NEGATION = re.compile(r"^\s*(?:no|nil|none|denies|denied|negative)\b|\bno (?:known )?(?:family )?history\b"
+                         r"|\bnegative for\b|\bdenies\b", re.IGNORECASE)
+FH_TEXT_SECOND_DEGREE = re.compile(r"\b(?:aunts?|uncles?|grand\w*|cousins?|nieces?|nephews?)\b", re.IGNORECASE)
+FH_TEXT_FIRST_DEGREE = re.compile(r"\b(?:mother|father|parents?|brothers?|sisters?|siblings?|sons?|daughters?)\b",
+                                  re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------
@@ -418,14 +426,24 @@ def _h_family_history(df, name, vc):
         vc += _value_counts(name, "status → canonical", raw.fillna("<empty>").astype(str) + " → " + value.astype(str))
     else:
         value = pd.Series("positive", index=df.index, dtype=object)
+    text = df["condition_text"].astype("string") if "condition_text" in df else pd.Series(pd.NA, index=df.index,
+                                                                                          dtype="string")
+    negated = text.str.contains(FH_NEGATION, na=False).astype(bool) & (value == "positive")
+    if negated.any():
+        vc += _value_counts(name, "condition_text negated → negative", text[negated], top=20)
+        value = value.where(~negated, "negative")
+    second = (text.str.contains(FH_TEXT_SECOND_DEGREE, na=False)
+              & ~text.str.contains(FH_TEXT_FIRST_DEGREE, na=False)).astype(bool)
+    if second.any():
+        vc += _value_counts(name, "second-degree relative in text", text[second], top=20)
     if "relation" in df:
         rel = _norm_text(df["relation"])
         deg = rel.map(FH_RELATION_DEGREE)
         label = deg.astype(object).where(deg.notna(), "unmapped (treated as first)")
         label = label.where(rel.notna(), "not recorded (treated as first)")
         vc += _value_counts(name, "relation → degree", rel.fillna("<empty>").astype(str) + " → " + label.astype(str))
-        value = value.where(~((value == "positive") & deg.eq("other").fillna(False).astype(bool)),
-                            "positive_non_first_degree")
+        second |= deg.eq("other").fillna(False).astype(bool)
+    value = value.where(~((value == "positive") & second), "positive_non_first_degree")
     out = pd.DataFrame({"patient_id": df["patient_id"], "concept": "family_history_dm", "code_system": pd.NA,
                         "code": pd.NA, "value": value, "unit": pd.NA, "date": df["date"]})
     return {"observations": out}
