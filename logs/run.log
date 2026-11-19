@@ -1,0 +1,346 @@
+P2IN_DHASBXNBPRDAA01@DHASBXNBPRDAA01:~/Desktop/albert-dha/albert-dha-sandbox/dist$ python3 ingest_bundle.py run ingest --cohorts c1 c2
+Running: SANDBOX_SOURCE=nabidh python /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/dist/ingest_bundle.py --bundle-exec tools/ingest_nabidh.py --source nabidh --input iris --cohorts c1 c2
+(the screen output below stays inside the enclave; the summary to copy comes at the end)
+Ingest v1.2.1 · run 20261119T120545Z_ingest_nabidh_5e2b7b
+[12:05:45 +0s] connecting to IRIS 10.28.29.29:51772/HSSBX as dha-sbx-000010 ...
+[12:05:45 +0s] connected
+[12:05:45 +0s] c1: reading 8 sources from IRIS
+[12:05:45 +0s] c1 patient_profile: querying Patient
+[12:05:45 +0s] c1 patient_profile: 2,596 rows read (0 s)
+[12:05:45 +0s] c1 patient_profile: mapped → 2,596 canonical rows (0 s)
+[12:05:45 +0s] c1 diagnoses: querying Diagnosis
+[12:05:49 +5s] c1 diagnoses: 99,397 rows read (4 s)
+[12:05:50 +5s] c1 diagnoses: mapped → 99,397 canonical rows (0 s)
+[12:05:50 +5s] c1 observations: querying Observation
+[12:05:54 +9s] c1 observations: 239,815 rows read (4 s)
+[12:05:55 +10s] c1 observations: mapped → 232,452 canonical rows (1 s)
+[12:05:55 +10s] c1 lab_results: querying LabResultItem
+[12:05:59 +14s] c1 lab_results: 3,147 rows read (4 s)
+[12:05:59 +14s] c1 lab_results: mapped → 3,144 canonical rows (0 s)
+[12:05:59 +14s] c1 social_history: querying SocialHistory
+[12:05:59 +14s] c1 social_history: 3,892 rows read (0 s)
+[12:05:59 +14s] c1 social_history: mapped → 3,824 canonical rows (0 s)
+[12:05:59 +14s] c1 family_history: querying FamilyHistory
+[12:05:59 +14s] c1 family_history: 4,094 rows read (0 s)
+[12:06:00 +15s] c1 family_history: mapped → 4,081 canonical rows (0 s)
+[12:06:00 +15s] c1 medications: querying Medication
+[12:06:56 +71s] c1 medications: 24,002 rows so far (57 s)
+[12:06:56 +72s] c1 medications: 24,002 rows read (57 s)
+[12:06:59 +74s] c1 medications: mapped → 30,503 canonical rows (3 s)
+[12:06:59 +74s] c1 encounters: querying Encounter
+[12:06:59 +74s] c1 encounters: absent (optional source)
+/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
+/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
+[12:07:00 +75s] c1: writing canonical tables and checking the schema
+
+== C1: 2596 patients → /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/data/canonical/nabidh/c1
+   rows: patients=2596, conditions=99397, medications=30503, labs=3144, observations=240357, encounters=0
+   patient_profile  read  rows_read=2596
+   diagnoses        read  rows_read=99397
+   observations     read  rows_read=239815  dropped_empty_value=7363 (8302-2 (3572), 3141-9 (2867), 39156-5 (924))
+   lab_results      read  rows_read=3147
+   social_history   read  rows_read=3892
+   family_history   read  rows_read=4094
+   medications      read  rows_read=24002
+   encounters       absent (optional)  rows_read=—  (OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
+[Location: <Prepare>]
+[%msg: <User dha-)
+       table                    check severity  n_affected                 detail
+    patients      sex not Male/Female     WARN           1                      U
+  conditions    missing required date    ERROR          17                       
+ medications    missing required date    ERROR          34                       
+        labs   missing required value    ERROR           2                       
+observations    missing required date    ERROR        3607                       
+        labs multiple units per LOINC     WARN           3 1521-4, 1558-6, 4548-4
+   unmapped values (to add to the adapter dictionaries):
+        source             field                                  value  n_rows
+social_history value → canonical       Smoking | other → unmapped:other     428
+social_history value → canonical   Cigarettes | <empty> → unmapped:<NA>       2
+social_history value → canonical            Cigarettes | 1 → unmapped:1       1
+social_history value → canonical        Cigarettes | 1.5 → unmapped:1.5       1
+social_history value → canonical Cigarettes,Cigars | .25 → unmapped:.25       1
+social_history value → canonical                Cigars | 1 → unmapped:1       1
+[12:07:02 +77s] c2: reading 8 sources from IRIS
+[12:07:02 +77s] c2 patient_profile: querying Patient
+[12:07:03 +78s] c2 patient_profile: 2,600 rows read (1 s)
+[12:07:03 +79s] c2 patient_profile: mapped → 2,600 canonical rows (0 s)
+[12:07:03 +79s] c2 diagnoses: querying Diagnosis
+[12:07:26 +101s] c2 diagnoses: 50,000 rows so far (22 s)
+[12:08:11 +146s] c2 diagnoses: 90,326 rows so far (68 s)
+[12:08:11 +146s] c2 diagnoses: 90,326 rows read (68 s)
+[12:08:11 +147s] c2 diagnoses: mapped → 90,326 canonical rows (0 s)
+[12:08:11 +147s] c2 observations: querying Observation
+[12:08:36 +171s] c2 observations: 50,000 rows so far (24 s)
+[12:09:08 +203s] c2 observations: 100,000 rows so far (56 s)
+[12:09:08 +203s] c2 observations: 118,792 rows read (57 s)
+[12:09:09 +204s] c2 observations: mapped → 117,742 canonical rows (0 s)
+[12:09:09 +204s] c2 lab_results: querying LabResultItem
+[12:11:21 +336s] c2 lab_results: 2,315 rows so far (132 s)
+[12:11:21 +336s] c2 lab_results: 2,315 rows read (132 s)
+[12:11:21 +336s] c2 lab_results: mapped → 2,313 canonical rows (0 s)
+[12:11:21 +336s] c2 social_history: querying SocialHistory
+[12:11:23 +339s] c2 social_history: 1,618 rows read (2 s)
+[12:11:23 +339s] c2 social_history: mapped → 1,467 canonical rows (0 s)
+[12:11:23 +339s] c2 family_history: querying FamilyHistory
+[12:11:25 +340s] c2 family_history: 682 rows read (1 s)
+[12:11:25 +340s] c2 family_history: mapped → 681 canonical rows (0 s)
+[12:11:25 +340s] c2 medications: querying Medication
+[12:11:58 +373s] c2 medications: 24,751 rows so far (33 s)
+[12:11:58 +374s] c2 medications: 24,751 rows read (34 s)
+[12:12:00 +375s] c2 medications: mapped → 33,008 canonical rows (2 s)
+[12:12:00 +375s] c2 encounters: querying Encounter
+[12:12:40 +415s] c2 encounters: 50,000 rows so far (40 s)
+[12:13:08 +443s] c2 encounters: 100,000 rows so far (68 s)
+[12:14:00 +495s] c2 encounters: 150,000 rows so far (120 s)
+[12:14:01 +496s] c2 encounters: 165,551 rows read (121 s)
+[12:14:01 +496s] c2 encounters: mapped → 165,551 canonical rows (0 s)
+/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
+/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
+[12:14:01 +497s] c2: writing canonical tables and checking the schema
+
+== C2: 2600 patients → /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/data/canonical/nabidh/c2
+   rows: patients=2600, conditions=90326, medications=33008, labs=2313, observations=119890, encounters=165551
+   patient_profile  read  rows_read=2600
+   diagnoses        read  rows_read=90326
+   observations     read  rows_read=118792  dropped_empty_value=1050 (8302-2 (566), 3141-9 (329), 39156-5 (155))
+   lab_results      read  rows_read=2315
+   social_history   read  rows_read=1618
+   family_history   read  rows_read=682
+   medications      read  rows_read=24751
+   encounters       read  rows_read=165551
+       table                    check severity  n_affected                 detail
+    patients      sex not Male/Female     WARN           2                      U
+  conditions    missing required date    ERROR          37                       
+ medications    missing required date    ERROR          15                       
+        labs   missing required value    ERROR          11                       
+observations    missing required date    ERROR        1329                       
+        labs multiple units per LOINC     WARN           3 1521-4, 1558-6, 4548-4
+   unmapped values (to add to the adapter dictionaries):
+        source             field                                value  n_rows
+social_history value → canonical     Smoking | other → unmapped:other     306
+social_history value → canonical Cigarettes | <empty> → unmapped:<NA>       1
+social_history value → canonical        Cigarettes | 15 → unmapped:15       1
+
+Run: 20261119T120545Z_ingest_nabidh_5e2b7b  status: schema_errors
+----8<---- COPY START | enclave run ingest --cohorts c1 c2 | 2026-11-19 12:05 UTC | ingest v1.2.1 | commit 7eb1c44 bundle 42ceda37ec57 | python 3.10.12 | 20261119T120544Z_enclave_run_ba713c ----8<----
+Step: run ingest · source nabidh · exit code 1 · 500 s
+Run: 20261119T120545Z_ingest_nabidh_5e2b7b · status: schema_errors · 35 outputs
+Error: social_history value → canonical        Cigarettes | 15 → unmapped:15       1
+Error: Run: 20261119T120545Z_ingest_nabidh_5e2b7b  status: schema_errors
+(Check that the error line holds no patient value; if it does, do not copy that line.)
+
+== C1 (ingest v1.2.1): 2596 patients · schema ERROR 4 / WARN 2 · unmapped value rows 434
+   rows: patients=2596, conditions=99397, medications=30503, labs=3144, observations=240357, encounters=0
+   patient_profile  read               read=2596 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=99397 
+   observations     read               read=239815 dropped_empty_value=7363 dropped_empty_value_by_code: 8302-2 (3572), 3141-9 (2867), 39156-5 (924)
+   lab_results      read               read=3147 
+   social_history   read               read=3892 filtered_out_by_item=66 filtered_out_values_item: <empty> (41), Unknown (17), +3 labels < 10 rows
+   family_history   read               read=4094 
+   medications      read               read=24002 
+   encounters       absent (optional)  read=- OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
+[Location: <Prepare>]
+[%msg: <User dha-
+   schema check (non-INFO):
+         table                    check severity n_affected                 detail
+      patients      sex not Male/Female     WARN        <10                      U
+    conditions    missing required date    ERROR         17                    NaN
+   medications    missing required date    ERROR         34                    NaN
+          labs   missing required value    ERROR        <10                    NaN
+  observations    missing required date    ERROR       3607                    NaN
+          labs multiple units per LOINC     WARN        <10 1521-4, 1558-6, 4548-4
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                  value n_rows
+  social_history value → canonical       Smoking | other → unmapped:other    428
+  social_history value → canonical   Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical            Cigarettes | 1 → unmapped:1    <10
+  social_history value → canonical        Cigarettes | 1.5 → unmapped:1.5    <10
+  social_history value → canonical Cigarettes,Cigars | .25 → unmapped:.25    <10
+  social_history value → canonical                Cigars | 1 → unmapped:1    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                           field                                                                            value n_rows
+                               drug → ATC method                                                                         DDC code  19243
+                               drug → ATC method                                                              DDC scientific code   3803
+                               drug → ATC method                                              code not ATC/DDC → name: ingredient    332
+                               drug → ATC method                                                                 name: trade name    135
+                               drug → ATC method                                                      DDC: not a study drug class    134
+                               drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient    117
+                               drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient    107
+                               drug → ATC method                                                          DDC: non-systemic route     53
+                               drug → ATC method                                                           name: brand first word     32
+                               drug → ATC method                                            code not ATC/DDC → name: non-systemic     21
+                               drug → ATC method                                              code not ATC/DDC → name: trade name     18
+                               drug → ATC method                                                    name: trade name + ingredient    <10
+                               drug → ATC method                                                        name: no study drug class    <10
+                               drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+               rows dropped: no study drug class                                                                         <no ATC>    212
+  combination products (rows → several ATC rows)                                                                         <n rows>   6364
+                     ATC (3 chars) after mapping                                                                              A10  17452
+                     ATC (3 chars) after mapping                                                                              C09   5402
+                     ATC (3 chars) after mapping                                                                              C08   3322
+                     ATC (3 chars) after mapping                                                                              C07   2643
+                     ATC (3 chars) after mapping                                                                              C03   1573
+                     ATC (3 chars) after mapping                                                                              C02    110
+                     ATC (3 chars) after mapping                                                                              C10    <10
+                           drug code not ATC/DDC                                                                           581303     36
+                           drug code not ATC/DDC                                                          VMP34433,5 MG-160 MG,TA     32
+                           drug code not ATC/DDC                                                                VMP4763,750 MG,TI     30
+                           drug code not ATC/DDC                                                                           166101     29
+                           drug code not ATC/DDC                                                                           229701     24
+                           drug code not ATC/DDC                                                              VMP4763,1,000 MG,TI     22
+                           drug code not ATC/DDC                                                                 0000-000000-0000     18
+                           drug code not ATC/DDC                                                                           585204     18
+                           drug code not ATC/DDC                                                            VMP45876,5 MG-5 MG,TA     16
+                           drug code not ATC/DDC                                                                    VMP182,2 %,OA     15
+                    ATC ← drug_name (name match)                               C09CA03 ← SACUBITRIL 97 MG-VALSARTAN 103 MG TABLET     34
+                    ATC ← drug_name (name match)               C08CA01+C09CA03 ← AMLODIPINE BESILATE/VALSARTAN 5 mg-160 mg Tablet     32
+                    ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 750 mg Tablet, Extended Release 24 hr (TI)     30
+                    ATC ← drug_name (name match)                                                 C09CA03 ← VALSARTAN 80 MG TABLET     29
+                    ATC ← drug_name (name match)                                                  C07AB12 ← NEBIVOLOL 5 MG TABLET     24
+                    ATC ← drug_name (name match) A10BA02 ← GLUCOPHAGE 1000 MG XR ....(TAKE AFTER MEALS AS ALREADY TAKING BEFORE-/     24
+                    ATC ← drug_name (name match)             A10BA02 ← METFORMIN HCL 1,000 mg Tablet, Extended Release 24 hr (TI)     20
+                    ATC ← drug_name (name match)       C07AB07+C08CA01 ← bisoprolol fumarate/amlodipine besilate 5 mg-5 mg Tablet     16
+                    ATC ← drug_name (name match)             C09CA04+C03AA03 ← IRBESARTAN/HYDROCHLOROTHIAZIDE 300 mg-25 mg Tablet     15
+                    ATC ← drug_name (name match)                                                         A10BK01+A10BA02 ← xigduo     14
+                    ATC ← drug_name (name match)            C09AA04+C03BA11 ← PERINDOPRIL ARGININE/INDAPAMIDE 5 mg-1.25 mg Tablet     14
+                    ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN 10 MG-METFORMIN ER 1,000 MG TABLET,EXTENDED RELE     13
+                    ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 500 mg Tablet, Extended Release 24 hr (TI)     12
+                    ATC ← drug_name (name match)                                                C03CA01 ← FUROSEMIDE 40 mg Tablet     12
+                    ATC ← drug_name (name match)         A10BJ06 ← semaglutide (44675) 1 mg/0.75 mL (4 mg/3 mL) Pen Injector (mL)     11
+              drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     15
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                                 value n_rows
+                 study lab: code | unit | name                                     1558-6 | mg/dL | Glucose, Fasting   1436
+                 study lab: code | unit | name                                                    4548-4 | % | HBA1C    660
+                 study lab: code | unit | name                             1558-6 | MG/DL | GLUCOSE FASTING (F.B.S.)    372
+                 study lab: code | unit | name                                      1558-6 | MG/DL | Glucose Fasting    239
+                 study lab: code | unit | name                            1558-6 | mg/dL | Fasting Blood Sugar (FBS)    193
+                 study lab: code | unit | name                                                    4548-4 | % | HbA1c    121
+                 study lab: code | unit | name                               1558-6 | mg/dL | Plasma Fasting Glucose     31
+                 study lab: code | unit | name                                  1558-6 | mg/dL | FASTING BLOOD SUGAR     10
+                          value by kind | unit               fpg | MG/DL : 354 patients, p5 79 / median 93 / p95 137    611
+                          value by kind | unit               fpg | mg/dL : 615 patients, p5 81 / median 98 / p95 173   1701
+                          value by kind | unit     fpg | mg/dl : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit               hba1c | % : 460 patients, p5 4.7 / median 5.5 / p95 7.9    802
+                          value by kind | unit       hba1c | 0 : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit ogtt_2h | MG/DL : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit        ogtt_2h | mg/dL : 11 patients, p5 65.9 / median 85.5 / p95 125     13
+  rows dropped: study code, other test by name                                                              <n rows>    <10
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                              field                                      value n_rows
+             diabetes recognised by                                SNOMED code   2354
+             diabetes recognised by                                  text only   1555
+             diabetes recognised by                                ICD-10 code    172
+                  relation → degree                             father → first   1887
+                  relation → degree                             mother → first   1865
+                  relation → degree                            brother → first    145
+                  relation → degree                             sister → first    117
+                  relation → degree                              child → first     39
+                  relation → degree                             parent → first     12
+  condition_text negated → negative No History Of Diabetes mellitus (disorder)     31
+== C2 (ingest v1.2.1): 2600 patients · schema ERROR 4 / WARN 2 · unmapped value rows 308
+   rows: patients=2600, conditions=90326, medications=33008, labs=2313, observations=119890, encounters=165551
+   patient_profile  read               read=2600 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=90326 
+   observations     read               read=118792 dropped_empty_value=1050 dropped_empty_value_by_code: 8302-2 (566), 3141-9 (329), 39156-5 (155)
+   lab_results      read               read=2315 
+   social_history   read               read=1618 filtered_out_by_item=150 filtered_out_values_item: <empty> (138), +5 labels < 10 rows
+   family_history   read               read=682 
+   medications      read               read=24751 
+   encounters       read               read=165551 
+   schema check (non-INFO):
+         table                    check severity n_affected                 detail
+      patients      sex not Male/Female     WARN        <10                      U
+    conditions    missing required date    ERROR         37                    NaN
+   medications    missing required date    ERROR         15                    NaN
+          labs   missing required value    ERROR         11                    NaN
+  observations    missing required date    ERROR       1329                    NaN
+          labs multiple units per LOINC     WARN        <10 1521-4, 1558-6, 4548-4
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                value n_rows
+  social_history value → canonical     Smoking | other → unmapped:other    306
+  social_history value → canonical Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical        Cigarettes | 15 → unmapped:15    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                           field                                                                            value n_rows
+                               drug → ATC method                                                                         DDC code  21099
+                               drug → ATC method                                                              DDC scientific code   3127
+                               drug → ATC method                                              code not ATC/DDC → name: ingredient    217
+                               drug → ATC method                                                      DDC: not a study drug class    140
+                               drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient     34
+                               drug → ATC method                                                          DDC: non-systemic route     30
+                               drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient     29
+                               drug → ATC method                                                                 name: trade name     25
+                               drug → ATC method                                            code not ATC/DDC → name: non-systemic     22
+                               drug → ATC method                                              code not ATC/DDC → name: trade name     11
+                               drug → ATC method                                                                 name: ingredient    <10
+                               drug → ATC method                                                        name: no study drug class    <10
+                               drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+                               drug → ATC method                                                           name: brand first word    <10
+                               drug → ATC method                                              name: brand first word + ingredient    <10
+                               drug → ATC method                                                    name: trade name + ingredient    <10
+               rows dropped: no study drug class                                                                         <no ATC>    197
+  combination products (rows → several ATC rows)                                                                         <n rows>   7844
+                     ATC (3 chars) after mapping                                                                              A10  17462
+                     ATC (3 chars) after mapping                                                                              C09   6420
+                     ATC (3 chars) after mapping                                                                              C08   4129
+                     ATC (3 chars) after mapping                                                                              C07   2642
+                     ATC (3 chars) after mapping                                                                              C03   2220
+                     ATC (3 chars) after mapping                                                                              C02    133
+                     ATC (3 chars) after mapping                                                                              C10    <10
+                           drug code not ATC/DDC                                                                           581303     43
+                           drug code not ATC/DDC                                                                           585204     22
+                           drug code not ATC/DDC                                                            VMP46490,5 MG-5 MG,TA     22
+                           drug code not ATC/DDC                                                                           166101     22
+                           drug code not ATC/DDC                                                                           229701     21
+                           drug code not ATC/DDC                                                                    VMP182,2 %,OA     16
+                           drug code not ATC/DDC                                                                 0000-000000-0000     14
+                           drug code not ATC/DDC                                                           VMP41724,25 MG-5 MG,TA     12
+                           drug code not ATC/DDC                                                                           114201     10
+                           drug code not ATC/DDC                                                  VMP42576,100 UNIT/ML (70-30),IO     10
+                    ATC ← drug_name (name match)                               C09CA03 ← SACUBITRIL 97 MG-VALSARTAN 103 MG TABLET     41
+                    ATC ← drug_name (name match)                                                 C09CA03 ← VALSARTAN 80 MG TABLET     22
+                    ATC ← drug_name (name match)      C07AB07+C09AA04 ← bisoprolol fumarate/perindopril arginine 5 mg-5 mg Tablet     22
+                    ATC ← drug_name (name match)                                                  C07AB12 ← NEBIVOLOL 5 MG TABLET     21
+                    ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN 10 MG-METFORMIN ER 1,000 MG TABLET,EXTENDED RELE     13
+                    ATC ← drug_name (name match)                    A10BK03+A10BH05 ← empagliflozin/linagliptin 25 mg-5 mg Tablet     12
+                    ATC ← drug_name (name match)      A10A ← insulin degludec/insulin aspart 100 unit/mL (70-30) Insulin Pen (mL)     10
+                    ATC ← drug_name (name match)                                                A10BB12 ← GLIMEPIRIDE 2 MG TABLET     10
+              drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     16
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                                 value n_rows
+                 study lab: code | unit | name                                     1558-6 | mg/dL | Glucose, Fasting   1277
+                 study lab: code | unit | name                            1558-6 | mg/dL | Fasting Blood Sugar (FBS)    300
+                 study lab: code | unit | name                                                    4548-4 | % | HBA1C    257
+                 study lab: code | unit | name                             1558-6 | MG/DL | GLUCOSE FASTING (F.B.S.)    134
+                 study lab: code | unit | name                                                    4548-4 | % | HbA1c     69
+                 study lab: code | unit | name                                      1558-6 | MG/DL | Glucose Fasting     67
+                 study lab: code | unit | name                                  1558-6 | mg/dL | Fasting Blood Sugar     64
+                 study lab: code | unit | name                        4548-4 | % | GLYCOSYLATED HEMOGLOBIN (HBA1C %)     35
+                 study lab: code | unit | name                               1558-6 | mg/dL | Plasma Fasting Glucose     23
+                 study lab: code | unit | name                            1521-4 | mg/dL | Blood Sugar Level - 2 Hrs     14
+                          value by kind | unit           fpg | MG/DL : 119 patients, p5 80.2 / median 94.7 / p95 134    201
+                          value by kind | unit              fpg | mg/dL : 625 patients, p5 82 / median 102 / p95 185   1682
+                          value by kind | unit     fpg | mg/dl : < 10 patients with a numeric value, no distribution     12
+                          value by kind | unit            hba1c | % : 209 patients, p5 4.99 / median 5.78 / p95 8.68    375
+                          value by kind | unit       hba1c | 0 : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit    hba1c | NULL : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit ogtt_2h | MG/DL : < 10 patients with a numeric value, no distribution     12
+                          value by kind | unit         ogtt_2h | mg/dL : 18 patients, p5 85.1 / median 123 / p95 245     21
+                          value by kind | unit ogtt_2h | mg/dl : < 10 patients with a numeric value, no distribution    <10
+  rows dropped: study code, other test by name                                                              <n rows>    <10
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                   field           value n_rows
+  diabetes recognised by       text only    424
+  diabetes recognised by     SNOMED code    224
+  diabetes recognised by     ICD-10 code     33
+       relation → degree  mother → first    298
+       relation → degree  father → first    279
+       relation → degree brother → first     39
+       relation → degree  sister → first     37
+       relation → degree   child → first     21
+Full screen output (inside the enclave): outputs/20261119T120544Z_enclave_run_ba713c/enclave/ingest.log
