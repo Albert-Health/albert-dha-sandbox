@@ -146,6 +146,9 @@ SEX_MAP = {"M": "Male", "MALE": "Male", "1": "Male", "F": "Female", "FEMALE": "F
 
 # Sigara değeri (küçük harf metin veya SNOMED kodu) → kanonik değer. Önce metin, sonra kod denenir.
 # "yes" / "no" yalnızca kaynak (veya filter) sigaraya özgüyse anlamlıdır.
+# NABIDH SocialHabitQty (C1 / C2 ingest, 2026-11-19): low / medium / high = yoğunluk → light / moderate / heavy.
+# occasional / rare (günlük değil, < 10 / gün) → light [KARAR BEKLİYOR] D7; seçenek: current (→ D7 kategorisi).
+# "other" eşlenmedi (C1 428, C2 531 satır): diğer tütün (shisha / midwakh?) olabilir → eksik sayılır, D7.
 SMOKING_VALUES = {
     **{k: "never" for k in ["never", "never smoker", "never smoked", "never smoked tobacco", "non-smoker",
                             "non smoker", "nonsmoker", "non", "no", "lifetime non-smoker"]},
@@ -153,10 +156,11 @@ SMOKING_VALUES = {
                          "quit smoking", "stopped smoking"]},
     **{k: "current" for k in ["current", "smoker", "current smoker", "yes", "current every day smoker",
                               "current some day smoker", "every day smoker", "some day smoker",
-                              "occasional smoker", "smoker, current status unknown"]},
-    **{k: "light" for k in ["light", "light smoker", "light tobacco smoker"]},
-    **{k: "moderate" for k in ["moderate", "moderate smoker"]},
-    **{k: "heavy" for k in ["heavy", "heavy smoker", "heavy tobacco smoker"]},
+                              "smoker, current status unknown"]},
+    **{k: "light" for k in ["light", "light smoker", "light tobacco smoker", "low",
+                            "occasional", "occasional smoker", "rare"]},
+    **{k: "moderate" for k in ["moderate", "moderate smoker", "medium"]},
+    **{k: "heavy" for k in ["heavy", "heavy smoker", "heavy tobacco smoker", "high"]},
     **{k: "unknown" for k in ["unknown", "unknown if ever smoked", "not asked", "declined", "not known"]},
     # SNOMED (ONC sigara durumu değer seti)
     "266919005": "never",           # Never smoked tobacco
@@ -180,9 +184,11 @@ FH_STATUS_VALUES = {
 # İkinci derece → positive_non_first_degree (kayıt var, pozitif sayılmaz). Boş / bilinmeyen akrabalık → pozitif.
 FH_RELATION_DEGREE = {
     **{k: "first" for k in ["mother", "father", "parent", "parents", "brother", "sister", "sibling", "siblings",
-                            "son", "daughter", "child", "children", "first degree", "first-degree"]},
+                            "son", "daughter", "child", "children", "first degree", "first-degree",
+                            "1st degree relative", "first degree relative", "first-degree relative"]},
     **{k: "other" for k in ["grandmother", "grandfather", "grandparent", "aunt", "uncle", "cousin",
-                            "niece", "nephew", "grandchild", "second degree", "second-degree"]},
+                            "niece", "nephew", "grandchild", "second degree", "second-degree",
+                            "2nd degree relative", "second degree relative", "3rd degree relative"]},
 }
 FH_DIABETES_SNOMED = {"160303001", "73211009", "44054006", "46635009"}
 

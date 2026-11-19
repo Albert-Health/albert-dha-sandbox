@@ -257,6 +257,21 @@ class TestAdapterOptions(unittest.TestCase):
         shown = set(vc.loc[vc["field"] == "value → canonical", "value"])
         self.assertIn("Cigars | 10 per day → unmapped:10 per day", shown)   # eşlenemeyen değerin kalemi görünür
 
+    def test_smoking_intensity_values(self):
+        """NABIDH SocialHabitQty (2026-11-19): yoğunluk değerleri; 'other' eşlenmez (eksik, D7)."""
+        vals = {"A1": "Low", "A2": "medium", "A3": "HIGH", "A4": "occasional"}
+        rows = [f"{p},Smoking,{v},2019-01-01" for p, v in vals.items()]
+        rows += ["A1,Smoking,rare,2019-02-01", "A2,Smoking,other,2019-02-01"]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows)
+            ds, _ = nabidh.load(d, "c1")
+        sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"].sort_values(["patient_id", "date"])
+        self.assertEqual(list(zip(sm["patient_id"], sm["value"])),
+                         [("A1", "light"), ("A1", "light"), ("A2", "moderate"), ("A2", "unmapped:other"),
+                          ("A3", "heavy"), ("A4", "light")])
+        self.assertEqual(nabidh.FH_RELATION_DEGREE["1st degree relative"], "first")
+
     def test_filter_that_drops_everything_stops(self):
         """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""
         rows = [f"A{1 + i % 4},Tobacco use,Never,2018-01-{1 + i:02d}" for i in range(11)] + ["A1,Alcohol,No,2018-02-01"]

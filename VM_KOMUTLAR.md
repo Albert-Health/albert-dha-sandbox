@@ -125,8 +125,9 @@ bash tools/enclave.sh values c1.SocialHistory SocialHabitCategory_Code
 bash tools/enclave.sh values c2.SocialHistory SocialHabitCategory_Description
 ```
 
-Lab ve ölçüm birimleri (12 blok). HbA1c medyanı ~5–8 ise %, ~30–65 ise mmol/mol. Glukoz medyanı ~90–150 ise
-mg/dL, ~5–8 ise mmol/L:
+İlk ingest'te `labs=0` çıktı: Observation'da HbA1c / glukoz kodu yok, lab'lar başka view'da olabilir. Bu yüzden
+aşağıdaki döngü büyük olasılıkla boş döner; önce `tables` çıktısındaki lab view'ına bakılır. Birimler için:
+HbA1c medyanı ~5–8 ise %, ~30–65 ise mmol/mol. Glukoz medyanı ~90–150 ise mg/dL, ~5–8 ise mmol/L:
 
 ```bash
 for s in c1 c2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
