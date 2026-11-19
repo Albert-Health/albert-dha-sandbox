@@ -5,10 +5,10 @@ Güncelleme: 2026-11-19 · Tam liste ve açıklamalar: [`docs/faz1_c1_c2.md`](do
 **Kopyala-yapıştır yok.** Bu dosyayı IntelliJ'de aç. Bir `bash` bloğunun solunda ▶ varsa tıklayınca o komut
 çalışır; yoksa komutu terminale elle yaz. Komutların hepsi repo kökünden çalışır.
 
-**Sürüm:** her bloğun başlığında `ingest v1.0.0 | commit …` yazar; NB0 / NB1 bloklarında `Veri: c1 ingest v…`
+**Sürüm:** her bloğun başlığında `ingest v1.0.0 | commit …` yazar; NB0 / NB1 bloklarında `Data: c1 ingest v…`
 satırı, notebook'un hangi ingest'in verisini okuduğunu gösterir.
 
-**Sonuçları gönderme:** her komut sonucu `KOPYALA BAŞ` … `KOPYALA SON` arasında basar. O bloğun fotoğrafını
+**Sonuçları gönderme:** her komut sonucu `COPY START` … `COPY END` arasında basar. O bloğun fotoğrafını
 çek. Ekrandan kaydıysa son bloğu yeniden bas:
 
 ```bash
@@ -33,13 +33,13 @@ Notebook'lar IRIS'i değil bu adımın yazdığı `data/canonical/nabidh/` klas�
 bash tools/enclave.sh run ingest --cohorts c1 c2
 ```
 
-- Beklenen: `success`, C1 ≈ 2.600 ve C2 ≈ 2.600 hasta. Bloğun fotoğrafını gönder (eşlenemeyen değerler orada).
+- Beklenen: `success`, C1 ≈ 2.600 ve C2 ≈ 2.600 hasta. Bloğun fotoğrafını gönder (`unmapped values` orada).
 - Sigara kalemi filtresi eklendi (C1'deki Smoking, Cigarettes, Cigars, "Cigarettes,Cigars"). C2'de kalem adları
-  farklıysa ingest "filter item … bütün satırları eledi" diye durur ve C2'deki kalemleri basar: fotoğrafı gönder.
+  farklıysa ingest "filter item … removed every row" diye durur ve C2'deki kalemleri basar: fotoğrafı gönder.
   Filtre düzeltilip push edilir; sonra adım 0 ve 1 tekrar.
 - Blokta `social_history` satırındaki `filtered_out_values_item` elenen kalemleri gösterir (ALCOHOL, Other …).
 - Lab'lar artık `LabResultItem` view'ından okunuyor (birim sütunu `ResultValueUnits` ile; ilk ingest'te
-  `labs=0` idi). Blokta `satır: labs=` 0'dan büyük olmalı. `lab (LabResultItem …)` bölümünü de fotoğrafla:
+  `labs=0` idi). Blokta `rows: labs=` 0'dan büyük olmalı. `lab (LabResultItem …)` bölümünü de fotoğrafla:
   orada tutulan test kodları, tür | birim başına medyan ve adı HbA1c / glukoz gibi görünüp kodu tanınmayan
   testler var. `lab_results  absent (optional)` görünürse view o kohortta yok ya da SELECT yetkisi yok.
 
@@ -74,7 +74,7 @@ Notlar:
   `python3 -m IPython -i notebooks/01_c1_c2_feasibility.py`. Notebook çalışır, değişkenler istemde kalır.
   Grafikler `outputs/<run_id>/` altında PNG olarak durur.
 
-## 3 · Resmi run'lar (audit + KOPYALA bloğu)
+## 3 · Resmi run'lar (audit + COPY bloğu)
 
 Jupyter'deki çalıştırma inceleme içindir. Gönderilecek sonuçlar şunlardan gelir; her birinin bloğunu
 fotoğrafla:
@@ -155,5 +155,5 @@ for s in c1 c2; do for k in 39156-5 8302-2 3141-9; do bash tools/enclave.sh valu
 ## 5 · Bitiş
 
 - Jupyter sekmesinde Ctrl+C.
-- Enclave'den yalnız KOPYALA blokları ve bastırılmış özet tablolar çıkar. `data/`, `.env`, snapshot'lar ve
+- Enclave'den yalnız COPY blokları ve bastırılmış özet tablolar çıkar. `data/`, `.env`, snapshot'lar ve
   hasta kimliği içeren dosyalar çıkmaz.

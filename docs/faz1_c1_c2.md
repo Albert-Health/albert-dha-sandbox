@@ -12,7 +12,7 @@ Güncelleme: 2026-11-19 · Açık işler ve kararların kaydı: [`gap.md`](gap.m
 | C2 şeması | `SBXV_ENCL94F43B4B_HSAA` |
 | C3 şeması (Faz 2) | `SBXV_ENCL6F10EFBD_HSAA` (2026-11-19'a kadar kodda C2 ile yer değiştirmişti) |
 
-**Çalışma döngüsü.** Her komut sonucunu `KOPYALA BAŞ` … `KOPYALA SON` arasında basar. Bu bloğu ekibe
+**Çalışma döngüsü.** Her komut sonucunu `COPY START` … `COPY END` arasında basar. Bu bloğu ekibe
 yapıştır. Adapter düzeltmesi VM dışında yapılır ve push edilir; VM'de `git pull --ff-only` ile alınıp komut
 tekrarlanır. VM'de kod düzenlenmez. Bloklarda yalnız meta veri ve özet vardır. Yine de yapıştırmadan önce
 göz at.
@@ -163,9 +163,9 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   bash tools/enclave.sh run ingest --cohorts c1 c2
   ```
 
-  Beklenen: `success`. C1 ≈ 2.600, C2 ≈ 2.600 hasta (Data availability). Blokta bakılacaklar: eşlenemeyen
-  değerler, düşen satırlar (diyabet dışı aile öyküsü, kullanılamayan yaş), `unparseable_*` tarihler ve
-  **"ilaç → ATC" bölümü** (K12):
+  Beklenen: `success`. C1 ≈ 2.600, C2 ≈ 2.600 hasta (Data availability). Blokta bakılacaklar: `unmapped
+  values`, düşen satırlar (diyabet dışı aile öyküsü, kullanılamayan yaş), `unparseable_*` tarihler ve
+  **"drug → ATC" bölümü** (K12):
   - `drug → ATC method`: C1'de çoğunluk `DDC code` olmalı; `code not ATC/DDC` çoksa kod biçimi farklıdır
     (`drug code not ATC/DDC` satırlarındaki örneklere bak).
   - `DDC: not a study drug class` ve `rows dropped` normaldir (antibiyotik, vitamin vb. çalışma sınıfı değil).
@@ -254,7 +254,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 
 ### 8 · Çıktı çıkarma
 
-- [ ] Enclave'den yalnız `KOPYALA` blokları ve küçük hücreleri bastırılmış (< 10 → "<10") özet tablolar
+- [ ] Enclave'den yalnız `COPY` blokları ve küçük hücreleri bastırılmış (< 10 → "<10") özet tablolar
   çıkar. DHA'nın onayı gerekir.
 - `data/`, snapshot'lar, hasta kimliği içeren dosyalar ve ekran görüntüleri çıkmaz.
 

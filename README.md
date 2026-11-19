@@ -6,7 +6,7 @@ Başvuru: **S-2025-Y4B7N9** · QDiabetes-2018 (Model A) ve Leicester Risk Score'
 
 **Enclave'de çalışma:** Faz 1'in sıralı yapılacaklar listesi [`docs/faz1_c1_c2.md`](docs/faz1_c1_c2.md) · komut
 rehberi [`docs/enclave_terminal.md`](docs/enclave_terminal.md) (IRIS keşfi, adapter eşlemesi, run, sorun giderme).
-Tek komut, repo kökünde: `bash tools/enclave.sh <komut>`; sonuç `KOPYALA` işaretleri arasında, yalnız özet / meta veri.
+Tek komut, repo kökünde: `bash tools/enclave.sh <komut>`; sonuç `COPY` işaretleri arasında, yalnız özet / meta veri.
 
 ## Yapı
 

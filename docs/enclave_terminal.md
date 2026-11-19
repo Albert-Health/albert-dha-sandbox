@@ -8,15 +8,15 @@ yapılacaklar listesi: [`faz1_c1_c2.md`](faz1_c1_c2.md).
 Her komut sonucunu iki işaret satırı arasında basar. Enclave dışına kopyalanan yalnız bu bloktur:
 
 ```text
-----8<---- KOPYALA BAŞ | enclave req R5 | 2026-11-18 10:00 UTC | commit 1c877f2 | python 3.11.9 | <run_id> ----8<----
+----8<---- COPY START | enclave req R5 | 2026-11-18 10:00 UTC | commit 1c877f2 | python 3.11.9 | <run_id> ----8<----
 ...
-----8<---- KOPYALA SON ----8<----
+----8<---- COPY END ----8<----
 ```
 
 ## Nasıl işler
 
 ```text
-GitHub (bu sayfa) ──kopyala──▶ enclave terminali ──KOPYALA bloğu──▶ ekip
+GitHub (bu sayfa) ──kopyala──▶ enclave terminali ──COPY bloğu──▶ ekip
         ▲                                                            │
         └──── git push ◀── adapter / kod düzeltmesi (enclave dışında) ◀┘
 enclave'de: git pull --ff-only (salt-okuma token) → komutu tekrar çalıştır
@@ -198,7 +198,7 @@ IRIS → snapshot (`data/nabidh_iris/raw/`) + kanonik veri (`data/canonical/nabi
 bash tools/enclave.sh run ingest --cohorts c1 c2
 ```
 
-Blokta "eşlenemeyen değerler" varsa onu gönder; sözlükler güncellenince IRIS'e gitmeden snapshot'tan tekrar:
+Blokta "unmapped values" varsa onu gönder; sözlükler güncellenince IRIS'e gitmeden snapshot'tan tekrar:
 
 ```bash
 bash tools/enclave.sh run ingest --snapshot --cohorts c1 c2
@@ -260,13 +260,13 @@ Ortak seçenekler: `--max-rows N` (tablo satırı), `--iris-sqlite DIZIN` (prova
 
 | Belirti | Ne yap |
 |---|---|
-| `Python >= 3.10 bulunamadı` ya da R5'te paket FAIL | DHA'nın kurduğu Python'u ver: komutun başına `SANDBOX_PYTHON=/tam/yol/python3 ` ekle. Eksik paket → DHA'ya `requirements.txt` ile ilet |
+| `Python >= 3.10 not found` ya da R5'te paket FAIL | DHA'nın kurduğu Python'u ver: komutun başına `SANDBOX_PYTHON=/tam/yol/python3 ` ekle. Eksik paket → DHA'ya `requirements.txt` ile ilet |
 | R6: `could not read Username` | token önbellekte değil: §1'deki `git pull`'u bir kez çalıştırıp token'ı gir, R6'yı tekrarla |
 | R7: TCP FAIL | firewall kuralı DHA'da (R7); DNS WARN ise §3.1'deki IP'li `iris-setup` |
 | R8: giriş FAIL | kullanıcı / şifre / namespace: `iris-setup`'ı tekrar çalıştır; şifreyi §3.2 ile yeniden gir |
 | R8: hiç şema görünmüyor | namespace yanlış ya da SELECT yetkisi yok → DHA (R8). `schemas --all` |
-| `şema yok` / `tablo yok` | blok yakın adları önerir; `schemas`, `find` ile ara |
-| `run` çıkış kodu ≠ 0 | blokta "Yer" ve "Hata" satırları var; hasta değeri içermiyorsa bloğu gönder |
+| `no such schema` / `No such table` | blok yakın adları önerir; `schemas`, `find` ile ara |
+| `run` çıkış kodu ≠ 0 | blokta "Where" ve "Error" satırları var; hasta değeri içermiyorsa bloğu gönder |
 | Blok ekrandan kaydı | `last` |
 
 ## 9. Yerelde prova (enclave dışında)

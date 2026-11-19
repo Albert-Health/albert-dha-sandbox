@@ -39,9 +39,9 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    yazma. `outputs/audit/audit_log.jsonl` append-only — elle düzenleme, silme.
 5. **Parametreler tek yerde:** `src/sandbox/config.py → PARAMS`. Notebook içinde sabit eşik/pencere
    yazma. Duyarlılık çalıştırmaları `SANDBOX_PARAMS='{"key": value}'` ortam değişkeniyle (audit'e girer).
-6. **Klinik kararlar kodlama asistanının/geliştiricinin değildir.** `[KARAR BEKLİYOR]` işaretli parametrelerin
+6. **Klinik kararlar kodlama asistanının/geliştiricinin değildir.** `[DECISION PENDING]` işaretli parametrelerin
    varsayılanını medikal ekip onayı olmadan değiştirme. Karar gelince: config'i güncelle, yorumdaki
-   işareti `[KARAR: <tarih>, <kim>]` yap, `docs/gap.md` §5 "Kararlar" bölümüne işle.
+   işareti `[DECIDED: <tarih>, <kim>]` yap, `docs/gap.md` §5 "Kararlar" bölümüne işle.
 7. **Kaynak formatı yalnızca adapter'da.** Analiz kodu sadece kanonik şemayı okur
    (`src/sandbox/io/schema.py`). NABIDH formatı / IRIS şeması değişirse yalnızca `io/adapters/nabidh.py`
    (SOURCES, IRIS_COHORTS ve değer sözlükleri) değişir. Ham dosya ve IRIS aynı SOURCES eşlemesinden geçer.
@@ -77,14 +77,16 @@ notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, build_ddc_reference, positive_control, py2ipynb, enclave.sh + enclave.py
                        (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run;
-                       çıktı KOPYALA bloğu)
+                       çıktı COPY bloğu)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 .run/                  IntelliJ run configuration'ları (repoda)
 ```
 Notebook başlığı her zaman aynı ROOT bloğuyla başlar (cwd'den yukarı `src/sandbox` arar).
-Kod tanımlayıcıları İngilizce; yorum/doküman Türkçe olabilir.
+Kod, yorumlar ve program çıktısı (print, hata mesajı, rapor / tablo başlığı, COPY bloğu) İngilizce;
+dokümanlar (`docs/*.md`, `README.md`, `VM_KOMUTLAR.md`) Türkçe kalabilir, ama alıntıladıkları çıktı koddaki
+İngilizce metinle aynı olmalı.
 
 ## Çalıştırma
 ```bash
@@ -103,14 +105,14 @@ python tools/build_evidence_package.py
 #   IRIS yolu provası: ingest_nabidh --input iris --iris-sqlite data/nabidh_dryrun/iris --source nabidh_dryrun_iris
 # Enclave: tools/ingest_nabidh.py --input iris (IRIS → data/nabidh_iris/raw/<kohort> snapshot → data/canonical/nabidh/)
 #   ya da ham dosyadan (data/nabidh/raw/<kohort>); sonra SANDBOX_SOURCE=nabidh
-# Enclave: repo kökünde bash tools/enclave.sh <komut> (docs/faz1_c1_c2.md, docs/enclave_terminal.md). Bloğa (KOPYALA
-#   BAŞ/SON) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
+# Enclave: repo kökünde bash tools/enclave.sh <komut> (docs/faz1_c1_c2.md, docs/enclave_terminal.md). Bloğa (COPY
+#   START/END) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
 ```
 
 ## Değişiklik yaparken
 - Kohort / outcome / prediktör kuralı değişirse: `tests/` altına el yapımı vaka ekle (tests/fixtures.py).
 - Adapter / ingest davranışı değişirse `io/adapters/nabidh.py → INGEST_VERSION`'ı artır ve kaydına bir satır ekle
-  (MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici · PATCH yalnız rapor). Sürüm her KOPYALA başlığında,
+  (MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici · PATCH yalnız rapor). Sürüm her COPY başlığında,
   ingest özetinde, audit'te ve kanonik `<kohort>/ingest.json`'da görünür; NB blokları okudukları sürümü basar.
 - Skorlayıcı değişirse: `tests/test_scores.py` referans vektörleri (CRAN QDiabetes README değerleri) geçmeli.
 - Metrik eklerken: küçük, elle doğrulanabilir örnekle test (sansürsüzde C-index = AUROC gibi).
