@@ -121,6 +121,10 @@ class TestIngest(BundleCase):
         self.assertEqual(rc, 1 if (val["severity"] == "ERROR").any() else 0, out)    # the fixture has an ERROR row
         self.assertIn(f"bundle {self.meta['payload_sha256'][:12]}", out)       # COPY START header
         self.assertIn("COPY END", out)
+        block = out[out.index("COPY START"):]
+        if rc == 1:          # schema_errors: the summary reports them; no "Error:" tail (raw table, counts < 10)
+            self.assertIn("status: schema_errors", block)
+            self.assertFalse([ln for ln in block.splitlines() if ln.startswith(("Error:", "Where:"))], block)
         got = self.root / "data" / "canonical" / "bt" / "c1"
         names = sorted(p.name for p in want.glob("*.csv"))
         self.assertEqual(names, sorted(p.name for p in got.glob("*.csv")))

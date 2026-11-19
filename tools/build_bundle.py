@@ -1,14 +1,15 @@
-"""One-file bundle for a VM that cannot `git pull`: the code of `bash tools/enclave.sh run ingest` in one .py file.
+"""One-file bundle for a VM that cannot `git pull`: the code of the `bash tools/enclave.sh run` steps in one .py file.
 
-The bundle carries tools/enclave.py, the step scripts (default: tools/ingest_nabidh.py) and every src/sandbox
-module they import, unchanged, compressed and base64-encoded (ASCII only: a clipboard copy cannot mangle →, ≥ …).
-Copy the file by hand into the repo root on the VM and run it there:
+The bundle carries tools/enclave.py, the step scripts (default: the Phase 1 steps ingest, nb0, nb1, kpi) and every
+src/sandbox module they import, unchanged, compressed and base64-encoded (ASCII only: a clipboard copy cannot
+mangle →, ≥ …). Copy the file by hand into the repo on the VM and run it there:
 
-  python tools/build_bundle.py                       # → dist/ingest_bundle.py
-  python tools/build_bundle.py --steps ingest nb1    # also carries notebooks/01_c1_c2_feasibility.py
-  # on the VM, repo root:
-  python3 ingest_bundle.py bundle-info               # file check, what it carries, which repo files are older
-  python3 ingest_bundle.py run ingest --cohorts c1 c2    # = bash tools/enclave.sh run ingest --cohorts c1 c2
+  python tools/build_bundle.py                       # → dist/sandbox_bundle.py (ingest, nb0, nb1, kpi)
+  python tools/build_bundle.py --steps ingest        # only the ingest
+  # on the VM, inside the repo:
+  python3 sandbox_bundle.py bundle-info              # file check, what it carries, which repo files are older
+  python3 sandbox_bundle.py run ingest --cohorts c1 c2   # = bash tools/enclave.sh run ingest --cohorts c1 c2
+  python3 sandbox_bundle.py run nb0                  # = bash tools/enclave.sh run nb0 (same for nb1, kpi)
 
 At run time the bundle's modules are imported instead of the repo's src/ and tools/ files (the repo is only read
 for data/, outputs/, .env and src/sandbox/reference/ddc.csv.gz, whose SHA-256 is checked). The last line holds a
@@ -35,6 +36,8 @@ sys.path.insert(0, str(REPO_ROOT / "tools"))
 import enclave  # noqa: E402  (standard library only at import)
 
 ENTRY = "tools/enclave.py"
+DEFAULT_STEPS = ["ingest", "nb0", "nb1", "kpi"]          # Phase 1 (C1 / C2): docs/faz1_c1_c2.md
+BUNDLE_NAME = "sandbox_bundle.py"
 # Files the bundled code reads from the repo on the VM (not embedded): path → SHA-256 checked before a run
 RESOURCES = ["src/sandbox/reference/ddc.csv.gz"]
 CHECK_PREFIX = "# file-check: "
@@ -115,7 +118,7 @@ def file_check(lines: list[str]) -> str:
     return sha256_bytes("\n".join(lines).encode("utf-8"))[:16]
 
 
-def build(steps: list[str], allow_dirty: bool = False) -> tuple[str, dict]:
+def build(steps: list[str], allow_dirty: bool = False, name: str = BUNDLE_NAME) -> tuple[str, dict]:
     """→ (bundle text, meta)."""
     unknown = [s for s in steps if s not in enclave.STEPS]
     if unknown:
@@ -146,7 +149,6 @@ def build(steps: list[str], allow_dirty: bool = False) -> tuple[str, dict]:
     blob = "\n".join("# " + ln for ln in base64.encodebytes(zlib.compress(raw, 9)).decode("ascii").split())
 
     commit = (meta["git"]["commit"] or "?")[:7] + ("+changes" if dirty else "")
-    name = default_name(steps)
     doc = "\n".join([
         f'"""Albert Health x DHA sandbox - one-file bundle {payload_sha[:12]}: run {", ".join(steps)}',
         "",
@@ -156,7 +158,9 @@ def build(steps: list[str], allow_dirty: bool = False) -> tuple[str, dict]:
         "Put this file in the repo root on the VM and run it there (the repo supplies data/, outputs/, .env and",
         f"{', '.join(RESOURCES)}):",
         f"  python3 {name} bundle-info                  # file check, contents, which repo files differ",
-        f"  python3 {name} run ingest --cohorts c1 c2   # = bash tools/enclave.sh run ingest --cohorts c1 c2",
+        *[f"  python3 {name} run ingest --cohorts c1 c2   # = bash tools/enclave.sh run ingest --cohorts c1 c2"
+          for s in steps if s == "ingest"],
+        *[f"  python3 {name} run {s:<24s}# = bash tools/enclave.sh run {s}" for s in steps if s != "ingest"],
         f"  python3 {name} help                         # every enclave.sh command",
         "The last line is a hash of all lines above it: a file changed while copying is refused. The",
         "embedded code is the comment block at the end (bundle-extract DIR writes it out as files).",
@@ -171,18 +175,15 @@ def build(steps: list[str], allow_dirty: bool = False) -> tuple[str, dict]:
     return text, meta
 
 
-def default_name(steps: list[str]) -> str:
-    return f"{'_'.join(steps)}_bundle.py"
-
-
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="One-file bundle of the enclave steps (for a VM without git pull)")
-    ap.add_argument("--steps", nargs="+", default=["ingest"], help=f"run steps to carry ({', '.join(enclave.STEPS)})")
-    ap.add_argument("--out", type=Path, default=None, help="default dist/<steps>_bundle.py")
+    ap.add_argument("--steps", nargs="+", default=DEFAULT_STEPS,
+                    help=f"run steps to carry ({', '.join(enclave.STEPS)}); default {' '.join(DEFAULT_STEPS)}")
+    ap.add_argument("--out", type=Path, default=REPO_ROOT / "dist" / BUNDLE_NAME, help=f"default dist/{BUNDLE_NAME}")
     ap.add_argument("--allow-dirty", action="store_true", help="build from uncommitted files (audit shows +changes)")
     a = ap.parse_args(argv)
-    text, meta = build(a.steps, a.allow_dirty)
-    out = a.out or REPO_ROOT / "dist" / default_name(a.steps)
+    text, meta = build(a.steps, a.allow_dirty, a.out.name)
+    out = a.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
     commit = (meta["git"]["commit"] or "?")[:7] + ("+changes" if meta["git"]["dirty"] else "")
@@ -190,7 +191,7 @@ def main(argv=None) -> int:
     print(f"bundle {meta['payload_sha256'][:12]} · commit {commit} · ingest v{meta['ingest_version']} · "
           f"steps: {', '.join(a.steps)} · {len(meta['files'])} files")
     print(f"file check: {text.rstrip().rsplit(CHECK_PREFIX, 1)[1]}  (the VM's `bundle-info` must show the same)")
-    print(f"VM: save as <repo root>/{out.name}, then: python3 {out.name} bundle-info")
+    print(f"VM: save it inside the repo as {out.name}, then: python3 {out.name} bundle-info")
     return 0
 
 
@@ -380,6 +381,7 @@ def extract(files, target):
 USAGE = f"""python3 {NAME} COMMAND ...   (from the repo root; same commands as bash tools/enclave.sh)
   bundle-info                     file check, what the bundle carries, DDC reference check
   run ingest --cohorts c1 c2      IRIS -> canonical (data/canonical/nabidh/...) + COPY block
+  run nb0 | run nb1 | run kpi     the other steps it carries (bundle-info lists them)
   mapping c1 c2 | schemas | ...   the other enclave.sh commands, with the bundle's adapter
   bundle-extract DIR              write the embedded source files to DIR (to read them)
 """

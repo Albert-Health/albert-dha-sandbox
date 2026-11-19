@@ -830,6 +830,11 @@ def framework_pivot(df):
     return wide.reset_index()
 
 
+# Step statuses whose details the block's summary already reports: no error tail then (for ingest "schema_errors" the
+# screen tail is the raw unmapped-values table, with counts < 10 not suppressed)
+REPORTED_STATUSES = {"schema_errors"}
+
+
 def failure_lines(lines: list[str]) -> list[str]:
     """Error summary: the traceback's last 'File …' line + the last two non-empty lines."""
     out = []
@@ -1010,16 +1015,17 @@ def cmd_run(a, out: Block, run) -> int:
     out(f"Step: run {a.step} · source {a.source} · exit code {rc} · {time.time() - t0:.0f} s")
     if a.step != "ingest":
         out(f"Data: {data_versions(a.source)}")
-    found = []
+    found, statuses = [], set()
     for n in new:
         m = OUTPUT_DIR / n / "run_manifest.json"
         if m.is_file():
             d = json.loads(m.read_text(encoding="utf-8"))
             found.append(OUTPUT_DIR / n)
+            statuses.add(d.get("status"))
             out(f"Run: {n} · status: {d.get('status')} · {len(d.get('outputs', []))} outputs")
     if not found:
         out("No run record found (the script stopped before opening its audit)")
-    if rc != 0:
+    if rc != 0 and not statuses & REPORTED_STATUSES:
         for ln in failure_lines(lines):
             out(ln)
     for d in found:
