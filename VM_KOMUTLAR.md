@@ -31,8 +31,10 @@ bash tools/enclave.sh run ingest --cohorts c1 c2
 ```
 
 - Beklenen: `success`, C1 ≈ 2.600 ve C2 ≈ 2.600 hasta. Bloğun fotoğrafını gönder (eşlenemeyen değerler orada).
-- "SocialHistory birden çok kalem içeriyor (…)" ile durursa: fotoğrafı gönder. Filtre düzeltilip push edilir;
-  sonra adım 0 ve 1 tekrar.
+- Sigara kalemi filtresi eklendi (C1'deki Smoking, Cigarettes, Cigars, "Cigarettes,Cigars"). C2'de kalem adları
+  farklıysa ingest "filter item … bütün satırları eledi" diye durur ve C2'deki kalemleri basar: fotoğrafı gönder.
+  Filtre düzeltilip push edilir; sonra adım 0 ve 1 tekrar.
+- Blokta `social_history` satırındaki `filtered_out_values_item` elenen kalemleri gösterir (ALCOHOL, Other …).
 
 ## 2 · Jupyter (inceleme)
 

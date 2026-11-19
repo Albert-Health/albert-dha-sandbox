@@ -227,14 +227,48 @@ class TestAdapterOptions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             write_raw(d, social_rows=rows)
-            with self.assertRaises(ValueError):
-                nabidh.load(d, "c1")
             src = copy.deepcopy(nabidh.SOURCES)
+            src["social_history"]["filter"] = None
+            with self.assertRaises(ValueError):                    # filtre yok → hangi kalem sigara, bilinmez
+                nabidh.load(d, "c1", src)
             src["social_history"]["filter"] = {"item": ["smoking"]}
             ds, rep = nabidh.load(d, "c1", src)
         sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"]
         self.assertEqual(list(sm["value"]), ["never"])
         self.assertEqual(rep["sources"]["social_history"]["filtered_out_by_item"], 1)
+
+    def test_social_history_c1_categories(self):
+        """C1 kalemleri (enclave ingest, 2026-11-19): varsayılan filtre tütün kalemlerini birlikte alır."""
+        rows = ["A1,Smoking,Never smoker,2018-01-01", "A2,Cigarettes,Current smoker,2019-01-01",
+                "A3,\"Cigarettes,Cigars\",Ex-smoker,2019-01-01", "A4,Cigars,10 per day,2019-01-01",
+                "A2,Other,Yes,2019-01-01", "A3,Unknown,Yes,2019-01-01", "A4,Beverages,Tea,2019-01-01"]
+        rows += [f"A1,ALCOHOL,No,2018-01-{i:02d}" for i in range(1, 13)]           # 12 satır: etiket adı basılır
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows)
+            ds, rep = nabidh.load(d, "c1")
+        sm = ds["observations"][ds["observations"]["concept"] == "smoking_status"]
+        self.assertEqual(dict(zip(sm["patient_id"], sm["value"])),
+                         {"A1": "never", "A2": "current", "A3": "ex", "A4": "unmapped:10 per day"})
+        info = rep["sources"]["social_history"]
+        self.assertEqual(info["filtered_out_by_item"], 15)
+        self.assertEqual(info["filtered_out_values_item"], "ALCOHOL (12), +3 etiket < 10 satır")
+        vc = pd.DataFrame(rep["value_counts"])
+        shown = set(vc.loc[vc["field"] == "value → canonical", "value"])
+        self.assertIn("Cigars | 10 per day → unmapped:10 per day", shown)   # eşlenemeyen değerin kalemi görünür
+
+    def test_filter_that_drops_everything_stops(self):
+        """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""
+        rows = [f"A{1 + i % 4},Tobacco use,Never,2018-01-{1 + i:02d}" for i in range(11)] + ["A1,Alcohol,No,2018-02-01"]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows, social_item="SocialHabitCategory_Description")
+            with self.assertRaises(ValueError) as cm:
+                nabidh.load(d, "c2")
+        msg = str(cm.exception)
+        self.assertIn("bütün satırları eledi", msg)
+        self.assertIn("Tobacco use (11)", msg)
+        self.assertIn("+1 etiket < 10 satır", msg)                    # Alcohol: 1 satır, adı basılmaz
 
 
 class TestNationality(unittest.TestCase):

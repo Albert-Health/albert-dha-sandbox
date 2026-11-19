@@ -856,6 +856,7 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             extra = [f"{k}={sdc.fmt_count(v)}" for k, v in src.items()
                      if k.startswith(("unparseable_", "filtered_out_by_")) and v]
             extra += [f"{k}={v}" for k, v in src.items() if k.startswith("absent") and v]
+            extra += [f"{k}: {v}" for k, v in src.items() if k.startswith("filtered_out_values_") and v]
             if src.get("error"):
                 extra.append(str(src["error"])[:120])
             out(f"   {name:16s} {str(src.get('status', '?')):18s} okunan={sdc.fmt_count(src.get('rows_read', '-'))} "

@@ -114,8 +114,11 @@ SOURCES: dict[str, dict] = {
         "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
         "columns": {"patient_id": "Patient", "value": "SocialHabitQty_Description", "date": "EnteredOn"},
         "optional_columns": {"item": ["SocialHabitCategory_Code", "SocialHabitCategory_Description"]},
-        # Sigara dışı kalemler de varsa: {"item": [sigara kaleminin kodu ve açıklaması]}
-        "filter": None,
+        # Kalemler (C1 ingest, 2026-11-19): ALCOHOL, Beverages, Cigarettes, "Cigarettes,Cigars", Cigars, Other,
+        # Smoking, Unknown. Sigara = tütün içimi kalemleri; "Tobacco" prova verisi ve olası C2 adı için.
+        # [KARAR BEKLİYOR] D7 — "Other" (shisha / midwakh olabilir) ve "Unknown" dışarıda; medikal ekip.
+        # Filtre bir kohortun bütün satırlarını elerse ingest durur ve kaynaktaki kalemleri basar.
+        "filter": {"item": ["Smoking", "Cigarettes", "Cigars", "Cigarettes,Cigars", "Tobacco"]},
     },
     "family_history": {
         "file": "family_history.csv", "table": "{schema}.FamilyHistory",
@@ -207,6 +210,18 @@ def _value_counts(source: str, field: str, s: pd.Series, top: int = 50) -> list[
     return [{"source": source, "field": field, "value": str(k), "n_rows": int(v)} for k, v in vc.items()]
 
 
+def _labels(s: pd.Series, top: int = 15, k: int = 10) -> str:
+    """Kategori etiketleri (ör. SocialHistory kalemi) ve satır sayıları; < k satırlık etiket adı basılmaz."""
+    vc = s.astype("string").fillna("<boş>").str.slice(0, 40).value_counts()
+    big, small = vc[vc >= k], vc[vc < k]
+    out = ", ".join(f"{v} ({n})" for v, n in big.head(top).items())
+    if len(big) > top:
+        out += f", +{len(big) - top} etiket"
+    if len(small):
+        out += f"{', ' if out else ''}+{len(small)} etiket < {k} satır"
+    return out or "yok"
+
+
 def alternatives(src) -> list[str]:
     """Kaynak sütun tanımı (ad ya da ad listesi) → aday adlar."""
     return [src] if isinstance(src, str) else list(src)
@@ -243,6 +258,11 @@ def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -
         allowed = spec["filter"][key]
         keep = _norm_text(df[src]).isin([a.lower() for a in allowed]).fillna(False).astype(bool)
         info[f"filtered_out_by_{key}"] = int((~keep).sum())
+        if len(df) and not keep.any():
+            raise ValueError(f"{name}: filter {key} = {allowed} bütün satırları eledi. Kaynaktaki değerler: "
+                             f"{_labels(df[src])}. SOURCES['{name}']['filter'] güncellenmeli.")
+        if (~keep).any():
+            info[f"filtered_out_values_{key}"] = _labels(df.loc[~keep, src])
         df = df[keep]
     out = pd.DataFrame({canon: df[src] for canon, src in got.items()})
     opt_got = {canon: resolve_column(src, df.columns) for canon, src in opt.items()}
@@ -350,8 +370,10 @@ def _h_measurements(df, name, vc):
     return {"labs": labs, "observations": obs}
 
 
-def _h_smoking(df, name, vc):
-    if "item" in df and df["item"].nunique(dropna=True) > 1:
+def _h_smoking(df, name, vc, item_filtered: bool = False):
+    """item_filtered: SOURCES'ta kalem filtresi var → seçilen kalemlerin hepsi sigara sayılır. Yoksa birden çok
+    kalem (ör. sigara + alkol) görülürse durur: hangi kalemin sigara olduğu bilinmez."""
+    if "item" in df and not item_filtered and df["item"].nunique(dropna=True) > 1:
         raise ValueError(f"{name}: SocialHistory birden çok kalem içeriyor "
                          f"({sorted(df['item'].dropna().unique())[:10]}). "
                          f"SOURCES['{name}']['filter'] ile sigara kalemini seç.")
@@ -363,8 +385,10 @@ def _h_smoking(df, name, vc):
     mapped = mapped.fillna(code.map(SMOKING_VALUES))
     has_any = key.notna() | code.notna()
     value = mapped.astype(object).where(mapped.notna(), "unmapped:" + key.fillna(code).astype(object).astype(str))
-    vc += _value_counts(name, "value → canonical",
-                        key.fillna("<empty>").astype(str) + " → " + value.astype(str))
+    shown = key.fillna("<empty>").astype(str) + " → " + value.astype(str)
+    if "item" in df:                                # birden çok kalemde değerin hangi kalemden geldiği
+        shown = df["item"].astype("string").fillna("<boş>").astype(str) + " | " + shown
+    vc += _value_counts(name, "value → canonical", shown)
     out = pd.DataFrame({"patient_id": df["patient_id"], "concept": "smoking_status",
                         "code_system": code.where(code.isna(), "SNOMED"), "code": code,
                         "value": value, "unit": pd.NA, "date": df["date"]})[has_any]
@@ -558,7 +582,8 @@ def _load(cohort: str, sources: dict, read, input_kind: str) -> tuple[Dataset, d
             continue
         df, info = _select(raw, spec, name, got.get("file") or "IRIS query")
         df = _parse_dates(df, spec, info)
-        produced = HANDLERS[spec["kind"]](df, name, report["value_counts"])
+        extra = {"item_filtered": bool(spec.get("filter"))} if spec["kind"] == "smoking" else {}
+        produced = HANDLERS[spec["kind"]](df, name, report["value_counts"], **extra)
         info.update(got)
         info.update(status="read", rows_out={t: int(len(d)) for t, d in produced.items()})
         report["sources"][name] = info
