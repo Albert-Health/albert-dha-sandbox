@@ -9,8 +9,8 @@ Güncelleme: 2026-11-19 · Açık işler ve kararların kaydı: [`gap.md`](gap.m
 | Python | `/usr/bin/python3`; paketler `--user` ile kuruldu (2026-11-18). Komutlarda `python3` |
 | IRIS | `10.28.29.29:51772`, namespace `HSSBX`, salt-okuma kullanıcı; ayar `~/.nabidh_iris` (repo dışında) |
 | C1 şeması | `SBXV_ENCL447CCD80_HSAA` |
-| C2 şeması | `SBXV_ENCL6F10EFBD_HSAA` |
-| C3 şeması (Faz 2) | `SBXV_ENCL94F43B4B_HSAA` |
+| C2 şeması | `SBXV_ENCL94F43B4B_HSAA` |
+| C3 şeması (Faz 2) | `SBXV_ENCL6F10EFBD_HSAA` (2026-11-19'a kadar kodda C2 ile yer değiştirmişti) |
 
 **Çalışma döngüsü.** Her komut sonucunu `KOPYALA BAŞ` … `KOPYALA SON` arasında basar. Bu bloğu ekibe
 yapıştır. Adapter düzeltmesi VM dışında yapılır ve push edilir; VM'de `git pull --ff-only` ile alınıp komut

@@ -60,10 +60,11 @@ from .synthetic import read_raw_csv
 # yanında (<kohort>/ingest.json → NB0 / NB1 blokları) görünür. Adapter ya da ingest davranışı değişince artır:
 #   MAJOR kanonik şema · MINOR eşleme / sözlük / işleyici (kanonik veri değişebilir) · PATCH yalnız rapor / çıktı.
 # Kayıt (en yeni üstte):
+#   1.1.0  2026-11-19  IRIS_COHORTS: C2 ve C3 şemaları yer değiştirdi (önceki "C2" verisi aslında C3'tü)
 #   1.0.0  2026-11-19  HSAA view'ları; LabResultItem lab'ları birimiyle (eAG / RBS adından elenir, makullük
 #                      raporu); SocialHistory tütün kalemi filtresi + yoğunluk sözlüğü; aile öyküsü: önce
 #                      ICD-10 / SNOMED kodu sonra metin, olumsuzlama, akraba derecesi, prediyabet atılır; DDC → ATC
-INGEST_VERSION = "1.0.0"
+INGEST_VERSION = "1.1.0"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas çıkarımı; ör. "%d/%m/%Y"; "horolog" (IRIS)
@@ -78,10 +79,11 @@ AGE_REFERENCE_DATE = "2026-11-18"
 
 # IRIS'te kohort başına yer tutucular: `table` / `query` içindeki {schema} vb. buradan, {cohort} kohort adından.
 # DHA enclave (namespace HSSBX, 2026-11-18): kohort başına bir HSAA şeması, içinde view'lar.
+# C2 and C3 were swapped until 2026-11-19 (ingest < 1.1.0): what was read as "C2" was the C3 schema.
 IRIS_COHORTS: dict[str, dict[str, str]] = {
     "c1": {"schema": "SBXV_ENCL447CCD80_HSAA"},
-    "c2": {"schema": "SBXV_ENCL6F10EFBD_HSAA"},
-    "c3": {"schema": "SBXV_ENCL94F43B4B_HSAA"},
+    "c2": {"schema": "SBXV_ENCL94F43B4B_HSAA"},
+    "c3": {"schema": "SBXV_ENCL6F10EFBD_HSAA"},
 }
 
 # Kaynak tanımı:
