@@ -258,6 +258,26 @@ def check_repo(github: bool) -> list[Result]:
             r.append(Result(g, f"{d}/ yazılabilir", PASS, str(p)))
         except OSError as e:
             r.append(Result(g, f"{d}/ yazılabilir", FAIL, f"{p}: {e}"))
+    return r + check_env_file()
+
+
+def check_env_file() -> list[Result]:
+    """Git dışı `.env` (src/sandbox/envfile.py): yalnız anahtar adları basılır, değerler asla."""
+    g = "repo"
+    try:
+        from sandbox import envfile
+        p = envfile.path()
+        keys = sorted(envfile.parse(p.read_text(encoding="utf-8"))) if p and p.is_file() else None
+    except Exception as e:
+        return [Result(g, ".env", WARN, f"okunamadı: {type(e).__name__}")]
+    if keys is None:
+        return [Result(g, ".env", INFO, "yok (isteğe bağlı; export yerine: SANDBOX_SOURCE, NABIDH_IRIS_PASSWORD)")]
+    r = [Result(g, ".env", INFO, f"{p.name}: {', '.join(keys) or 'anahtar yok'} (değerler basılmaz; ortamdaki "
+                                 "değişken .env'i geçer)")]
+    if shutil.which("git") and p.resolve().is_relative_to(REPO_ROOT):
+        ignored = _run(["git", "check-ignore", "-q", str(p)]).returncode == 0
+        if not ignored:
+            r.append(Result(g, ".env git dışında mı", WARN, ".gitignore'da değil — şifre commit'lenebilir"))
     return r
 
 

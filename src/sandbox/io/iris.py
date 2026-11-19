@@ -4,12 +4,13 @@ Kural 2'nin tek istisnası bu modüldür: sürücü (`intersystems-irispython`, 
 yalnızca bağlanırken (tembel import) yüklenir; testler ve analiz kodu sürücüsüz çalışır. Bağlantı DHA içindeki
 IRIS'e, yalnızca SELECT için açılır (`assert_select`).
 
-Bağlantı bilgisi (öncelik sırasıyla): fonksiyon argümanı → ortam değişkeni → kimlik dosyası (repo DIŞINDA;
+Bağlantı bilgisi (öncelik sırasıyla): fonksiyon argümanı → ortam değişkeni (repo kökündeki git dışı `.env`
+dahil; envfile.py) → kimlik dosyası (repo DIŞINDA;
 varsayılan ~/.nabidh_iris, `KEY=VALUE` satırları, `chmod 600`) → şifre için sorulur (terminal, IntelliJ'de
 'Emulate terminal' açık run configuration, Jupyter; bkz. `can_prompt`).
   NABIDH_IRIS_URL       jdbc:IRIS://host:port/NAMESPACE   (DHA'nın verdiği bağlantı dizesi)
   NABIDH_IRIS_USER      salt-okunur kullanıcı
-  NABIDH_IRIS_PASSWORD  şifre (dosyaya ya da ortama; repoya, run configuration'a, audit'e asla)
+  NABIDH_IRIS_PASSWORD  şifre (ortam, git dışı .env ya da kimlik dosyası; git'e, run configuration'a, audit'e asla)
   NABIDH_IRIS_ODBC      (yedek) tam ODBC bağlantı dizesi → pyodbc; verilirse URL/kullanıcı kullanılmaz
   NABIDH_IRIS_CREDENTIALS  kimlik dosyasının yolu (varsayılan ~/.nabidh_iris)
 Audit'e yalnızca host:port/NAMESPACE ve kullanıcı adı yazılır; dizenin geri kalanı (parametreler) yazılmaz.

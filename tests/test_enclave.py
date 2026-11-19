@@ -247,6 +247,16 @@ class TestEnclaveCli(_Db, unittest.TestCase):
             rc, again = run_main(["last"])
             self.assertEqual(again.strip(), text.strip())
 
+    def test_cohort_alias(self):
+        self.assertEqual(enclave.cohort_alias("c1.Patient"), f"{SCHEMA}.Patient")
+        self.assertEqual(enclave.cohort_alias("C2"), nabidh.IRIS_COHORTS["c2"]["schema"])
+        for same in (f"{SCHEMA}.Patient", "HSAA.Patient", "c1x.Patient", ".Patient"):
+            self.assertEqual(enclave.cohort_alias(same), same)
+        with temp_outputs():
+            rc, text = run_main(["values", "c1.Patient", "Nationality", "--iris-sqlite", str(self.dir)])
+        self.assertEqual(rc, 0, text)
+        self.assertIn(f"{SCHEMA}.Patient.Nationality", text)
+
     def test_columns_block_hides_ids(self):
         with temp_outputs():
             rc, text = run_main(["columns", f"{SCHEMA}.patient", "--iris-sqlite", str(self.dir)])

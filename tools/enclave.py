@@ -580,6 +580,17 @@ def ensure_password(a) -> None:
         os.environ[iris.ENV_PASSWORD] = pw
 
 
+def cohort_alias(name: str) -> str:
+    """Kohort kısa adı → IRIS şeması (adapter'daki IRIS_COHORTS): 'c1.Patient' → '<C1 şeması>.Patient', 'c2' →
+    '<C2 şeması>'. Shell'de C1 / C2 değişkeni gerekmez. Diğer adlar olduğu gibi kalır."""
+    head, dot, rest = str(name).partition(".")
+    if head.strip().lower() not in ("c1", "c2", "c3"):
+        return name
+    from sandbox.io.adapters import nabidh
+    hit = nabidh.IRIS_COHORTS.get(head.strip().lower())
+    return f"{hit['schema']}{dot}{rest}" if hit else name
+
+
 def connect(a):
     """→ (DB-API bağlantısı, hedefin kısa adı). --iris-sqlite: IRIS yerine prova SQLite dosyaları."""
     from sandbox.io import iris
@@ -1030,17 +1041,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--like", help="adında geçen metin")
 
     p = sub.add_parser("tables", parents=[common], help="bir şemanın tabloları + satır sayıları")
-    p.add_argument("schema", metavar="SEMA")
+    p.add_argument("schema", metavar="SEMA", help="şema adı ya da kohort: c1 / c2 / c3")
     p.add_argument("--like", help="tablo adında geçen metin")
     p.add_argument("--no-count", action="store_true", help="satır saymadan (büyük şemada hızlı)")
 
     p = sub.add_parser("columns", parents=[common], help="tablonun sütunları: tip, doluluk, şekil, tür")
-    p.add_argument("table", metavar="SEMA.TABLO")
+    p.add_argument("table", metavar="SEMA.TABLO", help="ör. c1.Patient (kohort → şema) ya da ŞEMA.Patient")
     p.add_argument("--sample", type=int, default=5000, help="profil örneklemi (ilk N satır)")
     p.add_argument("--where", help="SQL koşulu (ör. \"PatientType = 'C1'\")")
 
     p = sub.add_parser("values", parents=[common], help="bir sütunun değer dağılımı (≥ 10 hasta)")
-    p.add_argument("table", metavar="SEMA.TABLO")
+    p.add_argument("table", metavar="SEMA.TABLO", help="ör. c1.Patient (kohort → şema) ya da ŞEMA.Patient")
     p.add_argument("column", metavar="SUTUN")
     p.add_argument("--top", type=int, default=30)
     p.add_argument("--where", help="SQL koşulu")
@@ -1083,6 +1094,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "last":
         return cmd_last(a)
+    import sandbox  # noqa: F401  (git dışı .env'i ortama yükler: SANDBOX_SOURCE, NABIDH_IRIS_PASSWORD …)
+    for attr in ("table", "schema"):                 # c1.Patient → <C1 şeması>.Patient
+        if getattr(a, attr, None):
+            setattr(a, attr, cohort_alias(getattr(a, attr)))
     if a.cmd == "req":
         ids = [x.upper() for x in a.ids]
         a.ids = list(REQS) if "ALL" in ids else ids

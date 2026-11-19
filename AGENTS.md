@@ -25,7 +25,9 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
    scipy / sklearn / lifelines / statsmodels EKLEME. Ağ çağrısı (HTTP, telemetri, indirme) yazma.
    Tek istisna: `src/sandbox/io/iris.py` DHA içindeki InterSystems IRIS'e yalnızca SELECT için bağlanır;
    sürücü (`intersystems-irispython`, yedek `pyodbc`) yalnızca orada ve tembel import edilir — testler ve
-   analiz kodu sürücüsüz çalışır. Bağlantı şifresi repoya, run configuration'a, audit'e girmez.
+   analiz kodu sürücüsüz çalışır. Bağlantı şifresi git'e, run configuration'a, audit'e girmez; yerelde git
+   dışı `.env` (repo kökü, `.gitignore`) ya da `~/.nabidh_iris`'te durabilir. `.env`'i `import sandbox` yükler
+   (`envfile.py`; ortamdaki değer kazanır, audit'e yalnız anahtar adları).
    Kod hem pandas 2.x hem 3.x ile çalışmalı (ör. `Series.reset_index(names=)` pandas 2'de yok).
    Kurulum tek mekanizma: projenin Python'una `requirements.txt` (proje) + `requirements-explore.txt` (keşif;
    kod import etmez) bir kez kurulur — VM'de `/usr/bin/python3`'e `--user` ile (2026-11-18); proje venv
@@ -51,6 +53,7 @@ KPI & Graduation Framework (Precoh/DFF v4 → Albert V2.0).
 ```
 src/sandbox/
   config.py            PARAMS + yollar
+  envfile.py           git dışı .env → os.environ (import sandbox'ta; şifre, SANDBOX_SOURCE)
   codelists.py         ICD-10 / SNOMED / ATC / LOINC + etken madde → ATC + uyruk → etnik grup → QDiabetes / LRS
   io/schema.py         kanonik şema (6 tablo), okuma/yazma, validate()
   io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, SocialHistory,

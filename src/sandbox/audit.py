@@ -68,6 +68,16 @@ def _versions() -> dict:
     return out
 
 
+def _env_file() -> dict | None:
+    """`.env`'den gelen ayarlar: yalnız anahtar ADLARI (değer — ör. şifre — asla yazılmaz)."""
+    from .envfile import LOADED
+    if not LOADED["path"]:
+        return None
+    p = Path(LOADED["path"])
+    return {"file": str(p.relative_to(REPO_ROOT)) if p.is_relative_to(REPO_ROOT) else p.name,
+            "keys": list(LOADED["keys"])}
+
+
 def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
@@ -84,7 +94,7 @@ class Run:
             "run_id": self.run_id, "name": name, "source": source, "status": "running", "started_utc": _now(),
             "user": getpass.getuser(), "host": platform.node(), "platform": platform.platform(),
             "versions": _versions(), "code": code_fingerprint(),
-            "params": dict(params or PARAMS), "inputs": [], "outputs": [], "events": [],
+            "params": dict(params or PARAMS), "env_file": _env_file(), "inputs": [], "outputs": [], "events": [],
         }
         self._append({"event": "run_start", "run_id": self.run_id, "name": name,
                       "code_sha256": self.record["code"]["combined_sha256"], "ts": _now()})

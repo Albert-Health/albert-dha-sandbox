@@ -13,6 +13,9 @@ outputs/
 notebooks/*.ipynb
 .ipynb_checkpoints/
 
+# --- Yerel ortam: şifre içerebilir, repoya girmez (src/sandbox/envfile.py) ---
+.env
+
 # --- Python / IDE / OS ---
 __pycache__/
 *.pyc

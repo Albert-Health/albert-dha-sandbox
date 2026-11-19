@@ -1,6 +1,6 @@
 # Faz 1 — C1 / C2: enclave'de yapılacaklar
 
-Güncelleme: 2026-11-18 · Açık işler ve kararların kaydı: [`gap.md`](gap.md) · Komutların ayrıntısı:
+Güncelleme: 2026-11-19 · Açık işler ve kararların kaydı: [`gap.md`](gap.md) · Komutların ayrıntısı:
 [`enclave_terminal.md`](enclave_terminal.md)
 
 | Ortam | Değer |
@@ -44,11 +44,17 @@ göz at.
 
   Sonraki güncellemeler: `git pull --ff-only`.
 
-- [ ] IRIS şifresini oturum boyu bellekte tut, her komutta sorulmasın. Şifre dosyaya yazılmaz:
+- [ ] Bir kez: repo kökünde `.env` (git dışı, `.gitignore`'da). `import sandbox` onu okur; her terminal, notebook
+  ve Jupyter kernel'i `SANDBOX_SOURCE=nabidh` ve IRIS şifresini buradan alır, `export` gerekmez. Şifre ekrana ve
+  shell geçmişine yazılmaz; dosya varsa üzerine yazılır:
 
   ```bash
-  read -rs -p "IRIS şifresi: " NABIDH_IRIS_PASSWORD && echo && export NABIDH_IRIS_PASSWORD
+  read -rs -p "IRIS şifresi: " p && echo && printf 'SANDBOX_SOURCE=nabidh\nNABIDH_IRIS_PASSWORD=%s\n' "$p" > .env && unset p && chmod 600 .env
   ```
+
+  Ortamda (komut satırında) verilen değer `.env`'i geçer. Audit'e yalnız anahtar adları yazılır. `.env` istemezsen
+  eski yol: `read -rs -p "IRIS şifresi: " NABIDH_IRIS_PASSWORD && echo && export NABIDH_IRIS_PASSWORD` (her
+  terminalde).
 
 - [ ] Ortam + IRIS + eşleme kontrolü:
 
@@ -56,14 +62,11 @@ göz at.
   python3 tools/check_environment.py --iris --quick
   ```
 
-  Beklenen: FAIL yok. `[mapping]` c1 ve c2 PASS. c1 encounters INFO: yetki yok, Faz 1'de gerekmiyor. WARN
-  çıkarsa bloğu gönder.
+  Beklenen: FAIL yok. `[repo] .env` satırında `NABIDH_IRIS_PASSWORD, SANDBOX_SOURCE`. `[mapping]` c1 ve c2
+  PASS. c1 encounters INFO: yetki yok, Faz 1'de gerekmiyor. WARN çıkarsa bloğu gönder.
 
-- [ ] Kısa adlar (yeni terminal açınca tekrar):
-
-  ```bash
-  C1=SBXV_ENCL447CCD80_HSAA; C2=SBXV_ENCL6F10EFBD_HSAA
-  ```
+- Tablo adlarında şema yerine kohort yazılır: `c1.Patient`, `c2.Observation` (şemalar adapter'daki
+  `IRIS_COHORTS`'tan). Shell'de C1 / C2 değişkeni gerekmez.
 
 ### 1 · Değerlere bak — ingest'ten önce (~20 dk, K3)
 
@@ -74,10 +77,10 @@ hastada geçen değerleri ya da yüzdelikleri basar.
   olduğunu bilmez. Önce bunlar:
 
   ```bash
-  bash tools/enclave.sh values $C1.SocialHistory SocialHabitCategory_Code
-  bash tools/enclave.sh values $C2.SocialHistory SocialHabitCategory_Description
-  bash tools/enclave.sh values $C1.SocialHistory SocialHabitQty_Description
-  bash tools/enclave.sh values $C2.SocialHistory SocialHabitQty_Description
+  bash tools/enclave.sh values c1.SocialHistory SocialHabitCategory_Code
+  bash tools/enclave.sh values c2.SocialHistory SocialHabitCategory_Description
+  bash tools/enclave.sh values c1.SocialHistory SocialHabitQty_Description
+  bash tools/enclave.sh values c2.SocialHistory SocialHabitQty_Description
   ```
 
   Ne çıkar: SOURCES `social_history` filtresi, `SMOKING_VALUES`, yoğunluk (D7: midwakh, shisha?).
@@ -85,7 +88,7 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 - [ ] **1b · Demografi:**
 
   ```bash
-  for s in $C1 $C2; do for c in Gender_Code EthnicGroup_Description Age; do bash tools/enclave.sh values $s.Patient $c; done; done
+  for s in c1 c2; do for c in Gender_Code EthnicGroup_Description Age; do bash tools/enclave.sh values $s.Patient $c; done; done
   ```
 
   Ne çıkar: `SEX_MAP`; etnik grup listesi (adım 2 kararı için); yaş dağılımı (QDiabetes 25–84, LPRS 40–75).
@@ -93,7 +96,7 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 - [ ] **1c · Lab ve ölçüm birimleri.** Observation'da birim sütunu yok. Birim değer aralığından anlaşılır:
 
   ```bash
-  for s in $C1 $C2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
+  for s in c1 c2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
   ```
 
   | Kod | Medyan buysa | Birim |
@@ -112,9 +115,9 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 - [ ] **1d · Kodlar: tanı, gözlem, aile öyküsü, ilaç:**
 
   ```bash
-  for s in $C1 $C2; do bash tools/enclave.sh values $s.Diagnosis Diagnosis_Code --top 40; bash tools/enclave.sh values $s.Observation ObservationCode_Code --top 40; bash tools/enclave.sh values $s.FamilyHistory FamilyMember_Description; bash tools/enclave.sh values $s.FamilyHistory Diagnosis_Code; done
-  bash tools/enclave.sh values $C1.Medication DrugProduct_Code --top 40
-  bash tools/enclave.sh values $C2.Medication DrugProduct_Description --top 40
+  for s in c1 c2; do bash tools/enclave.sh values $s.Diagnosis Diagnosis_Code --top 40; bash tools/enclave.sh values $s.Observation ObservationCode_Code --top 40; bash tools/enclave.sh values $s.FamilyHistory FamilyMember_Description; bash tools/enclave.sh values $s.FamilyHistory Diagnosis_Code; done
+  bash tools/enclave.sh values c1.Medication DrugProduct_Code --top 40
+  bash tools/enclave.sh values c2.Medication DrugProduct_Description --top 40
   ```
 
   Ne çıkar: Diagnosis_Code gerçekten ICD-10 mu, noktalı mı (`a99.9`); ObservationCode_Code LOINC mi
@@ -126,7 +129,7 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 - [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
 
   ```bash
-  for t in Patient Diagnosis Observation SocialHistory FamilyHistory Medication; do bash tools/enclave.sh columns $C1.$t; done
+  for t in Patient Diagnosis Observation SocialHistory FamilyHistory Medication; do bash tools/enclave.sh columns c1.$t; done
   ```
 
 - [ ] **Blokları gönder → adapter güncellenir, push edilir → VM'de `git pull --ff-only`.**
@@ -225,12 +228,19 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 
   ```bash
   python3 tools/py2ipynb.py notebooks/00_data_profile.py notebooks/01_c1_c2_feasibility.py
-  SANDBOX_SOURCE=nabidh python3 -m jupyterlab
+  python3 -m jupyterlab --no-browser --ip 127.0.0.1 --port 8888
   ```
 
+- VM'de tarayıcı açılmıyor ve IntelliJ'in kendi (Managed) sunucusu "Could not find Jupyter notebook session
+  factory" veriyor (2026-11-19). Çalışan yol: sunucuyu yukarıdaki gibi terminalde başlat, basılan
+  `http://127.0.0.1:8888/lab?token=…` adresini IntelliJ'de notebook üst çubuğu → sunucu menüsü → Configured /
+  External Server alanına yapıştır. Terminal açık kalır; iş bitince Ctrl+C (açık run'lar audit'te kapanır).
 - Notebook'lar IRIS'i değil, ingest'in yazdığı `data/canonical/nabidh/` klasörünü okur; önce adım 3 yapılmış
   olmalı.
-- Değişkensiz açıldıysa en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekle.
+- `SANDBOX_SOURCE` `.env`'den gelir (adım 0). `.env` yoksa sunucuyu `SANDBOX_SOURCE=nabidh python3 -m jupyterlab …`
+  ile başlat ya da en üste `%env SANDBOX_SOURCE=nabidh` hücresi ekle.
+- Jupyter da çalışmazsa tarayıcısız: `python3 -m IPython -i notebooks/01_c1_c2_feasibility.py` (notebook çalışır,
+  değişkenler istemde kalır; grafikler `outputs/<run_id>/` altında PNG).
 - Kaynak `.py` dosyasıdır; `.ipynb`'de yapılan değişiklik yeniden üretilince kaybolur.
 
 ### 8 · Çıktı çıkarma

@@ -100,8 +100,15 @@ Host DNS'te çözülmüyorsa IP ile (R7 DNS satırı WARN):
 bash tools/enclave.sh iris-setup --url jdbc:IRIS://IP_ADRESI:51772/NAMESPACE --user KULLANICI
 ```
 
-**3.2 Şifre (oturum boyu, isteğe bağlı).** Yapılmazsa her komut şifreyi bir kez sorar. Bu satır şifreyi
-yalnız açık terminal oturumunun belleğinde tutar:
+**3.2 Şifre (isteğe bağlı).** Yapılmazsa her komut şifreyi bir kez sorar. Kalıcı yol: repo kökünde git dışı
+`.env` (`.gitignore`'da; `import sandbox` okur, `src/sandbox/envfile.py`). Bir kez yazılır, her terminal ve
+Jupyter kernel'i kullanır; ortamdaki değer `.env`'i geçer, audit'e yalnız anahtar adları girer:
+
+```bash
+read -rs -p "IRIS şifresi: " p && echo && printf 'SANDBOX_SOURCE=nabidh\nNABIDH_IRIS_PASSWORD=%s\n' "$p" > .env && unset p && chmod 600 .env
+```
+
+İş bitince `rm .env`. Dosyasız yol: şifreyi yalnız açık terminal oturumunun belleğinde tut:
 
 ```bash
 read -rs -p "IRIS şifresi: " NABIDH_IRIS_PASSWORD && echo && export NABIDH_IRIS_PASSWORD
