@@ -1,0 +1,22 @@
+Step: run kpi · source nabidh · exit code 0 · 1 s
+Data: c1 ingest v1.2.1 (20261119T120545Z_ingest_nabidh_5e2b7b); c2 ingest v1.2.1 (20261119T120545Z_ingest_nabidh_5e2b7b)
+Run: 20261119T124532Z_kpi_report_4b161e · status: success · 3 outputs
+
+-- kpi/kpi_table.csv (15 rows)
+                                         kpi         target                                 actual      met
+                    Audit Trail Completeness           100%                     95.3% (41/43 runs)  Not Met
+               Evidence Package Completeness       Complete                                    NaN  Pending
+                 Data Security / No-Incident    0 incidents                            0 incidents      Met
+  Applicant Data Requirement Framework Match          Match                                    NaN  Pending
+    Data Completeness for Required Variables         >= 90%                                    NaN  Pending
+                    Joint Completeness - LRS Report % and N C1 0.0% (N=0/2595); C2 0.0% (N=0/2567) Reported
+              Joint Completeness - QDiabetes Report % and N C1 0.0% (N=0/2595); C2 0.0% (N=0/2567) Reported
+        Sensitivity (Recall, positive class)         >= 70%                                    NaN  Pending
+                                 Specificity         >= 70%                                    NaN  Pending
+                                   NPV & PPV     Documented                                    NaN  Pending
+                                       AUROC        >= 0.75                                    NaN  Pending
+                                     C-Index      0.55-0.90                                    NaN  Pending
+                     Precision / Recall / F1     Documented                                    NaN  Pending
+                   Recalibration Slope / O:E     Documented                                    NaN  Pending
+               Alert Rate per 1,000 Patients Pending NABIDH                                    NaN  Pending
+Full screen output (inside the enclave): outputs/20261119T124531Z_enclave_run_c3c3ed/enclave/kpi.log
