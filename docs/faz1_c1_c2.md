@@ -228,13 +228,13 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 
   ```bash
   python3 tools/py2ipynb.py notebooks/00_data_profile.py notebooks/01_c1_c2_feasibility.py
-  python3 -m jupyterlab --no-browser --ip 127.0.0.1 --port 8888
+  python3 -m jupyterlab --no-browser --ip 127.0.0.1 --port 8888 --ServerApp.port_retries=0 --IdentityProvider.token=sandbox
   ```
 
 - VM'de tarayıcı açılmıyor ve IntelliJ'in kendi (Managed) sunucusu "Could not find Jupyter notebook session
-  factory" veriyor (2026-11-19). Çalışan yol: sunucuyu yukarıdaki gibi terminalde başlat, basılan
-  `http://127.0.0.1:8888/lab?token=…` adresini IntelliJ'de notebook üst çubuğu → sunucu menüsü → Configured /
-  External Server alanına yapıştır. Terminal açık kalır; iş bitince Ctrl+C (açık run'lar audit'te kapanır).
+  factory" veriyor (2026-11-19). Çalışan yol: sunucuyu yukarıdaki gibi terminalde başlat; IntelliJ'de notebook
+  üst çubuğu → sunucu menüsü → Configured / External Server: `http://127.0.0.1:8888/?token=sandbox` (token sabit,
+  yalnız 127.0.0.1; adres bir kez yazılır). Terminal açık kalır; iş bitince Ctrl+C (açık run'lar audit'te kapanır).
 - Notebook'lar IRIS'i değil, ingest'in yazdığı `data/canonical/nabidh/` klasörünü okur; önce adım 3 yapılmış
   olmalı.
 - `SANDBOX_SOURCE` `.env`'den gelir (adım 0). `.env` yoksa sunucuyu `SANDBOX_SOURCE=nabidh python3 -m jupyterlab …`
