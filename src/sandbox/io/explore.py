@@ -1,16 +1,16 @@
-"""IRIS'i terminalden keşif: şemalar, tablolar, sütunlar, değer dağılımları (IntelliJ Database aracı yokken).
+"""Explore IRIS from the terminal: schemas, tables, columns, value distributions (when IntelliJ's Database tool is absent).
 
-Amaç: adapter eşlemesi (io/adapters/nabidh.py → SOURCES, IRIS_COHORTS) için gereken bilgiyi grafik arayüz
-olmadan, terminale basmak. Basılan her şey meta veri ya da özettir ve enclave dışına kopyalanabilir: şema /
-tablo / sütun adları, tipler, satır sayıları, doluluk, değer "şekli" (2023-01-05 → 9999-99-99) ve küçük
-hücreleri gizlenmiş değer sayımları. Hasta düzeyi değer basılmaz:
-- kimlik / ad / doğum tarihi / iletişim benzeri adlı sütunlarda (`is_sensitive`) ve neredeyse her satırı farklı
-  (kimlik gibi) sütunlarda değerin kendisi yerine yalnız şekli gösterilir (`hidden_reason`);
-- bir değer ancak ≥ small_cell_threshold (10) farklı hastada geçiyorsa gösterilir (hasta anahtarı bulunamazsa
-  satır sayısına bakılır); gerisi tek satırda toplanır.
+Goal: print to the terminal, without a GUI, what the adapter mapping (io/adapters/nabidh.py → SOURCES,
+IRIS_COHORTS) needs. Everything printed is metadata or a summary and may be copied out of the enclave: schema /
+table / column names, types, row counts, fill rates, value "shape" (2023-01-05 → 9999-99-99) and value counts
+with small cells hidden. No patient-level value is printed:
+- for columns named like an ID / name / date of birth / contact (`is_sensitive`) and for columns where nearly
+  every row differs (ID-like), only the shape is shown, not the value (`hidden_reason`);
+- a value is shown only if it occurs in ≥ small_cell_threshold (10) distinct patients (row count when no
+  patient key is found); the rest are folded into one line.
 
-Bağlantıyı io/iris.py açar; bu modül sürücü import etmez, DB-API kullanır ve yalnız SELECT gönderir
-(`iris.assert_select`). Katalog: IRIS'te INFORMATION_SCHEMA, provada SQLite stand-in (`iris.sqlite_standin`).
+io/iris.py opens the connection; this module imports no driver, uses DB-API and sends SELECT only
+(`iris.assert_select`). Catalogue: INFORMATION_SCHEMA in IRIS, SQLite stand-in in the dry run (`iris.sqlite_standin`).
 """
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ import pandas as pd
 from ..config import PARAMS
 from . import iris
 
-SAMPLE_ROWS = 5000                 # sütun profili / şekiller bu kadar satırlık örneklemden (ilk satırlar)
-GROUP_ROWS = 1000                  # değer sayımında GROUP BY sonucundan en fazla bu kadar değer okunur
+SAMPLE_ROWS = 5000                 # column profile / shapes come from a sample of this many rows (the first rows)
+GROUP_ROWS = 1000                  # value counts read at most this many values from the GROUP BY result
 VALUE_MAX_LEN = 60
 SYSTEM_SCHEMAS = {"INFORMATION_SCHEMA"}
 CHAR_TYPES = {"varchar", "char", "nvarchar", "nchar", "character varying", "string", "text"}
-STREAM_TYPES = {"longvarchar", "longvarbinary", "varbinary", "binary", "blob", "clob"}   # gruplanamaz
+STREAM_TYPES = {"longvarchar", "longvarbinary", "varbinary", "binary", "blob", "clob"}   # cannot be grouped
 
 
 def threshold() -> int:
@@ -37,7 +37,7 @@ def threshold() -> int:
 
 
 # --------------------------------------------------------------------------
-# Sorgu yardımcıları
+# Query helpers
 # --------------------------------------------------------------------------
 def dialect(conn) -> str:
     return "sqlite" if isinstance(conn, sqlite3.Connection) else "iris"
@@ -52,14 +52,14 @@ def ident(schema: str, table: str) -> str:
 
 
 def limited(conn, body: str, n: int) -> str:
-    """'SELECT <body>' + satır sınırı: IRIS'te TOP n, SQLite'ta LIMIT n (body ORDER BY içerebilir)."""
+    """'SELECT <body>' + row limit: TOP n in IRIS, LIMIT n in SQLite (body may contain ORDER BY)."""
     if dialect(conn) == "iris":
         return f"SELECT TOP {int(n)} {body}"
     return f"SELECT {body} LIMIT {int(n)}"
 
 
 def run_query(conn, sql: str, lower: bool = True) -> pd.DataFrame:
-    """Tek SELECT → DataFrame (dtype=object). lower: sütun adları küçük harfe (katalog sorguları için)."""
+    """One SELECT → DataFrame (dtype=object). lower: lower-case column names (for catalogue queries)."""
     cur = conn.cursor()
     try:
         cur.execute(iris.assert_select(sql))
@@ -75,14 +75,14 @@ def where_clause(where: str | None) -> str:
 
 
 # --------------------------------------------------------------------------
-# Katalog
+# Catalogue
 # --------------------------------------------------------------------------
 def is_system_schema(name: str) -> bool:
     return str(name).startswith("%") or str(name).upper() in SYSTEM_SCHEMAS
 
 
 def _drop_system(df: pd.DataFrame) -> pd.DataFrame:
-    """Sistem şemalarını atar (boş tabloda da sütunlar korunur)."""
+    """Drops system schemas (columns are kept even for an empty table)."""
     return df.loc[~df["schema"].map(is_system_schema).astype(bool)]
 
 
@@ -91,7 +91,7 @@ def _sqlite_schemas(conn) -> list[str]:
 
 
 def list_schemas(conn, include_system: bool = False, like: str | None = None) -> pd.DataFrame:
-    """→ schema, tables, views. Sistem şemaları (% ile başlayanlar, INFORMATION_SCHEMA) varsayılan gizli."""
+    """→ schema, tables, views. System schemas (starting with %, INFORMATION_SCHEMA) are hidden by default."""
     if dialect(conn) == "sqlite":
         rows = []
         for s in _sqlite_schemas(conn):
@@ -122,7 +122,7 @@ def list_schemas(conn, include_system: bool = False, like: str | None = None) ->
 
 
 def list_tables(conn, schema: str) -> pd.DataFrame:
-    """→ schema, table, type (şema adı büyük/küçük harf duyarsız; katalogdaki yazımla döner)."""
+    """→ schema, table, type (schema name is case-insensitive; returned as spelled in the catalogue)."""
     if dialect(conn) == "sqlite":
         names = {s.upper(): s for s in _sqlite_schemas(conn)}
         s = names.get(schema.upper())
@@ -140,7 +140,7 @@ def list_tables(conn, schema: str) -> pd.DataFrame:
 
 
 def list_columns(conn, schema: str, table: str) -> pd.DataFrame:
-    """→ column, type, nullable (tablodaki sırayla). Katalogda görünmüyorsa adlar `WHERE 1=0` sorgusundan."""
+    """→ column, type, nullable (in table order). If not visible in the catalogue, names come from a `WHERE 1=0` query."""
     if dialect(conn) == "sqlite":
         raw = run_query(conn, f'SELECT name, type, "notnull" AS nn FROM pragma_table_info({lit(table)}, {lit(schema)}) '
                               "ORDER BY cid")
@@ -165,21 +165,21 @@ def _close(name: str, candidates) -> list[str]:
 
 
 def resolve_table(conn, name: str) -> tuple[str, str]:
-    """'ŞEMA.Tablo' (büyük/küçük harf duyarsız) → katalogdaki (şema, tablo). Yoksa yakın adlarla LookupError."""
+    """'SCHEMA.Table' (case-insensitive) → (schema, table) as in the catalogue. If missing, LookupError with close names."""
     parts = [p.strip().strip('"') for p in str(name).split(".")]
     if len(parts) != 2 or not all(parts):
-        raise ValueError(f"Tablo ŞEMA.Tablo biçiminde yazılmalı (ör. HSAA.Patient): {name!r}")
+        raise ValueError(f"Write the table as SCHEMA.Table (e.g. HSAA.Patient): {name!r}")
     schema, table = parts
     t = list_tables(conn, schema)
     if t.empty:
         close = _close(schema, list_schemas(conn, include_system=True)["schema"])
-        raise LookupError(f"Şema yok ya da tablosu görünmüyor: {schema}"
-                          + (f" — yakın adlar: {', '.join(close)}" if close else " — `schemas` ile listele"))
+        raise LookupError(f"No such schema, or none of its tables are visible: {schema}"
+                          + (f" — close names: {', '.join(close)}" if close else " — list them with `schemas`"))
     hit = t[t["table"].astype(str).str.upper() == table.upper()]
     if hit.empty:
         close = _close(table, t["table"])
-        raise LookupError(f"{schema} şemasında tablo yok: {table}"
-                          + (f" — yakın adlar: {', '.join(close)}" if close else f" — `tables {schema}` ile listele"))
+        raise LookupError(f"No such table in schema {schema}: {table}"
+                          + (f" — close names: {', '.join(close)}" if close else f" — list them with `tables {schema}`"))
     return str(hit["schema"].iloc[0]), str(hit["table"].iloc[0])
 
 
@@ -187,13 +187,13 @@ def resolve_column(columns: pd.DataFrame, name: str) -> pd.Series:
     hit = columns[columns["column"].astype(str).str.upper() == str(name).upper()]
     if hit.empty:
         close = _close(name, columns["column"])
-        raise LookupError(f"Sütun yok: {name}" + (f" — yakın adlar: {', '.join(close)}" if close else
-                                                   f" — sütunlar: {', '.join(map(str, columns['column'][:40]))}"))
+        raise LookupError(f"No such column: {name}" + (f" — close names: {', '.join(close)}" if close else
+                                                   f" — columns: {', '.join(map(str, columns['column'][:40]))}"))
     return hit.iloc[0]
 
 
 def find(conn, text: str, include_system: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Adında `text` geçen tablolar ve sütunlar → (schema, table, type), (schema, table, column, type)."""
+    """Tables and columns whose name contains `text` → (schema, table, type), (schema, table, column, type)."""
     if dialect(conn) == "sqlite":
         trows, crows = [], []
         for s in _sqlite_schemas(conn):
@@ -225,23 +225,23 @@ def count_rows(conn, schema: str, table: str, where: str | None = None) -> int:
 
 
 def count_query(conn, sql: str) -> int:
-    """Kullanıcının SELECT'inin satır sayısı: SELECT COUNT(*) FROM (<sql>) q — satırlar okunmaz."""
+    """Row count of the user's SELECT: SELECT COUNT(*) FROM (<sql>) q — rows are not read."""
     body = iris.assert_select(sql).strip().rstrip(";").strip()
     return int(run_query(conn, f"SELECT COUNT(*) AS n FROM ({body}) q").iloc[0, 0])
 
 
 def sample(conn, schema: str, table: str, n: int = SAMPLE_ROWS, where: str | None = None,
            columns: list[str] | None = None) -> pd.DataFrame:
-    """İlk n satır (sıralama yok: rastgele değil, yalnız biçim / doluluk ipucu için). Ekrana basılmaz."""
+    """First n rows (no ordering: not random, only a hint of format / fill rate). Never printed."""
     cols = ", ".join(iris.quote_ident(c) for c in columns) if columns else "*"
     return run_query(conn, limited(conn, f"{cols} FROM {ident(schema, table)}{where_clause(where)}", n), lower=False)
 
 
 # --------------------------------------------------------------------------
-# Değer özetleri (hasta düzeyi değer basmadan)
+# Value summaries (without printing patient-level values)
 # --------------------------------------------------------------------------
 def to_text(v) -> str | None:
-    """Sürücüden gelen değer → metin (boş / NULL → None). Tarih / sayı, ham CSV'deki gibi str()."""
+    """Driver value → text (empty / NULL → None). Dates / numbers via str(), as in the raw CSV."""
     if v is None:
         return None
     if isinstance(v, float) and v != v:
@@ -253,7 +253,7 @@ def to_text(v) -> str | None:
 
 
 def shape(text: str, max_len: int = 24) -> str:
-    """Değerin biçimi: rakam → 9 (tek tek), harf dizisi → a, boşluk dizisi → ' ', diğer karakterler aynen.
+    """Shape of a value: digit → 9 (each one), run of letters → a, run of spaces → ' ', other characters as is.
     2023-01-05 → 9999-99-99 · E11.9 → a99.9 · 'Never smoked' → 'a a' · 66841 → 99999."""
     out: list[str] = []
     for ch in str(text):
@@ -272,7 +272,7 @@ SENSITIVE_TOKENS = {
     "postcode", "dob", "birth", "birthdate", "dateofbirth", "firstname", "lastname", "surname", "fullname",
     "middlename", "givenname", "familyname", "contact",
 }
-# "name" tek başına (ör. Patient.Name) ya da kişiye ait (FirstName, PatientName) → hassas; nesne adı değil
+# "name" alone (e.g. Patient.Name) or a person's (FirstName, PatientName) → sensitive; not an object's name
 NON_PERSON_NAME = {
     "drug", "test", "item", "code", "product", "facility", "observation", "diagnosis", "procedure", "medication",
     "med", "lab", "display", "short", "long", "type", "category", "unit", "organization", "org", "department",
@@ -292,7 +292,7 @@ def name_tokens(name: str) -> list[str]:
 
 
 def is_sensitive(name: str) -> bool:
-    """Sütun adı kimlik / kişi adı / doğum tarihi / iletişim gibi mi → değeri hiç gösterilmez (yalnız şekli)."""
+    """Is the column name like an ID / person name / date of birth / contact → its value is never shown (only its shape)."""
     toks = name_tokens(name)
     if any(t in SENSITIVE_TOKENS for t in toks) or "".join(toks) in SENSITIVE_TOKENS:
         return True
@@ -300,7 +300,7 @@ def is_sensitive(name: str) -> bool:
 
 
 def patient_key(columns) -> str | None:
-    """Hasta anahtarı sütunu (değer görünürlüğü 'en az 10 farklı hasta' kuralıyla): PatientID, patient_id, MRN …"""
+    """Patient key column (for the 'at least 10 distinct patients' value-visibility rule): PatientID, patient_id, MRN …"""
     cols = [str(c) for c in columns]
     for c in cols:
         t = name_tokens(c)
@@ -318,7 +318,7 @@ def looks_like_date(shape_text: str) -> bool:
 
 
 def _yyyymmdd_share(values: pd.Series) -> float:
-    """8 haneli değerlerin kaçı 1900–2100 arası geçerli YYYYMMDD tarihi (SNOMED 73211009 değil)."""
+    """Share of 8-digit values that are valid YYYYMMDD dates in 1900–2100 (not SNOMED 73211009)."""
     v = values[values.astype(str).str.fullmatch(r"\d{8}")]
     if not len(v):
         return 0.0
@@ -327,7 +327,7 @@ def _yyyymmdd_share(values: pd.Series) -> float:
 
 
 def profile_column(name: str, s: pd.Series) -> dict:
-    """Örneklemdeki bir sütunun özeti: dolu %, farklı değer sayısı, en sık şekil, tür tahmini (değer yok)."""
+    """Summary of one column in the sample: filled %, distinct count, most common shape, kind guess (no values)."""
     t = pd.Series([to_text(v) for v in s], dtype=object)
     nn = t.dropna()
     n, k = len(t), len(nn)
@@ -338,45 +338,45 @@ def profile_column(name: str, s: pd.Series) -> dict:
     top = str(shapes.index[0]) if k else ""
     code_col = "code" in name_tokens(name)
     if not k:
-        kind = "boş"
+        kind = "empty"
     elif looks_like_date(top) and not (top == "99999999" and (code_col or _yyyymmdd_share(nn) < 0.9)):
-        kind = "tarih"
+        kind = "date"
     elif code_col and decimal <= 0.5:
-        kind = "kod"                               # sayısal da olsa kod (SNOMED, yerel numara): değer listesi
+        kind = "code"                              # a code even if numeric (SNOMED, local number): value list
     elif re.fullmatch(r"9{5}(,9+)?", top) and any(x in _DATE_HINT for x in name_tokens(name)):
-        kind = "tarih? (IRIS iç sayı: horolog)"
+        kind = "date? (IRIS internal number: $HOROLOG)"
     elif numeric >= 0.95 and decimal > 0.5:
-        kind = "sayı"                              # ondalıklı ölçüm (BMI, lab): her değer farklı olabilir
+        kind = "number"                            # decimal measurement (BMI, lab): every value may differ
     elif distinct == k and k >= 20:
-        kind = "benzersiz (kimlik?)"
+        kind = "unique (ID?)"
     elif numeric >= 0.95:
-        kind = "sayı" if distinct > 20 else "sayı / kategori"
+        kind = "number" if distinct > 20 else "number / category"
     elif distinct <= 50:
-        kind = "kategori"
+        kind = "category"
     else:
-        kind = "metin / kod"
+        kind = "text / code"
     return {"column": name, "n": n, "filled": k, "filled_pct": round(100 * k / n, 1) if n else 0.0,
             "distinct": distinct, "shape": top, "shape_pct": int(round(100 * shapes.iloc[0] / k)) if k else 0,
             "kind": kind, "numeric_share": numeric, "decimal_share": decimal}
 
 
 def hidden_reason(name: str, prof: dict) -> str | None:
-    """Değerler neden gösterilmez (None = gösterilebilir; yine de ≥ 10 hasta kuralı uygulanır). Olay tarihi ve
-    ondalıklı ölçüm çok çeşitli olsa da kimlik değildir: değer listesi yerine dağılımları basılır."""
+    """Why values are not shown (None = may be shown; the ≥ 10 patient rule still applies). Event dates and
+    decimal measurements vary widely but are not IDs: their distributions are printed instead of a value list."""
     if is_sensitive(name):
-        return "hassas sütun adı (kimlik / ad / doğum tarihi / iletişim)"
-    if prof["kind"].startswith("tarih") or (prof["kind"] == "sayı" and prof.get("decimal_share", 0) > 0.5):
+        return "sensitive column name (ID / name / date of birth / contact)"
+    if prof["kind"].startswith("date") or (prof["kind"] == "number" and prof.get("decimal_share", 0) > 0.5):
         return None
-    if prof["kind"].startswith("benzersiz"):
-        return "örneklemde her satır farklı (kimlik gibi)"
+    if prof["kind"].startswith("unique"):
+        return "every row in the sample differs (ID-like)"
     if prof["filled"] and prof["distinct"] > 50 and prof["distinct"] / prof["filled"] > 0.5:
-        return "çok çeşitli: örneklemde değerlerin yarıdan fazlası farklı (kimlik / serbest metin gibi)"
+        return "too varied: over half the values in the sample differ (ID / free text-like)"
     return None
 
 
 def table_profile(conn, schema: str, table: str, n_sample: int = SAMPLE_ROWS,
                   where: str | None = None) -> tuple[int, int, pd.DataFrame]:
-    """→ (satır sayısı, örneklem satırı, sütun başına tip + profil + değer görünürlüğü)."""
+    """→ (row count, sample rows, per column: type + profile + value visibility)."""
     cols = list_columns(conn, schema, table)
     n_rows = count_rows(conn, schema, table, where)
     smp = sample(conn, schema, table, n_sample, where)
@@ -389,19 +389,19 @@ def table_profile(conn, schema: str, table: str, n_sample: int = SAMPLE_ROWS,
         reason = hidden_reason(str(r.column), p)
         rows.append({"#": i, "column": r.column, "type": r.type, "filled_pct": p["filled_pct"],
                      "distinct": p["distinct"], "shape": f"{p['shape']} ({p['shape_pct']}%)" if p["filled"] else "",
-                     "kind": p["kind"], "values": "gizli" if reason else "values ile"})
+                     "kind": p["kind"], "values": "hidden" if reason else "use values"})
     return n_rows, len(smp), pd.DataFrame(rows)
 
 
 def value_counts(conn, schema: str, table: str, column: str, where: str | None = None,
                  patient_col: str | None = "auto", top: int = 30, n_sample: int = SAMPLE_ROWS,
                  force_list: bool = False) -> dict:
-    """Bir sütunun değer dağılımı, ifşa kurallarıyla:
-    - hassas / kimlik gibi sütunda değer yok, yalnız şekiller (`hidden`)
-    - değer, ≥ eşik farklı hastada (patient_col; 'auto' = `patient_key`) ya da anahtar yoksa ≥ eşik satırda
-      geçiyorsa gösterilir; kalanlar `rest_small` (sayısı + toplam satır) olarak tek satırda.
-    Tarih ve sürekli sayı sütunlarında değer listesi yerine örneklemden yüzdelikler (tarih: ay çözünürlüğünde);
-    force_list ile liste de çıkar (aynı kurallarla)."""
+    """Value distribution of one column, under the disclosure rules:
+    - no values for a sensitive / ID-like column, shapes only (`hidden`)
+    - a value is shown if it occurs in ≥ threshold distinct patients (patient_col; 'auto' = `patient_key`), or in
+      ≥ threshold rows when there is no key; the rest go on one line as `rest_small` (count + total rows).
+    For date and continuous number columns, percentiles from the sample instead of a value list (dates: month
+    resolution); force_list also produces the list (same rules)."""
     cols = list_columns(conn, schema, table)
     c = resolve_column(cols, column)
     col, typ = str(c["column"]), str(c["type"])
@@ -429,21 +429,21 @@ def value_counts(conn, schema: str, table: str, column: str, where: str | None =
            "distribution_only": False}
     if out["hidden"] or typ in STREAM_TYPES:
         if typ in STREAM_TYPES and not out["hidden"]:
-            out["hidden"] = f"{typ} (stream) sütunu gruplanamaz"
+            out["hidden"] = f"{typ} (stream) column cannot be grouped"
         return out
 
     out["quantiles"] = _quantiles(t, prof["kind"], k)
-    if not force_list and (prof["kind"].startswith("tarih") or prof["kind"] == "sayı"):
-        out["distribution_only"] = True            # tarih / sürekli sayı: değer listesi yerine dağılım
+    if not force_list and (prof["kind"].startswith("date") or prof["kind"] == "number"):
+        out["distribution_only"] = True            # date / continuous number: distribution, not a value list
         return out
 
     expr = iris.quote_ident(col)
     if dialect(conn) == "iris" and typ in CHAR_TYPES:
-        expr = f"%EXACT({expr})"                  # IRIS varsayılan karşılaştırması büyük/küçük harf duyarsız
+        expr = f"%EXACT({expr})"                  # IRIS compares case-insensitively by default
     np_sql = f", COUNT(DISTINCT {iris.quote_ident(pk)}) AS np" if pk else ""
     g = run_query(conn, limited(conn, f"{expr} AS v, COUNT(*) AS n{np_sql} FROM {q}{w} GROUP BY {expr} "
                                       "ORDER BY 2 DESC", GROUP_ROWS))
-    g["v"] = [("<boş>" if to_text(v) is None else to_text(v)[:VALUE_MAX_LEN]) for v in g["v"]]
+    g["v"] = [("<empty>" if to_text(v) is None else to_text(v)[:VALUE_MAX_LEN]) for v in g["v"]]
     g["n"] = pd.to_numeric(g["n"]).astype(int)
     if pk:
         g["np"] = pd.to_numeric(g["np"]).astype(int)
@@ -459,18 +459,18 @@ def value_counts(conn, schema: str, table: str, column: str, where: str | None =
     return out
 
 
-HOROLOG_EPOCH = pd.Timestamp("1840-12-31")      # IRIS $HOROLOG gün 0 (adapter'daki DATE_FORMAT="horolog")
+HOROLOG_EPOCH = pd.Timestamp("1840-12-31")      # IRIS $HOROLOG day 0 (DATE_FORMAT="horolog" in the adapter)
 
 
 def _quantiles(t: pd.Series, kind: str, k: int) -> dict | None:
-    """Örneklemden yüzdelikler: sayı → p5…p95; tarih → ay çözünürlüğünde p5 / p50 / p95; horolog → tarihe çevrilmiş."""
+    """Percentiles from the sample: number → p5…p95; date → p5 / p50 / p95 at month resolution; horolog → converted to dates."""
     if len(t) < k:
         return None
-    if kind == "tarih":
+    if kind == "date":
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             d = pd.to_datetime(t, errors="coerce", format="mixed").dropna()
-    elif kind.startswith("tarih?"):
+    elif kind.startswith("date?"):
         days = pd.to_numeric(t.str.split(",").str[0], errors="coerce").dropna()
         d = HOROLOG_EPOCH + pd.to_timedelta(days, unit="D")
     else:

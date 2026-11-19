@@ -1,4 +1,4 @@
-"""Ingest sürümü (nabidh.INGEST_VERSION): ingest çıktısı, özet, kanonik ingest.json, KOPYALA başlığı, NB bloğu."""
+"""Ingest version (nabidh.INGEST_VERSION): ingest output, summary, canonical ingest.json, COPY header, NB block."""
 import contextlib
 import importlib.util
 import io
@@ -30,7 +30,7 @@ class TestIngestVersion(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("ingest_nabidh", ROOT / "tools" / "ingest_nabidh.py")
         ing = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(ing)
-        (ROOT / "outputs").mkdir(exist_ok=True)          # audit çıktı yollarını repo köküne göre yazar
+        (ROOT / "outputs").mkdir(exist_ok=True)          # audit writes output paths relative to the repo root
         with tempfile.TemporaryDirectory(dir=ROOT / "outputs", prefix=".test_ingest_version_") as d:
             d = Path(d)
             (d / "raw" / "c1").mkdir(parents=True)
@@ -56,7 +56,7 @@ class TestIngestVersion(unittest.TestCase):
             (base / "nabidh" / "c2").mkdir()
             with mock.patch("sandbox.config.CANONICAL_DIR", base):
                 self.assertEqual(enclave.data_versions("nabidh"), f"c1 ingest v{V} (R1)")
-                self.assertIn("bilinmiyor", enclave.data_versions("synthetic"))
+                self.assertIn("unknown", enclave.data_versions("synthetic"))
 
 
 class TestBlockHeader(_Db, unittest.TestCase):

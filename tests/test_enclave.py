@@ -1,7 +1,9 @@
-"""tools/enclave.py + src/sandbox/io/explore.py: terminalden IRIS keşfi ve KOPYALA bloğu (IRIS yerine SQLite).
+"""tools/enclave.py + src/sandbox/io/explore.py: IRIS exploration from the terminal and the COPY block (SQLite
+instead of IRIS).
 
-Ana iddia: enclave dışına kopyalanan bloğa hasta düzeyi değer girmez — kimlik / doğum tarihi sütunlarında değer
-yok, < 10 farklı hastada geçen değer gösterilmez, sayımlar < 10 bastırılır, yüzdeler sayım sanılıp bozulmaz."""
+Main claim: no patient-level value gets into the block copied out of the enclave — no values in ID / birth date
+columns, values seen in < 10 distinct patients are not shown, counts < 10 are suppressed, percentages are not
+mistaken for counts and mangled."""
 import contextlib
 import io
 import os
@@ -23,11 +25,11 @@ from sandbox import audit, sdc  # noqa: E402
 from sandbox.io import explore, iris  # noqa: E402
 from sandbox.io.adapters import nabidh  # noqa: E402
 
-SCHEMA = nabidh.IRIS_COHORTS["c1"]["schema"]   # enclave --iris-sqlite c1.sqlite'yi bu adla bağlar
+SCHEMA = nabidh.IRIS_COHORTS["c1"]["schema"]   # enclave --iris-sqlite attaches c1.sqlite under this name
 
 
 def fixture_tables() -> dict[str, pd.DataFrame]:
-    """30 hasta. 'Rareland' tek hastada; o hastanın 12 'ZZ-1' gözlemi var (satır ≥ 10 ama hasta 1)."""
+    """30 patients. 'Rareland' in one patient only; that patient has 12 'ZZ-1' observations (rows ≥ 10 but 1 patient)."""
     ids = [f"P{i:03d}" for i in range(30)]
     patients = pd.DataFrame({
         "PatientID": ids, "Sex": ["M"] * 15 + ["F"] * 15,
@@ -81,11 +83,11 @@ class TestShapesAndNames(unittest.TestCase):
 
     def test_profile_kinds(self):
         p = explore.profile_column("ObsDate", pd.Series(["2021-01-01", "2021-02-03", None]))
-        self.assertEqual((p["kind"], p["filled"], p["shape"]), ("tarih", 2, "9999-99-99"))
+        self.assertEqual((p["kind"], p["filled"], p["shape"]), ("date", 2, "9999-99-99"))
         p = explore.profile_column("EventDate", pd.Series(["66841", "66900"] * 5))
-        self.assertTrue(p["kind"].startswith("tarih?"))
+        self.assertTrue(p["kind"].startswith("date?"))
         p = explore.profile_column("Id", pd.Series([f"X{i}" for i in range(30)]))
-        self.assertTrue(p["kind"].startswith("benzersiz"))
+        self.assertTrue(p["kind"].startswith("unique"))
         self.assertIsNotNone(explore.hidden_reason("Id", p))
 
 
@@ -115,24 +117,24 @@ class TestCatalog(_Db, unittest.TestCase):
         n, n_smp, prof = explore.table_profile(self.conn(), SCHEMA, "Patient")
         self.assertEqual((n, n_smp), (30, 30))
         vis = dict(zip(prof["column"], prof["values"]))
-        self.assertEqual(vis["PatientID"], "gizli")
-        self.assertEqual(vis["DateOfBirth"], "gizli")
-        self.assertEqual(vis["Sex"], "values ile")
+        self.assertEqual(vis["PatientID"], "hidden")
+        self.assertEqual(vis["DateOfBirth"], "hidden")
+        self.assertEqual(vis["Sex"], "use values")
 
 
 class TestValueCounts(_Db, unittest.TestCase):
     def test_values_need_ten_patients(self):
         v = explore.value_counts(self.conn(), SCHEMA, "Observation", "Code")
         self.assertEqual(v["patient_col"], "PatientID")
-        self.assertEqual(v["values"]["v"].tolist(), ["39156-5"])          # ZZ-1: 12 satır ama 1 hasta
+        self.assertEqual(v["values"]["v"].tolist(), ["39156-5"])          # ZZ-1: 12 rows but 1 patient
         self.assertEqual(v["rest_small"], {"values": 1, "rows": 12})
         v = explore.value_counts(self.conn(), SCHEMA, "Patient", "Nationality")
-        self.assertEqual(v["values"]["v"].tolist(), ["India"])            # Nepal 9, Rareland 1 hasta
+        self.assertEqual(v["values"]["v"].tolist(), ["India"])            # Nepal 9, Rareland 1 patient
         self.assertEqual(v["rest_small"]["values"], 2)
 
     def test_without_patient_key_rows_rule(self):
         v = explore.value_counts(self.conn(), SCHEMA, "Observation", "Code", patient_col="none")
-        self.assertIn("ZZ-1", v["values"]["v"].tolist())                  # satır kuralı: 12 ≥ 10
+        self.assertIn("ZZ-1", v["values"]["v"].tolist())                  # row rule: 12 ≥ 10
 
     def test_sensitive_and_continuous(self):
         for col in ("PatientID", "DateOfBirth"):
@@ -144,7 +146,7 @@ class TestValueCounts(_Db, unittest.TestCase):
         self.assertEqual(set(v["quantiles"]), {"p5", "p25", "p50", "p75", "p95"})
         v = explore.value_counts(self.conn(), SCHEMA, "Observation", "ObsDate")
         self.assertTrue(v["distribution_only"])
-        self.assertRegex(v["quantiles"]["p50"], r"^\d{4}-\d{2}$")         # ay çözünürlüğü
+        self.assertRegex(v["quantiles"]["p50"], r"^\d{4}-\d{2}$")         # month resolution
 
     def test_unknown_column_suggests(self):
         with self.assertRaisesRegex(LookupError, "Nationality"):
@@ -152,8 +154,8 @@ class TestValueCounts(_Db, unittest.TestCase):
 
 
 class FakeIris:
-    """IRIS lehçesi (INFORMATION_SCHEMA, TOP, %EXACT) için sahte DB-API bağlantısı: gönderilen SQL'i kaydeder,
-    kalıba göre hazır sonuç döner. IRIS'in kendisini değil, bu yolun Python tarafını sınar."""
+    """Fake DB-API connection for the IRIS dialect (INFORMATION_SCHEMA, TOP, %EXACT): records the SQL sent and returns
+    canned results by pattern. Tests the Python side of this path, not IRIS itself."""
 
     def __init__(self):
         self.sql = []
@@ -191,7 +193,7 @@ class FakeIris:
             return ["N", "NN"], [(40, 39)]
         if sql.startswith("SELECT TOP 5000"):
             return ["Gender"], [("M",)] * 20 + [("F",)] * 19 + [(None,)]
-        raise AssertionError(f"beklenmeyen SQL: {sql}")
+        raise AssertionError(f"unexpected SQL: {sql}")
 
 
 class TestIrisDialect(unittest.TestCase):
@@ -199,7 +201,7 @@ class TestIrisDialect(unittest.TestCase):
         c = FakeIris()
         sch = explore.list_schemas(c)
         self.assertEqual(sch.to_dict("records"), [{"schema": "Ens_Config", "tables": 2, "views": 0},
-                                                  {"schema": "HSAA", "tables": 3, "views": 1}])   # % gizli
+                                                  {"schema": "HSAA", "tables": 3, "views": 1}])   # % hidden
         self.assertEqual(explore.resolve_table(c, "hsaa.patient"), ("HSAA", "Patient"))
         v = explore.value_counts(c, "HSAA", "Patient", "gender")
         self.assertEqual(v["patient_col"], "PatientId")
@@ -213,8 +215,8 @@ class TestIrisDialect(unittest.TestCase):
 
 @contextlib.contextmanager
 def temp_outputs():
-    """Audit'i geçici dizine yönlendir (gerçek outputs/audit_log.jsonl'e test run'ı yazılmasın). Dizin repo
-    içinde (outputs/ git dışı): audit çıktı yollarını repo köküne göre yazar."""
+    """Point the audit at a temporary directory (no test run in the real outputs/audit_log.jsonl). The directory is
+    inside the repo (outputs/ is untracked): the audit writes output paths relative to the repo root."""
     (ROOT / "outputs").mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=ROOT / "outputs", prefix=".test_enclave_") as d:
         out = Path(d) / "outputs"
@@ -236,7 +238,7 @@ class TestEnclaveCli(_Db, unittest.TestCase):
             rc, text = run_main(["values", f"{SCHEMA}.Patient", "Nationality", "--iris-sqlite", str(self.dir)])
             self.assertEqual(rc, 0, text)
             lines = text.strip().splitlines()
-            self.assertTrue(lines[0].startswith("----8<---- KOPYALA BAŞ"))
+            self.assertTrue(lines[0].startswith("----8<---- COPY START"))
             self.assertEqual(lines[-1], enclave.MARK_END)
             self.assertIn("India", text)
             self.assertNotIn("Rareland", text)
@@ -269,14 +271,14 @@ class TestEnclaveCli(_Db, unittest.TestCase):
         with temp_outputs():
             rc, text = run_main(["tables", "NOPE", "--iris-sqlite", str(self.dir)])
         self.assertEqual(rc, 1)
-        self.assertIn("şema yok", text)
+        self.assertIn("no such schema", text)
         self.assertTrue(text.strip().endswith(enclave.MARK_END))
 
     def test_req_stdlib_checks(self):
         with temp_outputs():
             rc, text = run_main(["req", "r9", "R1"])
         self.assertIn("[R9]", text)
-        self.assertIn("Özet: R9", text)
+        self.assertIn("Summary: R9", text)
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             enclave.main(["req", "R10"])
 
@@ -292,8 +294,8 @@ class TestIrisSetup(unittest.TestCase):
             self.assertEqual(rc, 0, text)
             self.assertEqual(got[iris.ENV_URL], f"jdbc:IRIS://{enclave.DEFAULT_IRIS_HOST}:{enclave.DEFAULT_IRIS_PORT}/NABIDH")
             self.assertEqual(got[iris.ENV_USER], "reader")
-            self.assertEqual(got[iris.ENV_PASSWORD], "s3cret")                  # korunur
-            self.assertNotIn("s3cret", text)                                    # basılmaz
+            self.assertEqual(got[iris.ENV_PASSWORD], "s3cret")                  # kept
+            self.assertNotIn("s3cret", text)                                    # not printed
             if os.name == "posix":
                 self.assertEqual(stat.S_IMODE(cred.stat().st_mode), 0o600)
 
@@ -301,7 +303,7 @@ class TestIrisSetup(unittest.TestCase):
         with temp_outputs(), mock.patch.dict(os.environ, {iris.ENV_CREDENTIALS: str(ROOT / "outputs" / "x_iris")}):
             rc, text = run_main(["iris-setup", "--url", "jdbc:IRIS://h:1/NS", "--user", "u", "--yes"])
         self.assertEqual(rc, 1)
-        self.assertIn("repo içinde", text)
+        self.assertIn("inside the repo", text)
         self.assertFalse((ROOT / "outputs" / "x_iris").exists())
 
 
@@ -313,7 +315,7 @@ class TestOutputTables(unittest.TestCase):
         self.assertEqual(got["n"].tolist(), ["<10", 120])
         self.assertEqual(got["n_bad"].tolist(), [0, "<10"])
         self.assertEqual(got["patients_with_any"].tolist(), ["<10", 200])
-        self.assertEqual(got["pct_patients"].tolist(), [4.0, 96.0])              # yüzde sayım değil
+        self.assertEqual(got["pct_patients"].tolist(), [4.0, 96.0])              # a percentage is not a count
         with self.assertRaises(ValueError):
             enclave.safe_table(pd.DataFrame({"patient_id": ["P1"], "n": [1]}))
 
@@ -321,14 +323,14 @@ class TestOutputTables(unittest.TestCase):
         df = pd.DataFrame({"cohort": ["c1", "c2"], "domain": ["dx", "dx"], "group": ["gdm", "gdm"],
                            "patients_with_any": ["<10", "212"], "pct_patients": [0.3, 8.2]})
         got = enclave.framework_pivot(df)
-        self.assertEqual(got[["c1", "c2"]].values.tolist(), [["<10 hasta", 8.2]])
+        self.assertEqual(got[["c1", "c2"]].values.tolist(), [["<10 patients", 8.2]])
 
     def test_failure_lines(self):
         log = ["x", "Traceback (most recent call last):", f'  File "{ROOT}/tools/x.py", line 3, in <module>',
                "ValueError: bad"]
         got = enclave.failure_lines(log)
-        self.assertTrue(got[0].startswith('Yer: File "./tools/x.py", line 3'))
-        self.assertEqual(got[1], "Hata: ValueError: bad")
+        self.assertTrue(got[0].startswith('Where: File "./tools/x.py", line 3'))
+        self.assertEqual(got[1], "Error: ValueError: bad")
 
     def test_safe_argv_drops_url_parameters(self):
         got = enclave.safe_argv(["iris-setup", "--url", "jdbc:IRIS://h:1/NS;password=x", "--url=jdbc:IRIS://h:1/NS?p=y"])
@@ -342,7 +344,7 @@ class TestOutputTables(unittest.TestCase):
                           "n_rows": ["1200", "<10", "340", "<10", "350", "900"]})
         got = enclave.medication_summary(v)
         self.assertEqual(got["value"].tolist(), ["DDC code", "name: ingredient", "<no ATC>", "PANADOL"])
-        self.assertNotIn("RARE BRAND X", got["value"].tolist())                 # < 10 satırlık ad basılmaz
+        self.assertNotIn("RARE BRAND X", got["value"].tolist())                 # a name with < 10 rows is not printed
 
     def test_family_history_summary(self):
         v = pd.DataFrame({"source": ["family_history"] * 4 + ["medications"],
