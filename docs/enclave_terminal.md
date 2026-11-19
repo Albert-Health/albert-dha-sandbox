@@ -64,7 +64,7 @@ olarak taşır (yalnız ASCII; panodan kopyalarken `→`, `≥` bozulmaz). VM'de
 kullanılmaz; repo yalnız `data/`, `outputs/`, `.env`, `~/.nabidh_iris` ve `src/sandbox/reference/ddc.csv.gz`
 için okunur (DDC dosyasının SHA-256'sı kontrol edilir).
 
-1. Dışarıda, commit'ten sonra: `python tools/build_bundle.py` → `dist/ingest_bundle.py` (git dışı). Çıktıdaki
+1. Dışarıda, commit'ten sonra: `python tools/build_bundle.py` → `dist/ingest_bundle.py`. Çıktıdaki
    `file check` kodunu not et.
 2. Dosyayı bir metin editöründe aç, hepsini seç, kopyala. VM'de repo köküne yeni dosya `ingest_bundle.py`
    olarak yapıştır ve kaydet.

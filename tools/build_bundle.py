@@ -4,7 +4,7 @@ The bundle carries tools/enclave.py, the step scripts (default: tools/ingest_nab
 module they import, unchanged, compressed and base64-encoded (ASCII only: a clipboard copy cannot mangle →, ≥ …).
 Copy the file by hand into the repo root on the VM and run it there:
 
-  python tools/build_bundle.py                       # → dist/ingest_bundle.py (git-ignored)
+  python tools/build_bundle.py                       # → dist/ingest_bundle.py
   python tools/build_bundle.py --steps ingest nb1    # also carries notebooks/01_c1_c2_feasibility.py
   # on the VM, repo root:
   python3 ingest_bundle.py bundle-info               # file check, what it carries, which repo files are older

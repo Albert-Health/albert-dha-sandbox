@@ -78,7 +78,7 @@ tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, bui
                        build_evidence_package, build_ddc_reference, positive_control, py2ipynb, enclave.sh + enclave.py
                        (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run;
                        çıktı COPY bloğu), build_bundle (git pull'suz VM için enclave + ingest kodu tek dosyada,
-                       dist/ingest_bundle.py, git dışı)
+                       dist/ingest_bundle.py)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
