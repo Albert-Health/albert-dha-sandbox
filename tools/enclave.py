@@ -829,17 +829,30 @@ MED_FIELDS = [
 ]
 
 
-def medication_summary(v):
+# Aile öyküsü özeti (kaynak "family_history"): alan adının sonu eşleşir (ör. "condition | condition_text
+# (non-diabetes, dropped)"). Metin değerlerinde < 10 satırlık olan basılmaz.
+FH_FIELDS = [
+    ("diabetes recognised by", 5, False), ("relation → degree", 12, True), ("(prediabetes, dropped)", 10, True),
+    ("(non-diabetes, dropped)", 10, True), ("condition_text negated → negative", 5, True),
+    ("second-degree relative in text", 5, True),
+]
+
+
+def field_summary(v, source: str, fields, suffix: bool = False):
     import pandas as pd
 
-    v = v[v["source"].eq("medications")]
+    v = v[v["source"].eq(source)]
     parts = []
-    for field, top, hide_small in MED_FIELDS:
-        x = v[v["field"].eq(field)]
+    for field, top, hide_small in fields:
+        x = v[v["field"].str.endswith(field)] if suffix else v[v["field"].eq(field)]
         if hide_small:
             x = x[~x["n_rows"].astype(str).str.startswith("<")]
         parts.append(x.head(top))
-    return pd.concat(parts)[["field", "value", "n_rows"]] if parts else v
+    return pd.concat(parts)[["field", "value", "n_rows"]] if parts else v.iloc[0:0]
+
+
+def medication_summary(v):
+    return field_summary(v, "medications", MED_FIELDS)
 
 
 def summary_ingest(d: Path, out: Block, a) -> None:
@@ -879,6 +892,10 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             if len(m):
                 out("   ilaç → ATC (DDC kodu / ilaç adı; kod ve ad listelerinde < 10 satırlık değer yok):")
                 out.table(m, a.max_rows)
+            f = field_summary(v_all, "family_history", FH_FIELDS, suffix=True)
+            if len(f):
+                out("   aile öyküsü (diyabet tanıma yolu; metin listelerinde < 10 satırlık değer yok):")
+                out.table(f, a.max_rows)
 
 
 def summary_tables(step: str):

@@ -194,8 +194,12 @@ FH_DIABETES_SNOMED = {"160303001", "73211009", "44054006", "46635009"}
 # Açıklama metni (NABIDH FamilyHistory.Diagnosis_Description, 2026-11-19): durum sütunu yok, olumsuz kayıt
 # metinde ("No History Of Diabetes mellitus type 2 (disorder)") → negative. Metin ikinci derece akraba
 # söylüyorsa ("Maternal aunt and uncle have Diabetes mellitus", FamilyMember = Parent) metin geçerli.
+FH_DIABETES_TEXT = re.compile(r"diabet|\b(?:t[12])?dm\b", re.IGNORECASE)
+FH_PREDIABETES_SNOMED = {"714628002", "9414007"}       # Prediabetes; impaired glucose tolerance
+FH_PREDIABETES_TEXT = re.compile(r"\bpre[- ]?diabet|\bimpaired (?:fasting )?glucose|\bborderline diabet",
+                                 re.IGNORECASE)
 FH_NEGATION = re.compile(r"^\s*(?:no|nil|none|denies|denied|negative)\b|\bno (?:known )?(?:family )?history\b"
-                         r"|\bnegative for\b|\bdenies\b", re.IGNORECASE)
+                         r"|\bnegative for\b|\bdenies\b|\bnon[- ]?diabet", re.IGNORECASE)
 FH_TEXT_SECOND_DEGREE = re.compile(r"\b(?:aunts?|uncles?|grand\w*|cousins?|nieces?|nephews?)\b", re.IGNORECASE)
 FH_TEXT_FIRST_DEGREE = re.compile(r"\b(?:mother|father|parents?|brothers?|sisters?|siblings?|sons?|daughters?)\b",
                                   re.IGNORECASE)
@@ -316,12 +320,30 @@ def parse_horolog(raw: pd.Series) -> pd.Series:
     return pd.Series(out, index=raw.index)
 
 
-def _is_diabetes_condition(cond: pd.Series) -> pd.Series:
-    text = _norm_text(cond)
-    code = cond.astype("string").str.upper().str.replace(r"[.\s]", "", regex=True)
-    hit = (code.str.match(r"^(E0[89]|E1[0-4])", na=False) | code.str.startswith("Z833", na=False)
-           | cond.astype("string").str.strip().isin(FH_DIABETES_SNOMED) | text.str.contains("diabet", na=False))
-    return hit.fillna(False).astype(bool)
+def _fh_diabetes(df: pd.DataFrame, cond_cols: list[str]) -> tuple[pd.Series, pd.Series]:
+    """Aile öyküsü kaydı diyabet mi? → (tanıma yolu: "ICD-10 code" / "SNOMED code" / "text only" / NA,
+    prediyabet mi). Önce kod: ICD-10 E08–E14 / Z83.3, diyabet SNOMED'i. Kod bunlardan biri değilse (yerel numara,
+    kod sütununa yazılmış metin) metin: "diabet", "DM". Prediyabet (R73, SNOMED 714628002 / 9414007, metin)
+    diyabet aile öyküsü sayılmaz. NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): ~%62 SNOMED / ICD-10,
+    ~%20 kod sütununda metin ("DIABETES"), ~%17 yerel numara."""
+    icd = pd.Series(False, index=df.index)
+    snomed = pd.Series(False, index=df.index)
+    text = pd.Series(False, index=df.index)
+    pre = pd.Series(False, index=df.index)
+    for c in cond_cols:
+        raw = df[c].astype("string").str.strip()
+        code = raw.str.upper().str.replace(r"[.\s]", "", regex=True)
+        icd |= (code.str.match(r"^(?:E0[89]|E1[0-4])", na=False) | code.str.startswith("Z833", na=False)).astype(bool)
+        snomed |= raw.isin(FH_DIABETES_SNOMED).fillna(False).astype(bool)
+        text |= raw.str.contains(FH_DIABETES_TEXT, na=False).astype(bool)
+        pre |= (code.str.startswith("R73", na=False) | raw.isin(FH_PREDIABETES_SNOMED)
+                | raw.str.contains(FH_PREDIABETES_TEXT, na=False)).fillna(False).astype(bool)
+    how = pd.Series(pd.NA, index=df.index, dtype=object)
+    how[text] = "text only"
+    how[snomed] = "SNOMED code"
+    how[icd] = "ICD-10 code"
+    how[pre] = pd.NA
+    return how, pre
 
 
 # --------------------------------------------------------------------------
@@ -411,12 +433,13 @@ def _h_smoking(df, name, vc, item_filtered: bool = False):
 
 def _h_family_history(df, name, vc):
     cond_cols = [c for c in ("condition", "condition_text") if c in df]
-    if cond_cols:                                   # kod ya da açıklama diyabet diyorsa diyabet kaydı
-        is_dm = pd.Series(False, index=df.index)
-        for c in cond_cols:
-            is_dm |= _is_diabetes_condition(df[c])
+    if cond_cols:                                   # kod (ICD-10 / SNOMED), yoksa metin diyabet diyorsa diyabet kaydı
+        how, pre = _fh_diabetes(df, cond_cols)
+        is_dm = how.notna()
         shown = df[cond_cols].astype("string").fillna("").agg(" | ".join, axis=1)
-        vc += _value_counts(name, f"{' | '.join(cond_cols)} (non-diabetes, dropped)", shown[~is_dm], top=30)
+        vc += _value_counts(name, "diabetes recognised by", how[is_dm])
+        vc += _value_counts(name, f"{' | '.join(cond_cols)} (non-diabetes, dropped)", shown[~is_dm & ~pre], top=30)
+        vc += _value_counts(name, f"{' | '.join(cond_cols)} (prediabetes, dropped)", shown[pre], top=20)
         df = df[is_dm]
     if "status" in df:
         raw = _norm_text(df["status"])

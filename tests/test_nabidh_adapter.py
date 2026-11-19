@@ -306,6 +306,36 @@ class TestAdapterOptions(unittest.TestCase):
         obs_date = v[(v["table"] == "observations")].loc["missing required date"]
         self.assertEqual((obs_date["severity"], obs_date["n_affected"]), ("INFO", 0))
 
+    def test_family_history_code_first(self):
+        """NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): SNOMED, ICD-10, kod sütununda metin, yerel numara.
+        Önce kod, sonra metin; prediyabet diyabet aile öyküsü değil."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d)
+            _csv(d, "family_history.csv", "Patient,Diagnosis_Code,Diagnosis_Description,FamilyMember_Description,EnteredOn", [
+                "A1,Z83.3,Family history of diabetes mellitus,Mother,",
+                "A1,73211009,Diabetes mellitus (disorder),Father,",
+                "A2,DIABETES,DIABETES,Mother,",
+                "A2,60376773,Diabetes,Father,",
+                "A3,DM,DM,Sister,",
+                "A3,714628002,Prediabetes,Mother,",
+                "A4,R73.03,Pre-diabetes,Father,",
+                "A4,5,Hypertension,Father,",
+                "A4,2,Non-diabetic,Mother,",
+            ])
+            ds, rep = nabidh.load(d, "c1")
+        fh = ds["observations"][ds["observations"]["concept"] == "family_history_dm"]
+        self.assertEqual(list(zip(fh["patient_id"], fh["value"])),
+                         [("A1", "positive"), ("A1", "positive"), ("A2", "positive"), ("A2", "positive"),
+                          ("A3", "positive"), ("A4", "negative")])
+        vc = pd.DataFrame(rep["value_counts"])
+        by = vc[vc["field"] == "diabetes recognised by"].set_index("value")["n_rows"].to_dict()
+        self.assertEqual(by, {"ICD-10 code": 1, "SNOMED code": 1, "text only": 4})
+        pre = vc[vc["field"].str.endswith("(prediabetes, dropped)")]
+        self.assertEqual(int(pre["n_rows"].sum()), 2)
+        non = vc[vc["field"].str.endswith("(non-diabetes, dropped)")]
+        self.assertEqual(list(non["value"]), ["5 | Hypertension"])
+
     def test_filter_that_drops_everything_stops(self):
         """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""
         rows = [f"A{1 + i % 4},Tobacco use,Never,2018-01-{1 + i:02d}" for i in range(11)] + ["A1,Alcohol,No,2018-02-01"]

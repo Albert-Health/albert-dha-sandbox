@@ -344,6 +344,16 @@ class TestOutputTables(unittest.TestCase):
         self.assertEqual(got["value"].tolist(), ["DDC code", "name: ingredient", "<no ATC>", "PANADOL"])
         self.assertNotIn("RARE BRAND X", got["value"].tolist())                 # < 10 satırlık ad basılmaz
 
+    def test_family_history_summary(self):
+        v = pd.DataFrame({"source": ["family_history"] * 4 + ["medications"],
+                          "field": ["diabetes recognised by", "diabetes recognised by",
+                                    "condition | condition_text (non-diabetes, dropped)",
+                                    "condition | condition_text (non-diabetes, dropped)", "diabetes recognised by"],
+                          "value": ["SNOMED code", "text only", "5 | Hypertension", "9 | Rare text", "x"],
+                          "n_rows": ["2300", "<10", "42", "<10", "1"]})
+        got = enclave.field_summary(v, "family_history", enclave.FH_FIELDS, suffix=True)
+        self.assertEqual(got["value"].tolist(), ["SNOMED code", "text only", "5 | Hypertension"])
+
     def test_fmt_count(self):
         self.assertEqual([sdc.fmt_count(x) for x in (0, 3, 10, "-", None)], ["0", "<10", "10", "-", "None"])
 
