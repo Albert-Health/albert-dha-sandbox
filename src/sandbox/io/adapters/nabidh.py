@@ -60,12 +60,14 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
+#                      the C1 "missing required value" ERRORs were empty vital rows)
 #   1.1.1  2026-11-19  English comments, messages and report text (output wording only; mapping unchanged)
 #   1.1.0  2026-11-19  IRIS_COHORTS: C2 and C3 schemas swapped (the earlier "C2" data was really C3)
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.1.1"
+INGEST_VERSION = "1.2.0"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -97,6 +99,8 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 #   optional_columns  {canonical_name: source_column (or list)} — taken if present
 #   constants         {canonical_name: value} — this value if the column is absent or empty
 #   filter            {source_column or canonical_name: [allowed values]} — case-insensitive selection
+#   drop_empty        [canonical_name, ...] — rows whose value there is empty (NULL / blank) are dropped and
+#                     counted (report: dropped_empty_<name>, with a per-code breakdown when the source has `code`)
 #   optional          True → skipped if the file / table is absent (e.g. encounter only in C3)
 #   date_format       overrides DATE_FORMAT for this source
 #
@@ -126,6 +130,9 @@ SOURCES: dict[str, dict] = {
                     "date": "ObservationDate"},
         "optional_columns": {"test_name": "ObservationCode_Description"},     # no unit column
         "constants": {"code_system": "LOINC"},
+        # C1 (2026-11-19): Observation holds only vitals (3141-9 weight, 8302-2 height, 39156-5 BMI); rows with an
+        # empty ObservationValue carry nothing and were the "missing required value" schema ERRORs → dropped.
+        "drop_empty": ["value"],
     },
     # LabResultItem (C1 DDL, 2026-11-19): ID, Encounter, Patient, ResultDate, ResultValue, ResultValueUnits,
     # TestItemCode_Code, TestItemCode_Description. The first ingest had labs = 0 (no lab codes in Observation) →
@@ -319,6 +326,13 @@ def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -
             out[canon] = df[src]
     for k, v in spec.get("constants", {}).items():
         out[k] = out[k].fillna(v) if k in out else v
+    for col in spec.get("drop_empty", []):
+        txt = out[col].astype("string").str.strip()
+        empty = (txt.isna() | txt.eq("")).fillna(True).astype(bool)
+        info[f"dropped_empty_{col}"] = int(empty.sum())
+        if empty.any() and "code" in out:
+            info[f"dropped_empty_{col}_by_code"] = _labels(out.loc[empty, "code"].astype("string").str.strip())
+        out = out[~empty]
     return out, info
 
 

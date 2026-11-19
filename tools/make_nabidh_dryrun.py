@@ -4,7 +4,8 @@ Purpose: run the tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) chain end to e
 Follows the views seen in the enclave (2026-11-18):
 - Patient: ID, Age (no date of birth; age as of AGE_REFERENCE_DATE), Gender_Code (M/F),
   EthnicGroup_Description; no nationality. In the other views the patient key is `Patient` (= Patient.ID)
-- Diagnosis (ICD-10 only, incl. Z83.3), Observation (BMI, height, weight — LOINC; no unit column),
+- Diagnosis (ICD-10 only, incl. Z83.3), Observation (BMI, height, weight — LOINC; no unit column; as in C1,
+  some rows have an empty ObservationValue — the adapter drops them),
   LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19), SocialHistory (smoking),
   FamilyHistory (diabetes), Medication; Encounter only in C3
 - C2 differences: SocialHabitCategory_Description (not _Code), no DrugProduct_Code in Medication
@@ -92,6 +93,7 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "Diagnosis_Code": icd["code"], "Diagnosis_Description": icd["description"]})
 
     vit = obs[obs["concept"].isin(list(VITAL_LOINC))]
+    vit = pd.concat([vit, vit.iloc[::25].assign(value=pd.NA)], ignore_index=True)    # empty-value rows (as in C1)
     out["observations.csv"] = pd.DataFrame({
         "ID": range(1, len(vit) + 1), "Patient": vit["patient_id"],
         "ObservationCode_Code": vit["concept"].map(VITAL_LOINC), "ObservationCode_Description": vit["concept"],

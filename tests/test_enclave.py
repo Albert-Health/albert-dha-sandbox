@@ -6,6 +6,7 @@ columns, values seen in < 10 distinct patients are not shown, counts < 10 are su
 mistaken for counts and mangled."""
 import contextlib
 import io
+import json
 import os
 import stat
 import sys
@@ -368,6 +369,23 @@ class TestOutputTables(unittest.TestCase):
         self.assertEqual(got["value"].tolist(), ["4548-4 | % | HbA1c",
                                                  "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1",
                                                  "LOC-1 | % | HbA1c"])
+
+    def test_ingest_summary_shows_dropped_empty_values(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "ingest").mkdir()
+            src = {"observations": {"status": "read", "rows_read": 52000, "dropped_empty_value": 7365,
+                                    "dropped_empty_value_by_code": "3141-9 (4100), 8302-2 (3260), +1 labels < 10 rows"},
+                   "lab_results": {"status": "read", "rows_read": 900, "dropped_empty_value": 4}}
+            (Path(d) / "ingest" / "c1_summary.json").write_text(
+                json.dumps({"ingest_version": "9.9.9", "n_patients": 1000, "sources": src}))
+            block = enclave.Block("HEADER")
+            with contextlib.redirect_stdout(io.StringIO()):
+                enclave.summary_ingest(Path(d), block, mock.Mock(max_rows=60))
+        obs = next(ln for ln in block.lines if ln.strip().startswith("observations"))
+        self.assertIn("dropped_empty_value=7365", obs)
+        self.assertIn("dropped_empty_value_by_code: 3141-9 (4100), 8302-2 (3260), +1 labels < 10 rows", obs)
+        lab = next(ln for ln in block.lines if ln.strip().startswith("lab_results"))
+        self.assertIn("dropped_empty_value=<10", lab)                           # small count suppressed
 
     def test_fmt_count(self):
         self.assertEqual([sdc.fmt_count(x) for x in (0, 3, 10, "-", None)], ["0", "<10", "10", "-", "None"])

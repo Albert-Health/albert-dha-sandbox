@@ -48,6 +48,8 @@ def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="So
         "A2,8302-2,Height,160,2015-01-01",
         "A2,3141-9,Weight,64,2020-01-01",
         "A3,9999-9,Mystery,1,2020-01-01",
+        "A1,3141-9,Weight,,2020-06-01",               # empty value → dropped, counted
+        "A3,8302-2,Height,  ,2019-01-01",             # blank value → dropped, counted
     ])
     _csv(d, "social_history.csv", f"Patient,{social_item},SocialHabitQty_Description,EnteredOn", social_rows or [
         "A1,Smoking,Never smoker,2018-01-01",
@@ -155,6 +157,28 @@ class TestAdapter(unittest.TestCase):
         dropped = vc.loc[vc["field"] == "rows dropped: no study drug class", "n_rows"]
         self.assertEqual(int(dropped.iloc[0]), 3)
         self.assertEqual(self.rep["sources"]["medications"]["rows_out"], {"medications": 5})
+
+    def test_empty_observation_values_dropped(self):
+        src = self.rep["sources"]["observations"]
+        self.assertEqual(src["rows_read"], 8)
+        self.assertEqual(src["dropped_empty_value"], 2)
+        self.assertEqual(src["dropped_empty_value_by_code"], "+2 labels < 10 rows")   # codes with < 10 rows unnamed
+        self.assertEqual(src["rows_out"], {"labs": 2, "observations": 4})
+        self.assertFalse(self.ds["observations"]["value"].isna().any())
+        val = schema.validate(self.ds)
+        miss = val[(val["table"] == "observations") & (val["check"] == "missing required value")]
+        self.assertEqual(int(miss["n_affected"].iloc[0]), 0)
+
+    def test_empty_value_breakdown_by_code(self):
+        spec = nabidh.SOURCES["observations"]
+        raw = pd.DataFrame({"Patient": [f"P{i}" for i in range(15)],
+                            "ObservationCode_Code": ["3141-9"] * 12 + ["8302-2", "8302-2", "39156-5"],
+                            "ObservationValue": [None] * 11 + [""] + [None, "170", "0"],
+                            "ObservationDate": "2020-01-01"})
+        out, info = nabidh._select(raw, spec, "observations")
+        self.assertEqual(info["dropped_empty_value"], 13)
+        self.assertEqual(info["dropped_empty_value_by_code"], "3141-9 (12), +1 labels < 10 rows")
+        self.assertEqual(list(out["value"]), ["170", "0"])                       # "0" is a value, not empty
 
     def test_snapshot_uses_family_and_social_history(self):
         ref = pd.Series(pd.Timestamp("2022-12-31"), index=["A1", "A2", "A3", "A4"])
