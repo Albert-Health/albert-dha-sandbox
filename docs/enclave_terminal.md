@@ -56,6 +56,37 @@ Komut listesi:
 bash tools/enclave.sh help
 ```
 
+### `git pull` yoksa: tek dosya (bundle)
+
+VM GitHub'a çıkamıyorsa ingest kodu tek bir dosyayla elle taşınır. Dosya `tools/enclave.py`,
+`tools/ingest_nabidh.py` ve bunların import ettiği bütün `src/sandbox` modüllerini değiştirmeden, sıkıştırılmış
+olarak taşır (yalnız ASCII; panodan kopyalarken `→`, `≥` bozulmaz). VM'deki eski `src/` ve `tools/`
+kullanılmaz; repo yalnız `data/`, `outputs/`, `.env`, `~/.nabidh_iris` ve `src/sandbox/reference/ddc.csv.gz`
+için okunur (DDC dosyasının SHA-256'sı kontrol edilir).
+
+1. Dışarıda, commit'ten sonra: `python tools/build_bundle.py` → `dist/ingest_bundle.py` (git dışı). Çıktıdaki
+   `file check` kodunu not et.
+2. Dosyayı bir metin editöründe aç, hepsini seç, kopyala. VM'de repo köküne yeni dosya `ingest_bundle.py`
+   olarak yapıştır ve kaydet.
+3. VM'de, repo kökünde kontrol et: `File check: OK (<kod>)` satırındaki kod 1. adımdakiyle aynı olmalı. Dosyanın
+   son satırı üstündeki her satırın hash'idir; eksik ya da değişmiş bir kopya çalışmaz, yeniden kopyalanır.
+
+```bash
+python3 ingest_bundle.py bundle-info
+```
+
+4. Ingest: `bash tools/enclave.sh run ingest` ile aynı komut ve aynı COPY bloğu. Başlıkta
+   `commit <sha> bundle <id>` görünür; audit bundle'daki dosyaların hash'ini ve bundle id'sini yazar.
+
+```bash
+python3 ingest_bundle.py run ingest --cohorts c1 c2
+```
+
+Diğer `enclave.sh` komutları da bundle'ın adapter'ıyla çalışır (`python3 ingest_bundle.py mapping c1 c2`,
+`help`). `run nb0` / `nb1` bundle'da yoksa reddedilir: ya `bash tools/enclave.sh run nb1` (VM'deki kod) ya da
+dışarıda `python tools/build_bundle.py --steps ingest nb1` ile ikisini taşıyan bir dosya. Gömülü kodu okumak
+için: `python3 ingest_bundle.py bundle-extract /tmp/bundle_src`.
+
 ## 2. VM gereksinimleri (R1–R9)
 
 Kaynak: "Data Exploration Environment – VM Requirements". Durumlar: **PASS** tamam · **WARN** eksik ama iş

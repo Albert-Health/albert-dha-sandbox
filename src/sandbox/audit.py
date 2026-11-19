@@ -2,7 +2,8 @@
 
 Every execution is a Run. A Run records:
 - run_id, start/end time, user, machine, Python and package versions
-- code fingerprint: SHA-256 of every .py file under src/ + git commit (if any)
+- code fingerprint: SHA-256 of every .py file under src/ + git commit (if any); a one-file bundle
+  (tools/build_bundle.py) records the files it carries instead, with the commit it was built from
 - path, size and SHA-256 of the input files
 - a snapshot of PARAMS (config)
 - path and SHA-256 of every output file written

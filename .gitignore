@@ -16,6 +16,9 @@ notebooks/*.ipynb
 # --- Yerel ortam: şifre içerebilir, repoya girmez (src/sandbox/envfile.py) ---
 .env
 
+# --- Tek dosya bundle (tools/build_bundle.py; commit'ten yeniden üretilir) ---
+dist/
+
 # --- Python / IDE / OS ---
 __pycache__/
 *.pyc

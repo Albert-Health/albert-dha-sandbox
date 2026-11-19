@@ -77,7 +77,8 @@ notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, build_ddc_reference, positive_control, py2ipynb, enclave.sh + enclave.py
                        (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, mapping, run;
-                       çıktı COPY bloğu)
+                       çıktı COPY bloğu), build_bundle (git pull'suz VM için enclave + ingest kodu tek dosyada,
+                       dist/ingest_bundle.py, git dışı)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
@@ -107,6 +108,8 @@ python tools/build_evidence_package.py
 #   ya da ham dosyadan (data/nabidh/raw/<kohort>); sonra SANDBOX_SOURCE=nabidh
 # Enclave: repo kökünde bash tools/enclave.sh <komut> (docs/faz1_c1_c2.md, docs/enclave_terminal.md). Bloğa (COPY
 #   START/END) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
+# git pull yoksa: python tools/build_bundle.py (commit'ten sonra) → dist/ingest_bundle.py elle VM repo köküne →
+#   python3 ingest_bundle.py bundle-info → python3 ingest_bundle.py run ingest --cohorts c1 c2 (docs/enclave_terminal.md §1)
 ```
 
 ## Değişiklik yaparken

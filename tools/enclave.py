@@ -147,6 +147,8 @@ def data_versions(source: str) -> str:
 
 
 def commit_label() -> str:
+    """Block header: the repo's commit (+changes). A one-file bundle (tools/build_bundle.py) replaces this with the
+    commit it was built from and its own id."""
     sha = _git("rev-parse", "--short", "HEAD") or "?"
     return sha + ("+changes" if _git("status", "--porcelain", "--", "src", "notebooks", "tools") else "")
 
@@ -965,10 +967,16 @@ def summary_tables(step: str):
 SUMMARIES = {"ingest": summary_ingest, **{s: summary_tables(s) for s in SUMMARY_TABLES}}
 
 
+def step_command(step: str) -> list[str]:
+    """How `run` starts a step: the repo's script. A one-file bundle (tools/build_bundle.py) replaces this with the
+    copy of the script it carries."""
+    return [sys.executable, STEPS[step][0]]
+
+
 def cmd_run(a, out: Block, run) -> int:
     from sandbox.config import DATA_DIR, OUTPUT_DIR
 
-    cmd = [sys.executable, STEPS[a.step][0]]
+    cmd = step_command(a.step)
     if a.step == "ingest":
         cmd += ["--source", a.source]
         if a.snapshot:
