@@ -56,7 +56,7 @@ src/sandbox/
   envfile.py           git dışı .env → os.environ (import sandbox'ta; şifre, SANDBOX_SOURCE)
   codelists.py         ICD-10 / SNOMED / ATC / LOINC + etken madde → ATC + uyruk → etnik grup → QDiabetes / LRS
   io/schema.py         kanonik şema (6 tablo), okuma/yazma, validate()
-  io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, SocialHistory,
+  io/adapters/         synthetic.py, nabidh.py (SOURCES: Patient, tanı, Observation, LabResultItem, SocialHistory,
                        FamilyHistory, Medication, Encounter → kanonik; load = ham dosya, load_iris = IRIS),
                        ddc.py (Dubai Drug Code ürün kodu / ilaç adı → etken madde → ATC; yerel yol sayılmaz)
   reference/ddc.csv.gz DHA DDC listesinin sade hâli (tools/build_ddc_reference.py; hasta verisi değil)

@@ -93,11 +93,20 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 
   Ne çıkar: `SEX_MAP`; etnik grup listesi (adım 2 kararı için); yaş dağılımı (QDiabetes 25–84, LPRS 40–75).
 
-- [ ] **1c · Lab ve ölçüm birimleri.** Observation'da birim sütunu yok. Birim değer aralığından anlaşılır:
+- [ ] **1c · Lab ve ölçüm birimleri.** Lab'lar `LabResultItem` view'ında, birim sütunuyla (`ResultValueUnits`;
+  C1 DDL'i 2026-11-19). Adapter `mmol/mol` (HbA1c) ve `mmol/L` (glukoz) birimlerini kendisi dönüştürür. Bakılacak:
+  test kodları LOINC mi, birim boş mu. Vital'lerde (Observation) birim sütunu yok; birim değer aralığından anlaşılır:
 
   ```bash
-  for s in c1 c2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
+  for s in c1 c2; do bash tools/enclave.sh values $s.LabResultItem TestItemCode_Code --top 40; bash tools/enclave.sh values $s.LabResultItem ResultValueUnits --top 30; done
   ```
+
+  ```bash
+  for s in c1 c2; do for k in 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
+  ```
+
+  Ingest bloğunun `lab (LabResultItem …)` bölümü tür | birim başına p5 / medyan / p95 değerini (≥ 10 hastalı
+  grupta) ve adı glisemik görünüp kodu tanınmayan testleri gösterir. Birim boşsa ya da şüpheliyse:
 
   | Kod | Medyan buysa | Birim |
   |---|---|---|
@@ -109,8 +118,8 @@ hastada geçen değerleri ya da yüzdelikleri basar.
   | 3141-9 kilo | ~60–100 | kg |
   | 39156-5 BMI | ~25–32 | kg/m² |
 
-  Bu kontrol neden kritik: glukoz mmol/L geliyorsa kod onu mg/dL sanır. O zaman lab kanıtı "normal" çıkar ve
-  C1'deki T2DM / prediyabet ayrımı bozulur.
+  Bu kontrol neden kritik: glukoz mmol/L gelip birim sütunu boşsa kod onu mg/dL sanır. O zaman lab kanıtı
+  "normal" çıkar ve C1'deki T2DM / prediyabet ayrımı bozulur.
 
 - [ ] **1d · Kodlar: tanı, gözlem, aile öyküsü, ilaç:**
 
@@ -129,7 +138,7 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 - [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
 
   ```bash
-  for t in Patient Diagnosis Observation SocialHistory FamilyHistory Medication; do bash tools/enclave.sh columns c1.$t; done
+  for t in Patient Diagnosis Observation LabResultItem SocialHistory FamilyHistory Medication; do bash tools/enclave.sh columns c1.$t; done
   ```
 
 - [ ] **Blokları gönder → adapter güncellenir, push edilir → VM'de `git pull --ff-only`.**
@@ -254,7 +263,8 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 **DHA / NABIDH**
 - [ ] `Patient.Age` hangi güne göre hesaplandı? Doğum yılı ya da tarihi verilebilir mi? (D24)
 - [ ] Uyruk sütunu verilebilir mi? (D6)
-- [ ] Observation için birim sütunu var mı, ya da lab birimleri teyit edilebilir mi?
+- [ ] Observation (vital: BMI, boy, kilo) için birim sütunu verilebilir mi? (Lab birimi LabResultItem'da var.)
+- [ ] LabResultItem.TestItemCode_Code LOINC mi? C2 / C3 şemalarında da LabResultItem var mı?
 - [ ] C1 `DrugProduct_Code` DDC ürün kodu mu? C2 Medication'da neden yok, verilebilir mi? (K12)
 - [ ] C1 "complete case" tanımı nedir? C2'nin N'i ve örnekleme yöntemi nedir? C1 ile C2 örtüşüyor mu?
 - [ ] Veri çekim tarihi nedir? (Referans tarihi "veri sonu" için, D22.)
@@ -293,7 +303,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 | KVH | ✓ | — | Diagnosis I20–I25, I50, I6x, G45 | — |
 | Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication (DDC → ATC) | C2'de kod yok → addan (1d, K12) |
 | Statin, kortikosteroid, atipik antipsikotik | ✓ | — | Medication (DDC → ATC: C10AA, H02AB, N05AH / AX / AL) | Yalnız sistemik yol; D26 |
-| Glisemik lab (yalnız statü, model girdisi değil) | — | — | Observation 4548-4, 1558-6, 1521-4 | Birim yok (1c) |
+| Glisemik lab (yalnız statü, model girdisi değil) | — | — | LabResultItem 4548-4, 1558-6, 1521-4 (TestItemCode_Code) | Birim `ResultValueUnits`; LOINC teyit (1c) |
 
 NABIDH Data availability listesindeki hasta sayıları ve oranları (C1 = 2.600, C2 = 2.600, C3 = 1.000):
 

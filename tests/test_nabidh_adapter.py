@@ -143,6 +143,7 @@ class TestAdapter(unittest.TestCase):
     def test_report(self):
         self.assertEqual(self.rep["sources"]["diagnoses"]["unparseable_date"], 1)
         self.assertEqual(self.rep["sources"]["encounters"]["status"], "absent (optional)")
+        self.assertEqual(self.rep["sources"]["lab_results"]["status"], "absent (optional)")
         vc = pd.DataFrame(self.rep["value_counts"])
         self.assertTrue(vc["value"].str.contains("unmapped:weird value").any())
         self.assertEqual(set(vc.loc[vc["field"] == "drug code not ATC/DDC", "value"]), {"METFORMIN", "XYZ-1"})
@@ -348,6 +349,68 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertIn("bütün satırları eledi", msg)
         self.assertIn("Tobacco use (11)", msg)
         self.assertIn("+1 etiket < 10 satır", msg)                    # Alcohol: 1 satır, adı basılmaz
+
+
+class TestLabResults(unittest.TestCase):
+    """LabResultItem view'ı (C1 DDL, 2026-11-19): lab'lar birimiyle burada; Observation'da lab kodu yok."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        d = Path(cls.tmp.name)
+        write_raw(d)
+        hba1c = [f"P{i},Encounter{i},2021-0{1 + i % 9}-01,{5.0 + 0.2 * i:.1f},%,4548-4,HbA1c" for i in range(12)]
+        _csv(d, "lab_results.csv", "Patient,Encounter,ResultDate,ResultValue,ResultValueUnits,TestItemCode_Code,"
+                                   "TestItemCode_Description", hba1c + [
+            "A3,E1,2020-02-01,42,mmol/mol,59261-8,HbA1c IFCC",          # IFCC → % (6,0)
+            "A2,E2,2020-02-01,6.1,mmol/L,1558-6,Glucose fasting",       # mmol/L → mg/dL (109,9)
+            "A2,E2,2020-02-01,190,mg/dL,2093-3,Cholesterol",            # çalışma lab'ı değil → düşer
+            "A1,E3,2021-04-01,6.9,%,LOC-77,Glycated haemoglobin",       # yerel kodlu HbA1c → düşer, ayrı listede
+            "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # sayı değil, birim yok
+        ])
+        cls.ds, cls.rep = nabidh.load(d, "c1")
+        cls.vc = pd.DataFrame(cls.rep["value_counts"])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def field(self, name):
+        x = self.vc[(self.vc["source"] == "lab_results") & (self.vc["field"] == name)]
+        return x.set_index("value")["n_rows"].to_dict()
+
+    def test_study_labs_kept_with_unit(self):
+        labs = self.ds["labs"]
+        lab = labs[labs["patient_id"].isin(["A2", "A3", "A4"]) & labs["unit"].notna()].set_index("patient_id")
+        self.assertEqual(lab.loc["A3", ["loinc", "unit"]].tolist(), ["59261-8", "mmol/mol"])
+        self.assertEqual(lab.loc["A2", ["loinc", "unit"]].tolist(), ["1558-6", "mmol/L"])
+        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 15})
+        self.assertNotIn("2093-3", set(labs["loinc"]))
+        self.assertNotIn("LOC-77", set(labs["loinc"]))
+        self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # gözlem değil
+
+    def test_units_converted_in_phenotype(self):
+        g = phenotype.glycaemic_events(self.ds).set_index(["patient_id", "date"])
+        self.assertAlmostEqual(g.loc[("A3", pd.Timestamp("2020-02-01")), "value"], 42 / 10.929 + 2.15)
+        a2 = g.loc[("A2", pd.Timestamp("2020-02-01"))]
+        self.assertAlmostEqual(a2["value"], 6.1 * 18.016)
+        self.assertEqual(a2["status"], "pre")
+
+    def test_report_lists_codes_and_dropped_tests(self):
+        self.assertEqual(self.field("study lab: code | unit | name")["4548-4 | % | HbA1c"], 12)
+        self.assertIn("LOC-77 | % | Glycated haemoglobin",
+                      self.field("glycaemic-looking tests (dropped): code | unit | name"))
+        self.assertEqual(list(self.field("other tests (dropped): code | unit | name")),
+                         ["2093-3 | mg/dL | Cholesterol"])
+        self.assertEqual(self.field("rows dropped: not a study lab"), {"<n rows>": 2})
+        self.assertEqual(self.field("lab value non-numeric (raw)"), {"<2.8": 1})
+
+    def test_value_distribution_only_for_ten_patients(self):
+        stats = self.field("value by kind | unit")
+        self.assertIn("hba1c | % : 12 patients, p5 5.11 / median 6.1 / p95 7.09", stats)
+        small = [k for k in stats if k.startswith(("hba1c_ifcc", "fpg"))]
+        self.assertEqual(len(small), 3)                          # mmol/mol, mmol/L, <no unit>
+        self.assertTrue(all("no distribution" in k for k in small))
 
 
 class TestNationality(unittest.TestCase):

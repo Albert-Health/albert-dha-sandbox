@@ -354,6 +354,19 @@ class TestOutputTables(unittest.TestCase):
         got = enclave.field_summary(v, "family_history", enclave.FH_FIELDS, suffix=True)
         self.assertEqual(got["value"].tolist(), ["SNOMED code", "text only", "5 | Hypertension"])
 
+    def test_lab_summary(self):
+        f = "glycaemic-looking tests (dropped): code | unit | name"
+        v = pd.DataFrame({"source": ["lab_results"] * 5 + ["observations"],
+                          "field": ["study lab: code | unit | name", "value by kind | unit", f, f,
+                                    "study lab: code | unit | name", "study lab: code | unit | name"],
+                          "value": ["4548-4 | % | HbA1c", "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1",
+                                    "LOC-1 | % | HbA1c", "LOC-2 | mg/dL | Rare glucose", "9-9 | % | Rare", "x"],
+                          "n_rows": ["4100", "4100", "35", "<10", "<10", "1"]})
+        got = enclave.field_summary(v, "lab_results", enclave.LAB_FIELDS)
+        self.assertEqual(got["value"].tolist(), ["4548-4 | % | HbA1c",
+                                                 "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1",
+                                                 "LOC-1 | % | HbA1c"])
+
     def test_fmt_count(self):
         self.assertEqual([sdc.fmt_count(x) for x in (0, 3, 10, "-", None)], ["0", "<10", "10", "-", "None"])
 

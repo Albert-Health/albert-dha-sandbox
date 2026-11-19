@@ -1,9 +1,10 @@
 """NABIDH (enclave) ham verisi → kanonik şema.
 
-Teslim yapısı (NABIDH "Data availability", 2026-11-13; enclave'de görülen hâli 2026-11-18): kohort başına
-bir IRIS şeması (HSSBX namespace'i, *_HSAA), içinde HSAA view'ları — Patient (ID, Age, Gender_Code,
-EthnicGroup_Description; doğum tarihi ve uyruk yok) · Diagnosis · Observation (lab + vital; birim yok) ·
-SocialHistory · FamilyHistory · Medication · Encounter. Hasta anahtarı: Patient.ID = diğer view'larda Patient.
+Teslim yapısı (NABIDH "Data availability", 2026-11-13; enclave'de görülen hâli 2026-11-18; C1 DDL'i
+2026-11-19): kohort başına bir IRIS şeması (HSSBX namespace'i, *_HSAA), içinde HSAA view'ları — Patient (ID,
+Age, Gender_Code, EthnicGroup_Description; doğum tarihi ve uyruk yok) · Diagnosis · Observation (vital; birim
+yok) · LabResultItem (lab; birim var) · SocialHistory · FamilyHistory · Medication · Encounter (C1 DDL'inde
+yok). Hasta anahtarı: Patient.ID = diğer view'larda Patient.
 Ham dosyalar: data/nabidh/raw/<c1|c2|c3>/ (DHA'nın verdiği hâliyle; dokunulmaz).
 
 İki girdi yolu, aynı eşleme:
@@ -31,6 +32,8 @@ Kaynak türleri (kind) → kanonik tablo:
   patients        → patients (cinsiyet SEX_MAP ile Male / Female)
   conditions      → conditions (kod sistemi ICD-10 / SNOMED olarak normalize)
   measurements    → labs + observations (codelists.LOINC_LAB'daki kodlar lab, diğerleri gözlem)
+  lab_results     → labs (yalnız codelists.LOINC_LAB kodları; diğer testler düşer, gözlem değildir —
+                    kod | birim | ad listesi ve tür | birim başına değer dağılımı raporlanır)
   medications     → medications; ATC yoksa DDC ürün kodu / ilaç adı → ATC (io/adapters/ddc.py,
                     src/sandbox/reference/ddc.csv.gz); kombinasyon → etken madde başına satır
   labs, observations, encounters → doğrudan
@@ -90,6 +93,8 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 # SocialHabitCategory_Code yerine _Description var, Medication'da DrugProduct_Code yok; C1'de Encounter'a
 # SELECT yetkisi yok (opsiyonel, atlanır). Kod sistemleri (ICD-10 / LOINC) ve değer sözlükleri henüz
 # doğrulanmadı — enclave.sh values / columns ile bakılacak (docs/gap.md K3).
+# C1 DDL'inde (2026-11-19) olup eşlenmeyenler: Diagnosis.DiagnosisGroup (değerleri bilinmiyor), Medication
+# ToTime / DoseQuantity / DoseUoM_Description, Observation.Encounter, LabResultItem ID / Encounter.
 SOURCES: dict[str, dict] = {
     "patient_profile": {
         "file": "patients.csv", "table": "{schema}.Patient", "kind": "patients",
@@ -109,6 +114,18 @@ SOURCES: dict[str, dict] = {
                     "date": "ObservationDate"},
         "optional_columns": {"test_name": "ObservationCode_Description"},     # birim sütunu yok
         "constants": {"code_system": "LOINC"},
+    },
+    # LabResultItem (C1 DDL, 2026-11-19): ID, Encounter, Patient, ResultDate, ResultValue, ResultValueUnits,
+    # TestItemCode_Code, TestItemCode_Description. İlk ingest'te labs = 0 idi (Observation'da lab kodu yok) →
+    # lab'lar bu view'da. TestItemCode_Code'un LOINC olduğu henüz doğrulanmadı: LOINC_LAB dışında kalan testler
+    # düşer ve raporlanır ("glycaemic-looking tests (dropped)" listesi yerel kodlu HbA1c / glukozu gösterir).
+    # Opsiyonel: C2 / C3'te view yoksa ya da SELECT yetkisi yoksa (C1 Encounter gibi) o kohort atlanır.
+    "lab_results": {
+        "file": "lab_results.csv", "table": "{schema}.LabResultItem", "kind": "lab_results",
+        "optional": True,
+        "columns": {"patient_id": "Patient", "code": "TestItemCode_Code", "value": "ResultValue",
+                    "date": "ResultDate"},
+        "optional_columns": {"test_name": "TestItemCode_Description", "unit": "ResultValueUnits"},
     },
     "social_history": {
         "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
@@ -406,6 +423,56 @@ def _h_measurements(df, name, vc):
     return {"labs": labs, "observations": obs}
 
 
+# Kodu LOINC_LAB'da olmayan ama adı glisemik testi andıran testler (yerel kodlu HbA1c / glukoz) ayrıca listelenir.
+GLYCAEMIC_NAME = re.compile(r"a1c|glyc|gluc|ogtt|sugar", re.IGNORECASE)
+LAB_STATS_MIN_PATIENTS = 10                         # değer dağılımı yalnız ≥ 10 hastalı tür | birim grubunda
+
+
+def lab_value_stats(labs: pd.DataFrame, kind: pd.Series, unit: pd.Series) -> list[tuple[str, int]]:
+    """Tür | birim başına sayısal değer dağılımı (birim doğrulaması, K11) → [(etiket, satır sayısı)], ör.
+    "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1". < LAB_STATS_MIN_PATIENTS hastalı grupta dağılım
+    basılmaz (tek hastanın değerleri görünmesin)."""
+    g = pd.DataFrame({"kind": kind.astype("string").fillna("?"), "unit": unit.astype("string").fillna("<no unit>"),
+                      "pid": labs["patient_id"], "v": pd.to_numeric(labs["value"], errors="coerce")})
+    out = []
+    for (k, u), x in g.groupby(["kind", "unit"], sort=True):
+        n_pat = x.loc[x["v"].notna(), "pid"].nunique()
+        if n_pat < LAB_STATS_MIN_PATIENTS:
+            label = f"{k} | {u} : < {LAB_STATS_MIN_PATIENTS} patients with a numeric value, no distribution"
+        else:
+            p5, p50, p95 = x["v"].quantile([0.05, 0.5, 0.95])
+            label = f"{k} | {u} : {n_pat} patients, p5 {p5:.3g} / median {p50:.3g} / p95 {p95:.3g}"
+        out.append((label, int(len(x))))
+    return out
+
+
+def _h_lab_results(df, name, vc):
+    """Lab view'ı (NABIDH LabResultItem): yalnız çalışmanın glisemik lab'ları (codelists.LOINC_LAB) → labs. Diğer
+    testler (kolesterol, hemogram …) düşer; gözlem değildir. Rapor: tutulan ve düşen kod | birim | ad, adı glisemik
+    görünen düşen testler, tür | birim başına değer dağılımı (birim → phenotype.glycaemic_events dönüşümü)."""
+    empty = pd.Series(pd.NA, index=df.index, dtype="string")
+    code = df["code"].astype("string").str.strip()
+    test = (df["test_name"] if "test_name" in df else empty).astype("string").str.strip()
+    unit = (df["unit"] if "unit" in df else empty).astype("string").str.strip().replace("", pd.NA)
+    kind = code.map(codelists.LOINC_LAB)
+    keep = kind.notna().astype(bool)
+    shown = code.fillna("<empty>") + " | " + unit.fillna("") + " | " + test.fillna("")   # ad sona: 80 karakterde kesilir
+    vc += _value_counts(name, "study lab: code | unit | name", shown[keep], top=40)
+    look = ~keep & test.fillna("").str.contains(GLYCAEMIC_NAME).astype(bool)
+    vc += _value_counts(name, "glycaemic-looking tests (dropped): code | unit | name", shown[look], top=40)
+    vc += _value_counts(name, "other tests (dropped): code | unit | name", shown[~keep & ~look], top=60)
+    if (~keep).any():
+        vc.append({"source": name, "field": "rows dropped: not a study lab", "value": "<n rows>",
+                   "n_rows": int((~keep).sum())})
+    labs = df[keep].assign(code=code[keep], unit=unit[keep]).rename(columns={"code": "loinc"})
+    vc += [{"source": name, "field": "value by kind | unit", "value": label, "n_rows": n}
+           for label, n in lab_value_stats(labs, kind[keep], unit[keep])]
+    vc += _value_counts(name, "lab value non-numeric (raw)",
+                        labs.loc[pd.to_numeric(labs["value"], errors="coerce").isna() & labs["value"].notna(), "value"],
+                        top=20)
+    return {"labs": labs}
+
+
 def _h_smoking(df, name, vc, item_filtered: bool = False):
     """item_filtered: SOURCES'ta kalem filtresi var → seçilen kalemlerin hepsi sigara sayılır. Yoksa birden çok
     kalem (ör. sigara + alkol) görülürse durur: hangi kalemin sigara olduğu bilinmez."""
@@ -533,7 +600,7 @@ def _passthrough(table):
 HANDLERS = {
     "patients": _h_patients, "conditions": _h_conditions, "measurements": _h_measurements,
     "smoking": _h_smoking, "family_history": _h_family_history, "medications": _h_medications,
-    "labs": _passthrough("labs"), "observations": _passthrough("observations"),
+    "lab_results": _h_lab_results, "labs": _passthrough("labs"), "observations": _passthrough("observations"),
     "encounters": _passthrough("encounters"),
 }
 

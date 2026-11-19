@@ -35,6 +35,10 @@ bash tools/enclave.sh run ingest --cohorts c1 c2
   farklıysa ingest "filter item … bütün satırları eledi" diye durur ve C2'deki kalemleri basar: fotoğrafı gönder.
   Filtre düzeltilip push edilir; sonra adım 0 ve 1 tekrar.
 - Blokta `social_history` satırındaki `filtered_out_values_item` elenen kalemleri gösterir (ALCOHOL, Other …).
+- Lab'lar artık `LabResultItem` view'ından okunuyor (birim sütunu `ResultValueUnits` ile; ilk ingest'te
+  `labs=0` idi). Blokta `satır: labs=` 0'dan büyük olmalı. `lab (LabResultItem …)` bölümünü de fotoğrafla:
+  orada tutulan test kodları, tür | birim başına medyan ve adı HbA1c / glukoz gibi görünüp kodu tanınmayan
+  testler var. `lab_results  absent (optional)` görünürse view o kohortta yok ya da SELECT yetkisi yok.
 
 ## 2 · Jupyter (inceleme)
 
@@ -104,8 +108,7 @@ bash tools/enclave.sh show nb1 nb01/c1_detection_rate.csv
 
 ## 4 · Tablolar ve değerler (adapter sözlükleri için)
 
-Şemadaki bütün tablolar. Database panelinde "LabResult…" gibi bir tablo görünüyor; birim sütunu var mı,
-buradan anlaşılır:
+Şemadaki bütün tablolar (C1'de LabResultItem görünmeli; C2'de de olup olmadığı buradan anlaşılır):
 
 ```bash
 bash tools/enclave.sh tables c1
@@ -125,12 +128,25 @@ bash tools/enclave.sh values c1.SocialHistory SocialHabitCategory_Code
 bash tools/enclave.sh values c2.SocialHistory SocialHabitCategory_Description
 ```
 
-İlk ingest'te `labs=0` çıktı: Observation'da HbA1c / glukoz kodu yok, lab'lar başka view'da olabilir. Bu yüzden
-aşağıdaki döngü büyük olasılıkla boş döner; önce `tables` çıktısındaki lab view'ına bakılır. Birimler için:
-HbA1c medyanı ~5–8 ise %, ~30–65 ise mmol/mol. Glukoz medyanı ~90–150 ise mg/dL, ~5–8 ise mmol/L:
+Lab'lar `LabResultItem` view'ında (C1 DDL'i, 2026-11-19). Test kodları LOINC mi, birimler ne:
 
 ```bash
-for s in c1 c2; do for k in 4548-4 1558-6 1521-4 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
+for s in c1 c2; do bash tools/enclave.sh values $s.LabResultItem TestItemCode_Code --top 40; done
+```
+
+```bash
+for s in c1 c2; do bash tools/enclave.sh values $s.LabResultItem ResultValueUnits --top 30; done
+```
+
+Kodlar `4548-4` (HbA1c), `1558-6` (açlık glukozu), `1521-4` (OGTT) gibi değilse ingest bloğundaki "glycaemic-looking
+tests (dropped)" satırları yerel kodları gösterir; o kodlar adapter'a eklenir. Birim `mmol/mol` ya da `mmol/L`
+yazıyorsa dönüşüm kendiliğinden yapılır. Birim boşsa değer aralığına bakılır: HbA1c medyanı ~5–8 ise %, ~30–65
+ise mmol/mol; glukoz ~90–150 ise mg/dL, ~5–8 ise mmol/L.
+
+Vital'lerde (Observation) birim sütunu yok. BMI, boy, kilo değer aralığı:
+
+```bash
+for s in c1 c2; do for k in 39156-5 8302-2 3141-9; do bash tools/enclave.sh values $s.Observation ObservationValue --where "ObservationCode_Code = '$k'"; done; done
 ```
 
 ## 5 · Bitiş

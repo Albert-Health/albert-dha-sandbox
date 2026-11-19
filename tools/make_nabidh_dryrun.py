@@ -4,8 +4,9 @@ Amaç: tools/ingest_nabidh.py → NB0 → NB1 (→ NB2) zincirini NABIDH adapter
 çalıştırmak. Enclave'de görülen view'lara uyulur (2026-11-18):
 - Patient: ID, Age (doğum tarihi yok; yaş AGE_REFERENCE_DATE'e göre), Gender_Code (M/F),
   EthnicGroup_Description; uyruk yok. Diğer view'larda hasta anahtarı `Patient` (= Patient.ID)
-- Diagnosis (yalnız ICD-10, Z83.3 dahil), Observation (HbA1c, FPG, OGTT, BMI, boy, kilo — LOINC; birim
-  sütunu yok), SocialHistory (sigara), FamilyHistory (diyabet), Medication; Encounter yalnız C3
+- Diagnosis (yalnız ICD-10, Z83.3 dahil), Observation (BMI, boy, kilo — LOINC; birim sütunu yok),
+  LabResultItem (HbA1c, FPG, OGTT — LOINC, birimli; C1 DDL'i 2026-11-19), SocialHistory (sigara),
+  FamilyHistory (diyabet), Medication; Encounter yalnız C3
 - C2 farkları: SocialHabitCategory_Description (_Code değil), Medication'da DrugProduct_Code yok
 - Medication: C1'de DrugProduct_Code = DDC ürün kodu, C2'de DrugProduct_Description = DDC ticari adı (sentetik
   ilaç adına uyan tek etken maddeli, sistemik bir DDC ürünü; io/adapters/ddc.py eşlemesi böylece prova edilir)
@@ -89,17 +90,16 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "ID": range(1, len(icd) + 1), "DiagnosisDate": _d(icd["date"]), "Patient": icd["patient_id"],
         "Diagnosis_Code": icd["code"], "Diagnosis_Description": icd["description"]})
 
-    lab = labs[labs["loinc"].isin(DELIVERED_LABS)]
     vit = obs[obs["concept"].isin(list(VITAL_LOINC))]
-    m = pd.concat([
-        pd.DataFrame({"Patient": lab["patient_id"], "ObservationCode_Code": lab["loinc"],
-                      "ObservationCode_Description": lab["test_name"], "ObservationValue": lab["value"],
-                      "ObservationDate": _d(lab["date"])}),
-        pd.DataFrame({"Patient": vit["patient_id"], "ObservationCode_Code": vit["concept"].map(VITAL_LOINC),
-                      "ObservationCode_Description": vit["concept"], "ObservationValue": vit["value"],
-                      "ObservationDate": _d(vit["date"])}),
-    ], ignore_index=True)
-    out["observations.csv"] = m.assign(ID=range(1, len(m) + 1))
+    out["observations.csv"] = pd.DataFrame({
+        "ID": range(1, len(vit) + 1), "Patient": vit["patient_id"],
+        "ObservationCode_Code": vit["concept"].map(VITAL_LOINC), "ObservationCode_Description": vit["concept"],
+        "ObservationValue": vit["value"], "ObservationDate": _d(vit["date"])})
+    lab = labs[labs["loinc"].isin(DELIVERED_LABS)]
+    out["lab_results.csv"] = pd.DataFrame({
+        "ID": range(1, len(lab) + 1), "Encounter": pd.NA, "Patient": lab["patient_id"], "ResultDate": _d(lab["date"]),
+        "ResultValue": lab["value"], "ResultValueUnits": lab["unit"], "TestItemCode_Code": lab["loinc"],
+        "TestItemCode_Description": lab["test_name"]})
 
     sm = obs[obs["concept"] == "smoking_status"]
     item = "SocialHabitCategory_Description" if cohort == "c2" else "SocialHabitCategory_Code"

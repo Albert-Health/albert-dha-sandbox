@@ -838,6 +838,17 @@ FH_FIELDS = [
 ]
 
 
+# Lab özeti (kaynak "lab_results", LabResultItem): tutulan kodlar, tür | birim başına değer dağılımı (≥ 10 hastalı
+# grupta; birim doğrulaması), adı glisemik görünen ama kodu tanınmayan testler, düşen diğer testler. Kod / ad
+# listelerinde < 10 satırlık değer basılmaz.
+LAB_FIELDS = [
+    ("study lab: code | unit | name", 15, True), ("value by kind | unit", 15, False),
+    ("lab value non-numeric (raw)", 10, True), ("rows dropped: not a study lab", 1, False),
+    ("glycaemic-looking tests (dropped): code | unit | name", 20, True),
+    ("other tests (dropped): code | unit | name", 15, True),
+]
+
+
 def field_summary(v, source: str, fields, suffix: bool = False):
     import pandas as pd
 
@@ -892,6 +903,11 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             if len(m):
                 out("   ilaç → ATC (DDC kodu / ilaç adı; kod ve ad listelerinde < 10 satırlık değer yok):")
                 out.table(m, a.max_rows)
+            lab = field_summary(v_all, "lab_results", LAB_FIELDS)
+            if len(lab):
+                out("   lab (LabResultItem; tür | birim dağılımı ≥ 10 hastada; kod / ad listelerinde < 10 satırlık "
+                    "değer yok):")
+                out.table(lab, a.max_rows)
             f = field_summary(v_all, "family_history", FH_FIELDS, suffix=True)
             if len(f):
                 out("   aile öyküsü (diyabet tanıma yolu; metin listelerinde < 10 satırlık değer yok):")
