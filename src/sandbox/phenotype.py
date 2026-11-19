@@ -194,6 +194,23 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     fill = out["smoking_raw"].isna() & sm_dx_latest.notna()
     out.loc[fill, "smoking_raw"] = sm_dx_latest[fill]
     out.loc[fill, "smoking_source"] = "diagnosis_code"
+    # D28: undated structured records, only if they all agree (QDiabetes category; "current" → D7 default)
+    out["smoking_undated_conflict"] = False
+    if p.get("smoking_undated_if_consistent", PARAMS["smoking_undated_if_consistent"]):
+        und = obs_all[(obs_all["concept"] == "smoking_status") & obs_all["date"].isna()
+                      & obs_all["patient_id"].isin(out.index)]
+        und = und.assign(v=und["value"].astype("string").str.strip().str.lower())
+        und = und[und["v"].isin(list(codelists.SMOKING_TEXT_TO_CAT)).fillna(False).astype(bool)]
+        cur = p.get("qd_smoking_current_category", PARAMS["qd_smoking_current_category"])
+        und = und.assign(cat=und["v"].map(lambda x: cur if codelists.SMOKING_TEXT_TO_CAT[x] is None
+                                          else codelists.SMOKING_TEXT_TO_CAT[x]))
+        n_cat = und.groupby("patient_id")["cat"].nunique()
+        value = und.groupby("patient_id")["v"].first()
+        need = out["smoking_raw"].isna()
+        ok = need & out.index.isin(n_cat.index[n_cat == 1])
+        out.loc[ok, "smoking_raw"] = value.reindex(out.index)[ok]
+        out.loc[ok, "smoking_source"] = "undated_consistent"
+        out.loc[need & out.index.isin(n_cat.index[n_cat > 1]), "smoking_undated_conflict"] = True
     out["smoking_cat"] = out["smoking_raw"].map(codelists.SMOKING_TEXT_TO_CAT)
 
     # Diagnosis flags (full history, ref included)

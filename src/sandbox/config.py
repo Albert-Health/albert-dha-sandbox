@@ -62,6 +62,12 @@ PARAMS = {
     # records entered after the reference date also count. NABIDH FamilyHistory.EnteredOn is mostly empty.
     # [DECIDED: 2026-11-19, ensargunesdogdu] D27. False → only records dated up to the reference date.
     "family_history_any_date": True,
+    # Smoking without a usable dated record (NABIDH SocialHistory.EnteredOn is mostly empty): if all of the patient's
+    # undated structured smoking records give the same QDiabetes category, that value is used (date ignored).
+    # Order: latest dated record up to the reference date → smoking diagnosis code → consistent undated records.
+    # Conflicting undated records → missing. Unmapped values ("other") are not compared.
+    # [DECIDED: 2026-11-19, ensargunesdogdu] D28. False → undated records are not used.
+    "smoking_undated_if_consistent": True,
 
     # C3 (Non-Diabetic Cohort Spec v2)
     # The two versions of the v2 document disagree: 24 months (first version) vs 12 months (2026-11-13).

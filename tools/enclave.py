@@ -68,7 +68,7 @@ SUMMARY_TABLES = {
     "nb0": [("nb00/schema_validation.csv", "issues", None), ("nb00/volume.csv", None, None),
             ("nb00/framework_match.csv", "framework_pivot", None), ("nb00/unmapped_codes.csv", None, None),
             ("nb00/kpi_preview.csv", None, None)],
-    "nb1": [("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None),
+    "nb1": [("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None), ("nb01/smoking_source.csv", None, None),
             ("nb01/c1_detection_rate.csv", None,
              ["cohort", "reference", "group", "score", "n", "n_computable", "n_flagged", "sens_computable",
               "ci_low", "ci_high", "threshold"]),

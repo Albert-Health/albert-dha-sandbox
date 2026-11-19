@@ -331,6 +331,32 @@ class TestAdapterOptions(unittest.TestCase):
         obs_date = v[(v["table"] == "observations")].loc["missing required date"]
         self.assertEqual((obs_date["severity"], obs_date["n_affected"]), ("INFO", 0))
 
+    def test_smoking_undated_consistent(self):
+        """D28 (2026-11-19): undated smoking records are used only when they all agree (QDiabetes category);
+        a dated record up to the reference date wins; conflicting undated records → missing; unmapped not compared."""
+        rows = [
+            "A1,Smoking,Never smoker,",                      # undated, consistent → never
+            "A1,Smoking,Never smoker,",
+            "A2,Smoking,Ex-smoker,2019-01-01",               # dated record wins over undated
+            "A2,Smoking,Current every day smoker,",
+            "A3,Smoking,Never smoker,",                      # conflict → missing
+            "A3,Smoking,Current every day smoker,",
+            "A4,Smoking,Ex-smoker,",                         # unmapped value is not compared
+            "A4,Smoking,weird value,",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows)
+            ds, _ = nabidh.load(d, "c1")
+        ref = pd.Series(pd.Timestamp("2020-06-30"), index=["A1", "A2", "A3", "A4"])
+        s = phenotype.core_snapshot(ds, ref, None)
+        self.assertEqual(list(s["smoking_raw"].astype(object).where(s["smoking_raw"].notna(), None)),
+                         ["never", "ex", None, "ex"])
+        self.assertEqual(list(s["smoking_source"].fillna("-")), ["undated_consistent", "structured", "-", "undated_consistent"])
+        self.assertEqual(list(s["smoking_undated_conflict"]), [False, False, True, False])
+        off = phenotype.core_snapshot(ds, ref, None, dict(PARAMS, smoking_undated_if_consistent=False))
+        self.assertEqual(off["smoking_raw"].notna().tolist(), [False, True, False, False])
+
     def test_family_history_code_first(self):
         """NABIDH C1 FamilyHistory.Diagnosis_Code (2026-11-19): SNOMED, ICD-10, text in the code column, local number.
         Code first, then text; prediabetes is not a diabetes family history."""

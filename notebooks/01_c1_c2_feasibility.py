@@ -180,6 +180,16 @@ run.save_table(sdc.suppress_small_counts(reasons, ["n"]), "nb01/score_missing_re
 print(computability.to_string(index=False))
 print(reasons.to_string(index=False))
 
+# Where smoking came from (D28: undated records used only if consistent; conflicting → missing)
+sm_src = []
+for c, s in snaps.items():
+    src = s["smoking_source"].fillna("missing").where(~s["smoking_undated_conflict"], "missing (undated conflict)")
+    for k, v in src.value_counts().items():
+        sm_src.append({"cohort": c, "smoking_source": k, "n": int(v), "pct": round(100 * v / len(s), 1)})
+sm_src = pd.DataFrame(sm_src, columns=["cohort", "smoking_source", "n", "pct"])
+run.save_table(sdc.suppress_small_counts(sm_src, ["n"]), "nb01/smoking_source.csv", "Smoking status source (D28)")
+print(sm_src.to_string(index=False))
+
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
 for c, s in snaps.items():
     (100 * s["qd_risk_10y"]).dropna().plot.hist(bins=40, ax=axes[0], alpha=0.5, density=True, label=c.upper())
