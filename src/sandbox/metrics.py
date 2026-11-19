@@ -1,17 +1,17 @@
-"""Sansürlü (time-to-event) veri için performans metrikleri — yalnızca numpy/pandas.
+"""Performance metrics for censored (time-to-event) data — numpy/pandas only.
 
-Konvansiyon: time = yıl cinsinden takip süresi, event = birincil outcome (bool),
-risk = tahmin edilen olasılık (0–1) veya sıralama skoru (C-index / AUROC için).
-Horizon h'de değerlendirirken önce `truncate(time, event, h)` uygulanır (idari sansür).
+Convention: time = follow-up in years, event = primary outcome (bool),
+risk = predicted probability (0–1) or a ranking score (for C-index / AUROC).
+When evaluating at horizon h, `truncate(time, event, h)` is applied first (administrative censoring).
 
-Seçilen yöntemler (belgelendi):
-- C-index: Harrell; karşılaştırılabilir çift = olaylı i ve T_j > T_i (eşit zamanlar karşılaştırılmaz);
-  risk eşitliği 0.5.
-- Zaman-bağımlı AUROC(h): cumulative/dynamic, IPCW (Uno 2007; Hung & Chiang 2010) — vakalar
-  T ≤ h ve olay, ağırlık 1/G(T−); kontroller T > h, ağırlık 1/G(h); G = sansür KM'si.
-- Gözlenen risk: 1 − KM(h). O:E = gözlenen / ortalama tahmin.
-- Kalibrasyon eğimi: Cox PH (Breslow) ile time ~ cloglog(p_h) tek değişkenli Newton-Raphson; ideal 1.
-- Eşik metrikleri (sens/spec/PPV/NPV/F1): IPCW ağırlıklı 2×2; alert rate = eşik üstü oranı × 1000.
+Chosen methods (documented):
+- C-index: Harrell; comparable pair = i with an event and T_j > T_i (tied times are not compared);
+  tied risk counts 0.5.
+- Time-dependent AUROC(h): cumulative/dynamic, IPCW (Uno 2007; Hung & Chiang 2010) — cases
+  T ≤ h with an event, weight 1/G(T−); controls T > h, weight 1/G(h); G = censoring KM.
+- Observed risk: 1 − KM(h). O:E = observed / mean predicted.
+- Calibration slope: Cox PH (Breslow) of time ~ cloglog(p_h), univariable Newton-Raphson; ideal 1.
+- Threshold metrics (sens/spec/PPV/NPV/F1): IPCW-weighted 2×2; alert rate = share above threshold × 1000.
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def truncate(time, event, horizon: float):
 # Kaplan–Meier
 # --------------------------------------------------------------------------
 def kaplan_meier(time, event):
-    """Dönüş: (olay zamanları, o zamanlardaki S(t)) — sağdan sürekli basamak fonksiyonu."""
+    """Returns: (event times, S(t) at those times) — right-continuous step function."""
     t = np.asarray(time, float)
     e = np.asarray(event, bool)
     ts = np.sort(t)
@@ -40,7 +40,7 @@ def kaplan_meier(time, event):
 
 
 def step_at(times, surv, t, left: bool = False):
-    """S(t) (left=True → S(t−)). Vektörize."""
+    """S(t) (left=True → S(t−)). Vectorised."""
     t = np.atleast_1d(np.asarray(t, float))
     idx = np.searchsorted(times, t, side="left" if left else "right") - 1
     out = np.where(idx >= 0, surv[np.clip(idx, 0, None)] if len(surv) else 1.0, 1.0)
@@ -53,7 +53,7 @@ def km_risk(time, event, horizon: float) -> float:
 
 
 def _censoring_weights(time, event, horizon):
-    """IPCW: vakalar 1/G(T−), kontroller 1/G(h), diğerleri 0."""
+    """IPCW: cases 1/G(T−), controls 1/G(h), others 0."""
     t = np.asarray(time, float)
     e = np.asarray(event, bool)
     gt, gs = kaplan_meier(t, ~e)
@@ -68,10 +68,10 @@ def _censoring_weights(time, event, horizon):
 
 
 # --------------------------------------------------------------------------
-# Ayrım gücü
+# Discrimination
 # --------------------------------------------------------------------------
 def c_index(time, event, risk) -> float:
-    """Harrell C (Fenwick ağacı, O(n log n))."""
+    """Harrell C (Fenwick tree, O(n log n))."""
     t = np.asarray(time, float)
     e = np.asarray(event, bool)
     r = np.asarray(risk, float)
@@ -88,7 +88,7 @@ def c_index(time, event, risk) -> float:
             tree[i] += 1
             i += i & -i
 
-    def query(i):  # # eleman rank ≤ i
+    def query(i):  # number of elements with rank ≤ i
         s = 0
         while i > 0:
             s += tree[i]
@@ -105,7 +105,7 @@ def c_index(time, event, risk) -> float:
         j = i
         while j < n and ts[j] == ts[i]:
             j += 1
-        # grup [i, j): aynı zaman. Ağaçta yalnızca daha uzun zamanlılar var.
+        # group [i, j): same time. The tree only holds those with longer times.
         for k in range(i, j):
             if es[k] and inserted:
                 less = query(int(rs[k]) - 1)
@@ -136,16 +136,16 @@ def time_dependent_auc(time, event, risk, horizon: float) -> float:
 
 
 # --------------------------------------------------------------------------
-# Kalibrasyon
+# Calibration
 # --------------------------------------------------------------------------
 def cox_1d(time, event, x, max_iter: int = 50, tol: float = 1e-9):
-    """Tek değişkenli Cox PH (Breslow bağları). Dönüş: (beta, se)."""
+    """Univariable Cox PH (Breslow ties). Returns: (beta, se)."""
     t = np.asarray(time, float)
     e = np.asarray(event, bool)
     x = np.asarray(x, float)
     order = np.argsort(t, kind="mergesort")
     t, e, x = t[order], e[order], x[order]
-    first = np.searchsorted(t, t, side="left")      # risk seti başlangıcı (T_j ≥ T_i)
+    first = np.searchsorted(t, t, side="left")      # start of the risk set (T_j ≥ T_i)
     ev = np.where(e)[0]
     beta = 0.0
     se = float("nan")
@@ -195,7 +195,7 @@ def calibration_table(time, event, p_h, horizon: float, groups: int = 10) -> pd.
 
 
 # --------------------------------------------------------------------------
-# Eşik metrikleri
+# Threshold metrics
 # --------------------------------------------------------------------------
 def threshold_metrics(time, event, score, threshold: float, horizon: float) -> dict:
     t = np.asarray(time, float)
@@ -217,7 +217,7 @@ def threshold_metrics(time, event, score, threshold: float, horizon: float) -> d
 
 
 def wilson_ci(k: int, n: int, z: float = 1.959964) -> tuple[float, float]:
-    """Binom oranı için Wilson skor aralığı (varsayılan %95). n = 0 → (nan, nan)."""
+    """Wilson score interval for a binomial proportion (95% by default). n = 0 → (nan, nan)."""
     if n <= 0:
         return float("nan"), float("nan")
     p = k / n
@@ -228,14 +228,14 @@ def wilson_ci(k: int, n: int, z: float = 1.959964) -> tuple[float, float]:
 
 
 def detection_rate(flag) -> dict:
-    """Yalnızca pozitif vakadan oluşan kohortta (C1/C2) skorun yakalama oranı = duyarlılık.
+    """Capture rate of a score in a cohort of positive cases only (C1/C2) = sensitivity.
 
-    flag: hasta başı True (yüksek risk) / False / NA (skor hesaplanamadı).
-    sens_computable: yakalanan / skoru hesaplanabilen (+ Wilson %95 GA).
-    sens_all: yakalanan / tüm hastalar — hesaplanamayan "yakalanmadı" sayılır (tarama pratiği).
-      Hiç hesaplanabilen yoksa (ör. LRA 2010 ve bel çevresi teslim edilmemiş) nan: "%0 duyarlılık"
-      okunmasın.
-    Negatif vaka olmadığı için özgüllük, PPV, AUROC buradan çıkmaz.
+    flag: per patient True (high risk) / False / NA (score could not be computed).
+    sens_computable: captured / patients with a computable score (+ Wilson 95% CI).
+    sens_all: captured / all patients — not computable counts as "not captured" (screening practice).
+      If none is computable (e.g. LRA 2010 with waist circumference not delivered) nan, so it is not
+      read as "0% sensitivity".
+    With no negative cases, specificity, PPV and AUROC cannot come from here.
     """
     f = pd.Series(flag, dtype="boolean")
     n = int(len(f))
@@ -252,7 +252,7 @@ def detection_rate(flag) -> dict:
 # Bootstrap
 # --------------------------------------------------------------------------
 def bootstrap_ci(stat_fn, n: int, reps: int, seed: int, alpha: float = 0.05):
-    """stat_fn(idx) → float. Yüzdelik CI. Dönüş: (alt, üst)."""
+    """stat_fn(idx) → float. Percentile CI. Returns: (lower, upper)."""
     rng = np.random.default_rng(seed)
     vals = []
     for _ in range(reps):

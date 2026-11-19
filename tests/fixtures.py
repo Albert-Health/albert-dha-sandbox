@@ -1,4 +1,4 @@
-"""El yapımı küçük test veri seti — kohort kurallarının beklenen sonuçları bilinir."""
+"""Small hand-made test dataset — the expected results of the cohort rules are known."""
 from __future__ import annotations
 
 import pandas as pd
@@ -12,20 +12,20 @@ def _df(rows, cols):
 
 def tiny_dataset() -> Dataset:
     """
-    P01 C3 uygun: 2019 normal HbA1c, 2021 HbA1c 6.8 → incident (lab_hba1c)
-    P02 C3 uygun: 2019 normal FPG, 2022 normal HbA1c → non-event, sansür 2022
-    P03 C3 dışı: index sonrası ölçüm yok
-    P04 C3 dışı: 2018 R73 (prediyabet) normalden önce → prevalent
-    P05 C3 dışı: E10 (T1D) → her yerden hariç
-    P06 C3 dışı: index'te 22 yaş
-    P07 C3 uygun ama ilaç-tek outcome: 2023 A10 → birincilde event yok, duyarlılıkta var
-    P08 pozitif havuz (T2DM, tanı), 8 değişken tam → C1 adayı
-    P09 pozitif havuz (prediyabet lab), sigara yok → C1 dışı, C2 adayı
-    P10 C3: 2018 A10, 2019 normal HbA1c → prevalent (ilaç) → hariç
-    P11 C3 adayı: 2019-01-01 normal HbA1c, 45 gün sonra HbA1c 6.9 → varsayılan 90 gün washout ile
-        hariç (D1); washout 0 ile incident
+    P01 C3 eligible: 2019 normal HbA1c, 2021 HbA1c 6.8 → incident (lab_hba1c)
+    P02 C3 eligible: 2019 normal FPG, 2022 normal HbA1c → non-event, censored 2022
+    P03 not C3: no measurement after index
+    P04 not C3: 2018 R73 (prediabetes) before the normal value → prevalent
+    P05 not C3: E10 (T1D) → excluded everywhere
+    P06 not C3: aged 22 at index
+    P07 C3 eligible but medication-only outcome: 2023 A10 → no event in the primary, event in the sensitivity
+    P08 positive pool (T2DM, diagnosis), all 8 variables complete → C1 candidate
+    P09 positive pool (prediabetes lab), no smoking record → not C1, C2 candidate
+    P10 C3: 2018 A10, 2019 normal HbA1c → prevalent (medication) → excluded
+    P11 C3 candidate: 2019-01-01 normal HbA1c, HbA1c 6.9 45 days later → excluded with the default 90-day
+        washout (D1); incident with washout 0
     """
-    # Uyruk (PARAMS["ethnicity_source"] = "nationality") farklı yazımlarla: ad, ISO3, ISO2, sıfat
+    # Nationality (PARAMS["ethnicity_source"] = "nationality") in different spellings: name, ISO3, ISO2, adjective
     pts = _df([
         ("P01", "Male", "1970-01-01", "Emirati", "United Arab Emirates", "F1"),
         ("P02", "Female", "1965-06-15", "Indian", "IND", "F1"),

@@ -1,8 +1,8 @@
-"""QDiabetes-2018 A ve Leicester skoru testleri.
+"""QDiabetes-2018 A and Leicester score tests.
 
-Referans değerler: CRAN 'QDiabetes' R paketi README örnekleri (QDR2018A, tds=0 varsayılan).
-LPRS (Gray et al., Diabetologia 2012;55:959–966): katsayılardan elle hesaplanmış vakalar
-(0.0408359·yaş + 0.1839942·erkek + 0.7565977·BME + 0.0820698·BMI + 0.4770517·FH + 0.5498978·antiHT).
+Reference values: CRAN 'QDiabetes' R package README examples (QDR2018A, tds=0 default).
+LPRS (Gray et al., Diabetologia 2012;55:959–966): cases computed by hand from the coefficients
+(0.0408359·age + 0.1839942·male + 0.7565977·BME + 0.0820698·BMI + 0.4770517·FH + 0.5498978·antiHT).
 """
 import sys
 import unittest
@@ -27,7 +27,7 @@ def qd_risk(sex, age, bmi, years=10, **kw):
 
 
 class TestQDiabetesReference(unittest.TestCase):
-    """±0.01 yüzde puan."""
+    """±0.01 percentage points."""
 
     def test_male_45_bmi35(self):
         self.assertAlmostEqual(qd_risk("Male", 45, 35), 9.88593, delta=0.01)
@@ -61,7 +61,7 @@ class TestQDiabetesBehaviour(unittest.TestCase):
     def test_horizon_scaling(self):
         r10, r5 = qd_risk("Male", 50, 30, 10), qd_risk("Male", 50, 30, 5)
         self.assertLess(r5, r10)
-        s = (1 - r10 / 100) ** 0.5            # S(5) = S(10)^(5/10) power varsayımı
+        s = (1 - r10 / 100) ** 0.5            # S(5) = S(10)^(5/10) power assumption
         self.assertAlmostEqual(r5, 100 * (1 - s), places=8)
 
 
@@ -77,7 +77,7 @@ P2012 = dict(PARAMS, lrs_variant="practice_2012")
 
 
 class TestLPRS(unittest.TestCase):
-    """Leicester Practice Risk Score — elle hesaplanmış referanslar (6 ondalık)."""
+    """Leicester Practice Risk Score — references computed by hand (6 decimals)."""
 
     def test_reference_full(self):
         # 0.0408359·62 = 2.5318258; 0.0820698·31 = 2.5441638
@@ -88,13 +88,13 @@ class TestLPRS(unittest.TestCase):
         self.assertTrue(r["lrs_computable"])
 
     def test_reference_minimum_inputs(self):
-        # kadın, 40, beyaz, FH yok, BMI 22, ilaç yok: 0.0408359·40 + 0.0820698·22 = 1.633436 + 1.8055356
+        # female, 40, white, no FH, BMI 22, no medication: 0.0408359·40 + 0.0820698·22 = 1.633436 + 1.8055356
         r = lrs.score(_snap(sex="Female", age=40, ethnicity="Western", family_history=False, bmi=22,
                             htn_lrs=False, htn_med=False), p=P2012).iloc[0]
         self.assertAlmostEqual(r["lrs_score"], 3.4389716, places=6)
 
     def test_reference_mixed(self):
-        # kadın, 55, Hint (BME), FH yok, BMI 27.5, antihipertansif:
+        # female, 55, Indian (BME), no FH, BMI 27.5, antihypertensive:
         # 2.2459745 + 0.7565977 + 2.2569195 + 0.5498978 = 5.8093895
         r = lrs.score(_snap(sex="Female", age=55, ethnicity="Indian", family_history=False, bmi=27.5,
                             htn_med=True), p=P2012).iloc[0]
@@ -107,7 +107,7 @@ class TestLPRS(unittest.TestCase):
         self.assertAlmostEqual(r["lrs_score"], 7.0435310, places=6)
 
     def test_htn_diagnosis_alone_not_an_input(self):
-        # LPRS yalnız antihipertansif ilacı kullanır; HT tanısı (htn_lrs) tek başına katkı vermez
+        # LPRS uses only antihypertensive medication; an HTN diagnosis (htn_lrs) alone contributes nothing
         r = lrs.score(_snap(htn_lrs=True, htn_med=False), p=P2012).iloc[0]
         self.assertAlmostEqual(r["lrs_score"], 7.0435310 - 0.5498978, places=6)
 
@@ -137,7 +137,7 @@ class TestLPRS(unittest.TestCase):
 
 class TestLeicesterVariant(unittest.TestCase):
     def test_default_is_practice_2012(self):
-        # [KARAR: 2026-11-14] K-LRS (b): varsayılan bel çevresiz LPRS
+        # [DECIDED: 2026-11-14] K-LRS (b): default is LPRS without waist circumference
         self.assertEqual(PARAMS["lrs_variant"], "practice_2012")
         self.assertFalse(lrs.needs_waist(PARAMS))
         self.assertIsNone(lrs.threshold(PARAMS))
@@ -156,10 +156,10 @@ class TestLeicesterVariant(unittest.TestCase):
 
 
 class TestLRS(unittest.TestCase):
-    """LRA 2010 (bel çevresi zorunlu) — lrs_variant = "assessment_2010"."""
+    """LRA 2010 (waist circumference required) — lrs_variant = "assessment_2010"."""
 
     def test_full_example(self):
-        # yaş 60–69: 9, erkek: 1, beyaz değil: 6, FH: 5, bel 100–109.9: 6, BMI 30–34.9: 5, HT: 5 → 37
+        # age 60–69: 9, male: 1, non-white: 6, FH: 5, waist 100–109.9: 6, BMI 30–34.9: 5, HTN: 5 → 37
         r = lrs.score_assessment_2010(_snap()).iloc[0]
         self.assertEqual(r["lrs_score"], 37)
         self.assertEqual(r["lrs_category"], "high")

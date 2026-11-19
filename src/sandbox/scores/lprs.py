@@ -1,36 +1,36 @@
-"""Leicester Practice Risk Score (LPRS) — bel çevresi gerektirmeyen Leicester skoru.
+"""Leicester Practice Risk Score (LPRS) — the Leicester score that needs no waist circumference.
 
-Kaynak: Gray LJ, Davies MJ, Hiles S, Taub NA, Webb DR, Srinivasan BT, Khunti K. Detection of impaired
+Source: Gray LJ, Davies MJ, Hiles S, Taub NA, Webb DR, Srinivasan BT, Khunti K. Detection of impaired
 glucose regulation and/or type 2 diabetes mellitus, using primary care electronic data, in a multiethnic
 UK community setting. Diabetologia 2012;55(4):959–966. doi:10.1007/s00125-011-2432-x
 
-Rutin birinci basamak EHR verisi için geliştirildi; bel çevresi EHR'de rutin tutulmadığı için modele
-alınmadı. Lojistik modelin doğrusal öngörücüsü, sabit terim yok → mutlak risk/olasılık DEĞİL, sıralama
-skoru. Katsayılar ilk yazarın (L. J. Gray, Leicester Diabetes Centre) "The Leicester Diabetes Risk Scores"
-sunumundaki "Automated score for GP databases" slaytından harfiyen alındı (slayt makaleye atıf veriyor):
+Developed for routine primary-care EHR data; waist circumference was left out of the model because it is not
+routinely recorded in the EHR. Linear predictor of a logistic model, no intercept → NOT an absolute risk/probability,
+a ranking score. Coefficients taken verbatim from the "Automated score for GP databases" slide of the first author's
+(L. J. Gray, Leicester Diabetes Centre) "The Leicester Diabetes Risk Scores" presentation (the slide cites the paper):
 
-    Risk Score = 0.0408359 × yaş + 0.1839942 (erkekse) + 0.7565977 (BME ise) + 0.0820698 × BMI
-                 + 0.4770517 (T2DM aile öyküsü varsa) + 0.5498978 (antihipertansif ilaç kullanıyorsa)
+    Risk Score = 0.0408359 × age + 0.1839942 (if male) + 0.7565977 (if BME) + 0.0820698 × BMI
+                 + 0.4770517 (if family history of T2DM) + 0.5498978 (if on antihypertensive medication)
 
-[DOĞRULAMA BEKLİYOR] Katsayılar makalenin tam metniyle (paywall) henüz karşılaştırılmadı.
+[VERIFICATION PENDING] The coefficients have not yet been checked against the full text of the paper (paywall).
 
-Mutlak bir "yüksek risk" eşiği bulunamadı: yazarlar skoru sıralama için kullandı — pratik başına en
-yüksek %10 davet edildi (Let's Prevent Diabetes ve Walking Away from Diabetes; Gray et al. Diabetologia
-2012, doi:10.1007/s00125-012-2725-8) ya da hedef duyarlılığa (ör. %80) göre eşik seçildi (aynı sunum). Eşik bu yüzden
-`PARAMS["lprs_high_risk_threshold"]`; None → "Pending" [KARAR BEKLİYOR — D23].
+No absolute "high risk" threshold was found: the authors used the score for ranking — the top 10% per practice
+were invited (Let's Prevent Diabetes and Walking Away from Diabetes; Gray et al. Diabetologia
+2012, doi:10.1007/s00125-012-2725-8) or a threshold was chosen for a target sensitivity (e.g. 80%) (same presentation).
+The threshold is therefore `PARAMS["lprs_high_risk_threshold"]`; None → "Pending" [DECISION PENDING — D23].
 
-Kodlama:
-- yaş: yıl, sürekli. Geliştirme popülasyonu 40–75 yaş; aralık dışı hastalarda skor ekstrapolasyondur
-  (kısıtlama uygulanmaz, LRA 2010 ile aynı).
-- BME (Black and minority ethnic): beyaz dışı = 1. LRA 2010 ile aynı eşleme (`codelists.LRS_WHITE`).
-  Etnisite kayıtsız → `lrs_unknown_ethnicity_as_missing` (D12).
-- BMI: kg/m², sürekli.
-- aile öyküsü: birinci derece akrabada diyabet (`phenotype` → `family_history`).
-- antihipertansif: pencere içinde antihipertansif reçete (`phenotype` → `htn_med`); hipertansiyon
-  TANISI bu modelde yok (LRA 2010'dan farkı).
+Coding:
+- age: years, continuous. Development population aged 40–75; for patients outside this range the score is an
+  extrapolation (no restriction applied, same as LRA 2010).
+- BME (Black and minority ethnic): non-white = 1. Same mapping as LRA 2010 (`codelists.LRS_WHITE`).
+  Ethnicity not recorded → `lrs_unknown_ethnicity_as_missing` (D12).
+- BMI: kg/m², continuous.
+- family history: diabetes in a first-degree relative (`phenotype` → `family_history`).
+- antihypertensive: an antihypertensive prescription within the window (`phenotype` → `htn_med`); a hypertension
+  DIAGNOSIS is not in this model (the difference from LRA 2010).
 
-Not: LPRS mevcut (tanı konmamış) IGR/T2D tespiti için geliştirilmiş kesitsel bir skordur; C3'teki
-incident benchmark dış kullanım (off-label) olarak raporlanır.
+Note: LPRS is a cross-sectional score developed to detect existing (undiagnosed) IGR/T2D; the incident benchmark
+in C3 is reported as off-label use.
 """
 from __future__ import annotations
 
@@ -41,18 +41,18 @@ from .. import codelists
 from ..config import PARAMS
 
 COEF = {
-    "age": 0.0408359,            # yıl başına
+    "age": 0.0408359,            # per year
     "male": 0.1839942,
-    "bme": 0.7565977,            # beyaz dışı
-    "bmi": 0.0820698,            # kg/m² başına
+    "bme": 0.7565977,            # non-white
+    "bmi": 0.0820698,            # per kg/m²
     "family_history": 0.4770517,
     "antihypertensive": 0.5498978,
 }
-DEV_AGE_RANGE = (40, 75)         # geliştirme popülasyonu (bilgi amaçlı; kısıt uygulanmaz)
+DEV_AGE_RANGE = (40, 75)         # development population (informational; no restriction applied)
 
 
 def bme_flag(ethnicity: pd.Series, p: dict = PARAMS) -> pd.Series:
-    """Beyaz dışı = 1.0, beyaz = 0.0; kayıtsız → NaN (D12 açıksa)."""
+    """Non-white = 1.0, white = 0.0; not recorded → NaN (if D12 is on)."""
     eth = ethnicity.astype("string").str.strip().str.lower()
     unknown = (eth.isna() | eth.isin(codelists.ETHNICITY_UNKNOWN)).fillna(True).astype(bool)
     white = eth.isin(codelists.LRS_WHITE).fillna(False).astype(bool)
@@ -63,10 +63,10 @@ def bme_flag(ethnicity: pd.Series, p: dict = PARAMS) -> pd.Series:
 
 
 def score(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
-    """phenotype.core_snapshot → LPRS. Eksik girdi → NaN + lrs_missing nedeni.
+    """phenotype.core_snapshot → LPRS. Missing input → NaN + lrs_missing reason.
 
-    Çıktı sütunları LRA 2010 ile aynı adları taşır (`lrs_*`), böylece notebook'lar varyanttan bağımsız.
-    Bileşenler (lrs_age, lrs_sex, …) skora katkıdır (katsayı × değer).
+    Output columns carry the same names as LRA 2010 (`lrs_*`), so the notebooks are variant-independent.
+    The components (lrs_age, lrs_sex, …) are contributions to the score (coefficient × value).
     """
     sex_ok = snap["sex"].isin(["Male", "Female"])
     bmi = pd.to_numeric(snap["bmi"], errors="coerce").astype(float)
@@ -87,7 +87,7 @@ def score(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
     x["lrs_missing"] = reasons
     x["lrs_computable"] = reasons == ""
     x["lrs_score"] = x[list(parts)].sum(axis=1, min_count=len(parts)).where(x["lrs_computable"])
-    x["lrs_category"] = pd.Series(pd.NA, index=x.index, dtype="string")   # yayımlanmış kategori yok
+    x["lrs_category"] = pd.Series(pd.NA, index=x.index, dtype="string")   # no published categories
     thr = p["lprs_high_risk_threshold"]
     if thr is None:
         x["lrs_high_risk"] = pd.Series(pd.NA, index=x.index, dtype="boolean")

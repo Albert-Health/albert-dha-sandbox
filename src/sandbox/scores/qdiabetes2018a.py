@@ -1,17 +1,17 @@
-"""QDiabetes-2018 Model A (laboratuvar gerektirmeyen varyant).
+"""QDiabetes-2018 Model A (the variant that needs no laboratory values).
 
-Katsayı kaynağı: CRAN 'QDiabetes' R paketi v1.0-2, R/QDR2018A.R (B. Feakes; ClinRisk Ltd. /
-University of Oxford'un QDiabetes-2018 açık kaynak kodunun R portu, qdiabetes.org).
-Lisans: orijinal kod LGPL-3, R portu AGPL-3. Katsayılar 2026-11-13'te kaynaktan alındı ve
-paketin README örnek çıktılarıyla doğrulandı (tests/test_scores.py).
+Coefficient source: CRAN 'QDiabetes' R package v1.0-2, R/QDR2018A.R (B. Feakes; R port of the
+QDiabetes-2018 open-source code by ClinRisk Ltd. / University of Oxford, qdiabetes.org).
+Licence: original code LGPL-3, R port AGPL-3. Coefficients taken from the source on 2026-11-13 and
+verified against the package README example outputs (tests/test_scores.py).
 
-Önemli notlar
-- Kaynak kod yalnızca 10 yıllık baseline survival içerir (kadın 0.986227273941040,
-  erkek 0.978732228279114). Diğer horizon'lar için PARAMS["qd_baseline_time_scaling"]="power":
-  S0(t) = S0(10)^(t/10) (sabit baseline hazard varsayımı). [KARAR BEKLİYOR] — Kol 2 recalibration
-  horizon'da baseline'ı UAE verisinden yeniden tahmin ettiği için bu varsayıma bağlı değildir.
-- Yaş 25–84 dışı → NaN (kaynak: hata). BMI 20–40 dışına kırpılır (kaynak: uyarıyla kırpma).
-- Lab değerleri girdi değildir.
+Important notes
+- The source code only contains the 10-year baseline survival (female 0.986227273941040,
+  male 0.978732228279114). For other horizons PARAMS["qd_baseline_time_scaling"]="power":
+  S0(t) = S0(10)^(t/10) (constant baseline hazard assumption). [DECISION PENDING] — Arm 2 recalibration
+  does not depend on this assumption, since it re-estimates the baseline at the horizon from UAE data.
+- Age outside 25–84 → NaN (source: error). BMI is clipped to 20–40 (source: clips with a warning).
+- Lab values are not inputs.
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ COEF = {
 }
 
 BINARY = ["fhdm", "cvd", "htn", "ster", "apsy", "stat", "psy", "learn", "gdm", "pcos"]
-OUT_OF_SCOPE = ["ster", "apsy", "stat", "psy", "learn", "gdm", "pcos"]   # revize MVP'de istenmedi
+OUT_OF_SCOPE = ["ster", "apsy", "stat", "psy", "learn", "gdm", "pcos"]   # not requested in the revised MVP
 
 
 def _transforms(sex: str, age: np.ndarray, bmi: np.ndarray):
@@ -83,8 +83,8 @@ def _transforms(sex: str, age: np.ndarray, bmi: np.ndarray):
 
 
 def linear_predictor(df: pd.DataFrame) -> pd.Series:
-    """Skor (log-hazard, merkezlenmiş). Girdi sütunları: sex, age, bmi, ethn_qd, smoke_cat (0–4),
-    townsend ve BINARY bayrakları (bool/0-1). Geçersiz satır → NaN."""
+    """Score (log-hazard, centred). Input columns: sex, age, bmi, ethn_qd, smoke_cat (0–4),
+    townsend and the BINARY flags (bool/0-1). Invalid row → NaN."""
     out = pd.Series(np.nan, index=df.index, dtype=float)
     for sex in ("Female", "Male"):
         m = (df["sex"] == sex).to_numpy()
@@ -117,19 +117,19 @@ def baseline_survival(sex: pd.Series, years: float, p: dict = PARAMS) -> pd.Seri
     if years == 10:
         return s10
     if p["qd_baseline_time_scaling"] != "power":
-        raise ValueError("Bilinmeyen qd_baseline_time_scaling")
+        raise ValueError("Unknown qd_baseline_time_scaling")
     return s10 ** (years / 10.0)
 
 
 def risk(lp: pd.Series, sex: pd.Series, years: float = 10, p: dict = PARAMS) -> pd.Series:
-    """Olasılık (0–1): 1 − S0(t)^exp(lp)."""
+    """Probability (0–1): 1 − S0(t)^exp(lp)."""
     return 1.0 - baseline_survival(sex, years, p) ** np.exp(lp)
 
 
 def prepare_inputs(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
-    """phenotype.core_snapshot çıktısını QDiabetes girdilerine çevirir.
+    """Convert phenotype.core_snapshot output into QDiabetes inputs.
 
-    Ek sütunlar: qd_variant ('reduced_8core' | 'full'), qd_computable (bool), qd_missing (neden).
+    Extra columns: qd_variant ('reduced_8core' | 'full'), qd_computable (bool), qd_missing (reason).
     """
     x = pd.DataFrame(index=snap.index)
     x["sex"] = snap["sex"]
@@ -137,7 +137,7 @@ def prepare_inputs(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
     x["bmi"] = snap["bmi"]
     x["ethn_qd"] = codelists.map_ethnicity_qdiabetes(snap["ethnicity"])
     sm = snap["smoking_cat"].astype("float")
-    # dtype=bool: pandas 2'de boolean → object dizisi olur ve ~ onu -1/-2 tamsayısına çevirir
+    # dtype=bool: in pandas 2 boolean becomes an object array and ~ turns it into the integers -1/-2
     current = snap["smoking_raw"].astype("string").str.lower().eq("current").fillna(False).to_numpy(dtype=bool)
     sm = sm.where(~current, p["qd_smoking_current_category"])
     if p["qd_missing_smoking_as_non"]:
@@ -166,7 +166,7 @@ def prepare_inputs(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
 
 
 def score(snap: pd.DataFrame, years: float = 10, p: dict = PARAMS) -> pd.DataFrame:
-    """Snapshot → lp ve horizon riski (0–1). Hesaplanamayan satırlarda NaN."""
+    """Snapshot → lp and horizon risk (0–1). NaN for rows that cannot be computed."""
     x = prepare_inputs(snap, p)
     lp = linear_predictor(x).where(x["qd_computable"])
     x["qd_lp"] = lp

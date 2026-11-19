@@ -1,11 +1,11 @@
-"""Kol 2 — QDiabetes'in UAE'ye yeniden kalibrasyonu.
+"""Arm 2 — recalibration of QDiabetes to the UAE.
 
-QDiabetes bir Cox modelidir: p(t) = 1 − S0(t)^exp(lp). Recalibration lp'yi (prediktör yapısı ve
-göreli ağırlıklar) korur, yalnızca UAE verisinden horizon'daki baseline survival'ı yeniden tahmin eder.
+QDiabetes is a Cox model: p(t) = 1 − S0(t)^exp(lp). Recalibration keeps lp (predictor structure and
+relative weights) and only re-estimates the baseline survival at the horizon from UAE data.
 
-- "baseline": eğim 1 sabit (lp offset), S0(h) Breslow ile → seviye (calibration-in-the-large) düzelir.
-- "baseline_slope": önce Cox ile lp eğimi β, sonra β·lp ile Breslow S0(h) → seviye + yayılım düzelir.
-Hiçbiri sıralamayı (C-index) değiştirmez — bu Kol 2'nin teşhis değeridir.
+- "baseline": slope fixed at 1 (lp offset), S0(h) via Breslow → fixes the level (calibration-in-the-large).
+- "baseline_slope": first the lp slope β via Cox, then Breslow S0(h) with β·lp → fixes level + spread.
+Neither changes the ranking (C-index) — that is Arm 2's diagnostic value.
 """
 from __future__ import annotations
 
@@ -46,9 +46,9 @@ def predict(model: dict, lp) -> np.ndarray:
 
 
 def fit_stratified(time, event, lp, strata, horizon: float, method: str = "baseline") -> dict:
-    """Katman (ör. cinsiyet) başına ayrı recalibration. QDiabetes kadın/erkek için ayrı baseline
-    survival kullandığından Kol 2 de cinsiyete göre katmanlı yapılmalıdır; aksi halde katmanlar arası
-    sıralama değişir."""
+    """Separate recalibration per stratum (e.g. sex). QDiabetes uses separate baseline survival for
+    women/men, so Arm 2 must also be stratified by sex; otherwise the ranking across strata
+    changes."""
     t, e, lp, s = (np.asarray(a) for a in (time, event, lp, strata))
     return {str(k): fit(t[s == k], e[s == k].astype(bool), lp[s == k].astype(float), horizon, method)
             for k in np.unique(s)}

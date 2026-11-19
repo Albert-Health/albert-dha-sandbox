@@ -1,19 +1,19 @@
-"""Merkezi konfigürasyon.
+"""Central configuration.
 
-Tüm analiz parametreleri burada. Değişiklikler audit log'a otomatik yazılır
-(audit.Run, bu modüldeki PARAMS sözlüğünü kaydeder).
+All analysis parameters live here. Changes are written to the audit log automatically
+(audit.Run records the PARAMS dictionary of this module).
 
-Kaynak belgeler:
-- MVP Dataset v1.0 (kod listeleri)
-- Interim Data Assessment (C1/C2 tanımı, cap = 2,600)
-- Non-Diabetic Cohort Spec v2 (C3: index, lookback, takip, outcome)
+Source documents:
+- MVP Dataset v1.0 (code lists)
+- Interim Data Assessment (C1/C2 definition, cap = 2,600)
+- Non-Diabetic Cohort Spec v2 (C3: index, lookback, follow-up, outcome)
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 # --------------------------------------------------------------------------
-# Yollar
+# Paths
 # --------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
@@ -28,20 +28,20 @@ AUDIT_DIR = OUTPUT_DIR / "audit"
 COHORTS = ("c1", "c2", "c3")
 
 # --------------------------------------------------------------------------
-# Analiz parametreleri (tek doğruluk kaynağı)
+# Analysis parameters (single source of truth)
 # --------------------------------------------------------------------------
 PARAMS = {
-    # Genel
+    # General
     "seed": 42,
-    "age_min": 25,                    # QDiabetes geçerli aralık
+    "age_min": 25,                    # QDiabetes valid range
     "age_max": 84,
 
-    # Etnisite kaynağı: "nationality" (uyruk) | "ethnicity" (NABIDH etnisite alanı).
-    # [KARAR: 2026-11-13, ensargunesdogdu] Etnisite yerine uyruk kullanılacak. Uyruk → etnik grup
-    # eşlemesinin içeriği (codelists.NATIONALITY_COUNTRIES) ayrıca [KARAR BEKLİYOR] (D6).
+    # Ethnicity source: "nationality" | "ethnicity" (NABIDH ethnicity field).
+    # [DECIDED: 2026-11-13, ensargunesdogdu] Nationality is used instead of ethnicity. The content of the
+    # nationality → ethnic group mapping (codelists.NATIONALITY_COUNTRIES) is separately [DECISION PENDING] (D6).
     "ethnicity_source": "nationality",
 
-    # Glisemik eşikler (ADA 2024) — mg/dL ve %
+    # Glycaemic thresholds (ADA 2024) — mg/dL and %
     "hba1c_dm": 6.5,
     "hba1c_pre_low": 5.7,
     "fpg_dm": 126.0,
@@ -53,75 +53,75 @@ PARAMS = {
     # C1 / C2 (Interim Data Assessment)
     "c1_cap": 2600,
     "c2_cap": 2600,
-    # C1 tamlık tanımı: aile öyküsü / KVH / HT kodları "var/yok" olarak ele alınır.
-    # True → aile öyküsü için kayıt (FamilyHistory pozitif/negatif veya Z83.3) şartı aranır.
-    # [KARAR BEKLİYOR] D17 — enclave'de NABIDH'in C1 tanımı görülünce netleşecek.
+    # C1 completeness definition: family history / CVD / HTN codes are treated as "present/absent".
+    # True → a family history record (FamilyHistory positive/negative or Z83.3) is required.
+    # [DECISION PENDING] D17 — to be settled once NABIDH's C1 definition is seen in the enclave.
     "c1_require_fh_record": False,
-    # Diyabet aile öyküsü (birinci derece akraba; FamilyHistory kaydı ve Z83.3) var / yok olarak alınır. Diyabet dışı
-    # hastalık kayıtları adapter'da atılır. Kayıt tarihi kullanılmaz: tarihsiz ve referans tarihinden sonra
-    # girilmiş kayıt da sayılır. NABIDH FamilyHistory.EnteredOn çoğunlukla boş.
-    # [KARAR: 2026-11-19, ensargunesdogdu] D27. False → yalnız referans tarihine kadar tarihli kayıtlar.
+    # Family history of diabetes (first-degree relative; FamilyHistory record and Z83.3) is taken as present / absent.
+    # Non-diabetes condition records are dropped in the adapter. The record date is not used: undated records and
+    # records entered after the reference date also count. NABIDH FamilyHistory.EnteredOn is mostly empty.
+    # [DECIDED: 2026-11-19, ensargunesdogdu] D27. False → only records dated up to the reference date.
     "family_history_any_date": True,
 
     # C3 (Non-Diabetic Cohort Spec v2)
-    # v2 belgesinin iki sürümü çelişiyor: 24 ay (ilk sürüm) vs 12 ay (2026-11-13).
-    # [KARAR: 2026-11-13, ensargunesdogdu] D3: 1 yıl birincil; 2 yıl (730 gün) ek kontrol olarak duyarlılık
-    # çalıştırması: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (.run "4c").
+    # The two versions of the v2 document disagree: 24 months (first version) vs 12 months (2026-11-13).
+    # [DECIDED: 2026-11-13, ensargunesdogdu] D3: 1 year primary; 2 years (730 days) as an extra check via a sensitivity
+    # run: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (.run "4c").
     "predictor_lookback_days": 365,
-    "min_followup_gap_days": 0,       # v2 alt sürümü ">= 3 ay" önerir; 0 = şart yok
-    # [KARAR: 2026-11-13, ensargunesdogdu] D2: birincil horizon 3 yıl "şimdilik" — ayrıntılı
-    # değerlendirilecek. 5 yıl ikincil horizon olarak raporlanmaya devam eder.
-    "horizon_years": 3,               # birincil
-    "horizon_years_fallback": 5,      # ikincil (NB2'de CI'sız raporlanır)
+    "min_followup_gap_days": 0,       # a v2 sub-version suggests ">= 3 months"; 0 = no requirement
+    # [DECIDED: 2026-11-13, ensargunesdogdu] D2: primary horizon 3 years "for now" — to be assessed
+    # in detail. 5 years continues to be reported as the secondary horizon.
+    "horizon_years": 3,               # primary
+    "horizon_years_fallback": 5,      # secondary (reported without CI in NB2)
     "c3_cap": None,                   # v2: "no cap"
-    # Index'ten sonraki N gün içinde olay = başlangıçta zaten diyabetik (tanı konmamış) kabul edilir
-    # ve hasta kohorttan çıkarılır. NB0 duyarlılık tablosu 0/90/180 raporlar.
-    # [KARAR: 2026-11-13, ensargunesdogdu] D1: 90 gün (v2'de washout yoktu; 0 = v2 duyarlılığı, .run "4b").
+    # An event within N days after index = already diabetic at baseline (undiagnosed); the patient
+    # is removed from the cohort. The NB0 sensitivity table reports 0/90/180.
+    # [DECIDED: 2026-11-13, ensargunesdogdu] D1: 90 days (v2 had no washout; 0 = v2 sensitivity, .run "4b").
     "outcome_washout_days": 90,
 
-    # QDiabetes-2018 Model A (scores/qdiabetes2018a.py) — [KARAR BEKLİYOR] işaretliler medikal ekipte
-    # Revize MVP yalnızca 8 çekirdek değişkeni istiyor → steroid, statin, atipik antipsikotik,
-    # şizofreni/bipolar, öğrenme güçlüğü, GDM, PCOS = 0 ("indirgenmiş Model A"). False → veride varsa kullanılır.
-    "qd_force_reduced_model": True,          # [KARAR: 2026-11-13, ensargunesdogdu] D9: kapsam dışı kalacak
-    "qd_townsend": 0.0,                      # [KARAR: 2026-11-13, ensargunesdogdu] D10: out of scope → 0
-    "qd_smoking_current_category": 3,        # yoğunluksuz "current" → 3=moderate [KARAR BEKLİYOR] D7
-    # [KARAR: 2026-11-13, ensargunesdogdu] D8: sigara kaydı yok = bilinmiyor (non-smoker sayılmaz) →
-    # QDiabetes hesaplanmaz, eksiklik nedeni "smoking_missing" olarak raporlanır.
+    # QDiabetes-2018 Model A (scores/qdiabetes2018a.py) — items marked [DECISION PENDING] are with the medical team
+    # The revised MVP asks for only the 8 core variables → steroids, statins, atypical antipsychotics,
+    # schizophrenia/bipolar, learning disability, GDM, PCOS = 0 ("reduced Model A"). False → used if present in the data.
+    "qd_force_reduced_model": True,          # [DECIDED: 2026-11-13, ensargunesdogdu] D9: stays out of scope
+    "qd_townsend": 0.0,                      # [DECIDED: 2026-11-13, ensargunesdogdu] D10: out of scope → 0
+    "qd_smoking_current_category": 3,        # "current" without intensity → 3=moderate [DECISION PENDING] D7
+    # [DECIDED: 2026-11-13, ensargunesdogdu] D8: no smoking record = unknown (not counted as non-smoker) →
+    # QDiabetes is not computed; the missingness reason is reported as "smoking_missing".
     "qd_missing_smoking_as_non": False,
-    # Kaynak kod yalnızca 10 yıllık baseline survival verir. Diğer horizon'lar için
-    # S0(t) = S0(10)^(t/10) (sabit baseline hazard varsayımı) [KARAR BEKLİYOR]
+    # The source code only gives the 10-year baseline survival. For other horizons
+    # S0(t) = S0(10)^(t/10) (constant baseline hazard assumption) [DECISION PENDING]
     "qd_baseline_time_scaling": "power",
-    # sens/spec/PPV için horizon riski eşiği (%). [KARAR: 2026-11-13, ensargunesdogdu] D5: şimdilik
-    # varsayılan (None) → eşik KPI'ları "Pending".
+    # Horizon risk threshold (%) for sens/spec/PPV. [DECIDED: 2026-11-13, ensargunesdogdu] D5: default for now
+    # (None) → threshold KPIs "Pending".
     "qd_risk_threshold_pct": None,
 
-    # Leicester skoru (scores/lrs.py → varyant seçici). NABIDH teslim listesinde bel çevresi yok →
-    # LRA 2010 hesaplanamaz (K-LRS).
-    # [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat] K-LRS: seçenek (b) — bel çevresi
-    # istemeyen Leicester Practice Risk Score (Gray et al., Diabetologia 2012;55:959–966) kullanılır
-    # (Slack #sandboxteam, 2026-11-13). LRA 2010 karşılaştırma için kalır:
+    # Leicester score (scores/lrs.py → variant selector). Waist circumference is not in the NABIDH delivery list →
+    # LRA 2010 cannot be computed (K-LRS).
+    # [DECIDED: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat] K-LRS: option (b) — the Leicester Practice Risk
+    # Score, which needs no waist circumference (Gray et al., Diabetologia 2012;55:959–966), is used
+    # (Slack #sandboxteam, 2026-11-13). LRA 2010 stays for comparison:
     # SANDBOX_PARAMS='{"lrs_variant": "assessment_2010"}'.
-    "lrs_variant": "practice_2012",          # "practice_2012" (LPRS, bel yok) | "assessment_2010" (LRA, bel zorunlu)
-    # LPRS doğrusal öngörücüdür (sabit terimsiz, mutlak risk değil); yayımlanmış mutlak eşik yok —
-    # yazarlar sıralama kullandı (pratik başına en yüksek %10 / hedef duyarlılık). Eşik değeri
-    # (skor ≥ x → yüksek risk) seçilene kadar None → C1 yakalama oranı ve eşik metrikleri "Pending".
-    "lprs_high_risk_threshold": None,        # [KARAR BEKLİYOR] D23
-    "lrs_high_risk_threshold": 16,           # yalnız assessment_2010: ≥16 yüksek risk (NHS Health Check)
-    "lrs_unknown_ethnicity_as_missing": True,  # her iki varyant: "Not recorded" → skor hesaplanmaz [KARAR BEKLİYOR] D12
+    "lrs_variant": "practice_2012",          # "practice_2012" (LPRS, no waist) | "assessment_2010" (LRA, waist required)
+    # LPRS is a linear predictor (no intercept, not an absolute risk); there is no published absolute threshold —
+    # the authors used ranking (top 10% per practice / target sensitivity). Until a threshold value
+    # (score ≥ x → high risk) is chosen, None → C1 capture rate and threshold metrics "Pending".
+    "lprs_high_risk_threshold": None,        # [DECISION PENDING] D23
+    "lrs_high_risk_threshold": 16,           # assessment_2010 only: ≥16 high risk (NHS Health Check)
+    "lrs_unknown_ethnicity_as_missing": True,  # both variants: "Not recorded" → score not computed [DECISION PENDING] D12
 
-    # Recalibration (Kol 2)
-    "recal_split": "temporal",               # "temporal" (index tarihine göre) | "random"
+    # Recalibration (Arm 2)
+    "recal_split": "temporal",               # "temporal" (by index date) | "random"
     "recal_train_frac": 0.7,
 
-    # Alt-gruplar
+    # Subgroups
     "age_band_edges": [25, 40, 55, 70, 85],  # [25,40) [40,55) [55,70) [70,85)
     "age_band_labels": ["25–39", "40–54", "55–69", "70–84"],
 
-    # Manuel KPI girdisi
-    "security_incidents": 0,                 # Data Security KPI — enclave olay kaydından manuel
+    # Manual KPI input
+    "security_incidents": 0,                 # Data Security KPI — manual, from the enclave incident log
 
-    # İstatistik
+    # Statistics
     "bootstrap_reps": 500,
     "min_events_subgroup": 50,
-    "small_cell_threshold": 10,       # çıktı tablolarında n < 10 → "<10"
+    "small_cell_threshold": 10,       # n < 10 → "<10" in output tables
 }

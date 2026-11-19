@@ -1,15 +1,15 @@
 """Audit trail (KPI: Audit Trail Completeness = %100, Critical).
 
-Her çalıştırma bir Run'dır. Run şunları kaydeder:
-- run_id, başlangıç/bitiş zamanı, kullanıcı, makine, Python ve paket sürümleri
-- kod parmak izi: src/ altındaki tüm .py dosyalarının SHA-256'sı + git commit (varsa)
-- girdi dosyalarının yolu, boyutu, SHA-256'sı
-- PARAMS (config) anlık görüntüsü
-- yazılan her çıktı dosyasının yolu ve SHA-256'sı
-- serbest olay kayıtları (adım adım ne yapıldı)
+Every execution is a Run. A Run records:
+- run_id, start/end time, user, machine, Python and package versions
+- code fingerprint: SHA-256 of every .py file under src/ + git commit (if any)
+- path, size and SHA-256 of the input files
+- a snapshot of PARAMS (config)
+- path and SHA-256 of every output file written
+- free-form event records (what was done, step by step)
 
-Yazım yeri: outputs/audit/audit_log.jsonl (append-only) ve
-outputs/<run_id>/run_manifest.json. Ağ erişimi yoktur, her şey yereldir.
+Written to: outputs/audit/audit_log.jsonl (append-only) and
+outputs/<run_id>/run_manifest.json. No network access; everything is local.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def code_fingerprint() -> dict:
         dirty = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--", "src", "notebooks"],
                                capture_output=True, text=True, timeout=5).stdout.strip()
         git = {"commit": git, "dirty": bool(dirty)}
-    except Exception:  # git yoksa audit yine çalışır
+    except Exception:  # the audit still works without git
         pass
     return {"combined_sha256": combined, "files": per_file, "git": git}
 
@@ -58,7 +58,7 @@ def _versions() -> dict:
             out[mod] = __import__(mod).__version__
         except Exception:
             out[mod] = None
-    # Opsiyonel IRIS sürücüleri (io/iris.py): yalnızca kuruluysa, import etmeden
+    # Optional IRIS drivers (io/iris.py): only if installed, without importing them
     from importlib import metadata
     for dist in ("intersystems-irispython", "pyodbc"):
         try:
@@ -69,7 +69,7 @@ def _versions() -> dict:
 
 
 def _env_file() -> dict | None:
-    """`.env`'den gelen ayarlar: yalnız anahtar ADLARI (değer — ör. şifre — asla yazılmaz)."""
+    """Settings from `.env`: key NAMES only (a value — e.g. the password — is never written)."""
     from .envfile import LOADED
     if not LOADED["path"]:
         return None
@@ -84,7 +84,7 @@ def _now() -> str:
 
 class Run:
     def __init__(self, name: str, params: dict | None = None, source: str | None = None):
-        ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")   # UTC: makineden bağımsız sıralama
+        ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")   # UTC: ordering independent of the machine
         self.run_id = f"{ts}_{name}_{uuid.uuid4().hex[:6]}"
         self.name = name
         self.dir = OUTPUT_DIR / self.run_id
@@ -99,14 +99,14 @@ class Run:
         self._append({"event": "run_start", "run_id": self.run_id, "name": name,
                       "code_sha256": self.record["code"]["combined_sha256"], "ts": _now()})
         self._finished = False
-        # Script hata ile biterse de run_end yazılsın (audit trail boşluk bırakmasın)
+        # Write run_end even if the script fails (no gap in the audit trail)
         atexit.register(self._close_if_open)
 
     def _close_if_open(self) -> None:
         if not self._finished:
             self.finish(status="failed_or_interrupted")
 
-    # -- kayıtlar ---------------------------------------------------------
+    # -- records ----------------------------------------------------------
     def _append(self, obj: dict) -> None:
         with open(AUDIT_DIR / "audit_log.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(obj, default=str, ensure_ascii=False) + "\n")
@@ -128,8 +128,8 @@ class Run:
             self._append({"event": "input", "run_id": self.run_id, **item})
 
     def add_query_input(self, target: str, query: str, rows: int, sha256: str, label: str = "") -> None:
-        """Dosya olmayan girdi (IRIS sorgusu): hedef (host:port/NAMESPACE — şifre / parametre yok),
-        çalıştırılan SELECT, satır sayısı ve sonucun (CSV metni) SHA-256'sı."""
+        """A non-file input (IRIS query): target (host:port/NAMESPACE — no password / parameters),
+        the SELECT run, row count and SHA-256 of the result (CSV text)."""
         item = {"query": query, "target": target, "rows": int(rows), "sha256": sha256, "label": label}
         self.record["inputs"].append(item)
         self._append({"event": "input", "run_id": self.run_id, **item})

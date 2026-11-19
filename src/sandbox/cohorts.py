@@ -1,10 +1,10 @@
-"""Kohort kuralları.
+"""Cohort rules.
 
-- Pozitif havuz (C1/C2, Interim Data Assessment): T2DM veya prediyabet (tanı ve/veya lab),
-  T1D hariç. A10 ilacı tek başına statü belirlemez, ayrı raporlanır.
-- C3 (Non-Diabetic Cohort Spec v2): ilk normal glisemik değer = index; öncesinde hiç
-  diyabet/prediyabet/A10 yok; T1D hiç yok; 25–84 yaş; index sonrası ≥1 glisemik ölçüm.
-  Sansür: son glisemik ölçüm.
+- Positive pool (C1/C2, Interim Data Assessment): T2DM or prediabetes (diagnosis and/or lab),
+  T1D excluded. An A10 drug alone does not set the status; it is reported separately.
+- C3 (Non-Diabetic Cohort Spec v2): first normal glycaemic value = index; no diabetes/prediabetes/A10
+  before it; never T1D; age 25–84; ≥1 glycaemic measurement after index.
+  Censoring: last glycaemic measurement.
 """
 from __future__ import annotations
 
@@ -23,10 +23,10 @@ def data_end_date(ds: Dataset) -> pd.Timestamp:
 
 
 # --------------------------------------------------------------------------
-# Pozitif havuz (C1 / C2)
+# Positive pool (C1 / C2)
 # --------------------------------------------------------------------------
 def positive_pool(ds: Dataset, ev: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Hasta başı: status (T2DM/Prediabetes), ilk tarih, kanıt tipleri, A10 bayrağı."""
+    """Per patient: status (T2DM/Prediabetes), first date, evidence types, A10 flag."""
     ev = phenotype.dm_evidence(ds) if ev is None else ev
     t1d_ids = set(ev.loc[ev["status"] == "t1d", "patient_id"])
     ev = ev[~ev["patient_id"].isin(t1d_ids)]
@@ -50,24 +50,24 @@ POSITIVE_REFERENCES = ("data_end", "first_evidence")
 
 
 def positive_reference_dates(ds: Dataset, pool: pd.DataFrame, how: str) -> pd.Series:
-    """C1/C2 snapshot'ı için hasta başı referans tarihi.
+    """Per-patient reference date for the C1/C2 snapshot.
 
-    "data_end": veri sonu — C1 tanımı ("as currently recorded"); tamlık ve seçilim etkisi bununla.
-    "first_evidence": statüyü belirleyen ilk kanıt tarihi (T2DM → ilk T2DM, prediyabet → ilk
-      prediyabet kanıtı), o gün dahil. "Skor bu hastayı tanı anında yakalar mıydı" sorusu için;
-      tanı sonrası kayıtlar (ör. tedavi sonrası BMI) girmez.
+    "data_end": end of data — the C1 definition ("as currently recorded"); used for completeness and selection effect.
+    "first_evidence": date of the first evidence that sets the status (T2DM → first T2DM, prediabetes → first
+      prediabetes evidence), that day included. For the question "would the score have caught this patient at
+      diagnosis"; post-diagnosis records (e.g. BMI after treatment) are left out.
     """
     if how == "data_end":
         return pd.Series(data_end_date(ds), index=pool.index)
     if how == "first_evidence":
         return pool["first_t2dm_date"].where(pool["status"] == "T2DM", pool["first_prediabetes_date"])
-    raise ValueError(f"bilinmeyen referans: {how!r} (seçenekler: {POSITIVE_REFERENCES})")
+    raise ValueError(f"unknown reference: {how!r} (options: {POSITIVE_REFERENCES})")
 
 
 def build_c1_c2(ds: Dataset, p: dict = PARAMS) -> dict:
-    """Pozitif havuzdan C1 (8 değişken tam, cap) ve C2 (rastgele, cap) seçer.
+    """Select C1 (all 8 variables complete, cap) and C2 (random, cap) from the positive pool.
 
-    Dönüş: {"pool": df, "c1_ids": [...], "c2_ids": [...], "report": {...}}
+    Returns: {"pool": df, "c1_ids": [...], "c2_ids": [...], "report": {...}}
     """
     pool = positive_pool(ds)
     ref = pd.Series(data_end_date(ds), index=pool.index)
@@ -78,7 +78,7 @@ def build_c1_c2(ds: Dataset, p: dict = PARAMS) -> dict:
     complete = pool.index[pool["ok_core8"]]
     c1_ids = list(complete) if len(complete) <= p["c1_cap"] else \
         list(rng.choice(np.array(complete), size=p["c1_cap"], replace=False))
-    # C2: C1'den bağımsız rastgele örneklem; C1 hastaları çerçeveden çıkarılmaz
+    # C2: random sample independent of C1; C1 patients are not removed from the frame
     rng2 = np.random.default_rng(p["seed"] + 1)
     all_ids = np.array(pool.index)
     c2_ids = list(all_ids) if len(all_ids) <= p["c2_cap"] else \
@@ -101,9 +101,9 @@ def build_c1_c2(ds: Dataset, p: dict = PARAMS) -> dict:
 # C3 — non-diabetic, incident
 # --------------------------------------------------------------------------
 def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
-    """v2 kurallarıyla C3 kohortu: index, outcome, sansür, 8 değişken (index'te).
+    """C3 cohort under the v2 rules: index, outcome, censoring, 8 variables (at index).
 
-    Dönüş: {"cohort": df (patient_id index), "funnel": dict}
+    Returns: {"cohort": df (patient_id index), "funnel": dict}
     """
     glyc = phenotype.glycaemic_events(ds, p)
     ev = phenotype.dm_evidence(ds, glyc)
@@ -111,7 +111,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     funnel = {"patients_total": int(len(pts))}
 
     t1d_ids = set(ev.loc[ev["status"] == "t1d", "patient_id"])
-    bad = ev[ev["status"].isin(["t2d", "pre"])]                     # A10 dahil
+    bad = ev[ev["status"].isin(["t2d", "pre"])]                     # A10 included
     first_bad = bad.groupby("patient_id")["date"].min()
 
     cand = glyc[(glyc["status"] == "normal") & glyc["kind"].isin(["hba1c", "fpg"])].copy()
@@ -120,7 +120,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     cand = cand[~cand["patient_id"].isin(t1d_ids)]
     funnel["after_t1d_exclusion"] = int(cand["patient_id"].nunique())
 
-    # Index öncesi/aynı gün hiç DM/prediyabet/A10 kanıtı olmamalı
+    # There must be no DM/prediabetes/A10 evidence before or on the index day
     cand["first_bad"] = cand["patient_id"].map(first_bad)
     cand = cand[cand["first_bad"].isna() | (cand["date"] < cand["first_bad"])]
     funnel["after_prevalent_dm_pre_exclusion"] = int(cand["patient_id"].nunique())
@@ -135,7 +135,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     cand = cand[cand["last_glyc"] > cand["date"] + pd.Timedelta(days=p["min_followup_gap_days"])]
     funnel["after_followup_measurement"] = int(cand["patient_id"].nunique())
 
-    # Uygun en erken normal değer = index (aynı gün HbA1c > FPG önceliği)
+    # Earliest eligible normal value = index (same day: HbA1c takes priority over FPG)
     cand["kprio"] = cand["kind"].map({"hba1c": 0, "fpg": 1})
     idx = cand.sort_values(["patient_id", "date", "kprio"]).drop_duplicates("patient_id").set_index("patient_id")
     c3 = pd.DataFrame(index=idx.index)
@@ -149,7 +149,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
         c3 = c3.loc[sorted(keep)]
     funnel["c3_final"] = int(len(c3))
 
-    # Takip ölçümleri
+    # Follow-up measurements
     g = glyc.merge(c3["index_date"], left_on="patient_id", right_index=True)
     after = g[g["date"] > g["index_date"]].sort_values(["patient_id", "date"])
     c3["n_followup_glycaemic"] = after.groupby("patient_id").size().reindex(c3.index).fillna(0).astype(int)
@@ -158,7 +158,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     c3["last_glycaemic_type"] = last["kind"].reindex(c3.index)
     c3["last_glycaemic_value"] = last["value"].reindex(c3.index)
 
-    # Outcome'lar
+    # Outcomes
     e = ev.merge(c3["index_date"], left_on="patient_id", right_index=True)
     e = e[e["date"] > e["index_date"]].copy()
     e["prio"] = e["evidence"].map(phenotype.EVIDENCE_PRIORITY)
@@ -168,7 +168,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     c3["incident_diabetes"] = c3.index.isin(primary.index)
     c3["incident_date"] = primary["date"].reindex(c3.index)
     c3["incident_evidence"] = primary["evidence"].reindex(c3.index)
-    # Duyarlılık: ilaç-tek kanıt dahil
+    # Sensitivity: medication-only evidence included
     c3["incident_diabetes_incl_med"] = c3.index.isin(anyev.index)
     c3["incident_date_incl_med"] = anyev["date"].reindex(c3.index)
 
@@ -176,18 +176,18 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
     c3["incident_prediabetes"] = c3.index.isin(pre.index)
     c3["prediabetes_date"] = pre["date"].reindex(c3.index)
 
-    # Washout: index'e çok yakın olay → prevalent sayılır, hasta çıkarılır
+    # Washout: an event too close to index → counted as prevalent, patient removed
     w = p.get("outcome_washout_days", 0) or 0
     if w > 0:
         early = c3["incident_diabetes"] & ((c3["incident_date"] - c3["index_date"]).dt.days <= w)
         c3 = c3[~early]
     funnel["after_outcome_washout"] = int(len(c3))
 
-    # Takip sonu ve süre (birincil outcome)
+    # End and length of follow-up (primary outcome)
     c3["followup_end"] = c3["incident_date"].where(c3["incident_diabetes"], c3["last_glycaemic_date"])
     c3["followup_years"] = (c3["followup_end"] - c3["index_date"]).dt.days / 365.25
 
-    # Index'te 8 çekirdek değişken
+    # 8 core variables at index
     snap = phenotype.core_snapshot(ds, c3["index_date"], lookback_days=p["predictor_lookback_days"], p=p)
     c3 = c3.join(snap.drop(columns=["ref_date"]))
     funnel["incident_t2d_events"] = int(c3["incident_diabetes"].sum())
@@ -195,7 +195,7 @@ def build_c3(ds: Dataset, p: dict = PARAMS) -> dict:
 
 
 def subset(ds: Dataset, ids, cohort: str) -> Dataset:
-    """Kohort hastalarına ait tüm tablo satırlarını içeren yeni Dataset."""
+    """New Dataset with all table rows belonging to the cohort's patients."""
     ids = set(ids)
     return Dataset(source=ds.source, cohort=cohort,
                    tables={n: df[df["patient_id"].isin(ids)].reset_index(drop=True)

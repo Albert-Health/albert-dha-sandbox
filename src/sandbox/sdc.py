@@ -1,7 +1,7 @@
-"""Çıktı ifşa kontrolü (statistical disclosure control).
+"""Output disclosure control (statistical disclosure control).
 
-Kod yalnızca enclave içinde çalışır; bu modülün amacı enclave'den çıkacak
-özet tablolarda küçük hücreleri bastırmaktır (DHA veri paylaşım şartları).
+The code runs only inside the enclave; this module suppresses small cells in the
+summary tables that leave the enclave (DHA data-sharing terms).
 """
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from .config import PARAMS
 
 def suppress_rates(df: pd.DataFrame, num_col: str, den_cols, rate_cols,
                    threshold: int | None = None) -> pd.DataFrame:
-    """Pay ya da (payda − pay) 0 < x < threshold olan satırlarda oran sütunlarını bastırır.
+    """Suppresses the rate columns in rows where the numerator or (denominator − numerator) is 0 < x < threshold.
 
-    Bastırılmış sayımın "oran × payda" ile geri hesaplanmasını önler. Sayımlar suppress_small_counts
-    ile bastırılmadan ÖNCE (sayılar hâlâ sayısalken) çağrılmalı.
+    Prevents back-calculating a suppressed count as "rate × denominator". Call it BEFORE the counts are
+    suppressed with suppress_small_counts (while they are still numeric).
     """
     threshold = threshold or PARAMS["small_cell_threshold"]
     out = df.copy()
@@ -34,7 +34,7 @@ def suppress_rates(df: pd.DataFrame, num_col: str, den_cols, rate_cols,
 
 
 def fmt_count(n, threshold: int | None = None) -> str:
-    """Tek bir sayım → metin: 0 < n < threshold ise '<threshold' (terminale basılan özetler için)."""
+    """One count → text: '<threshold' if 0 < n < threshold (for summaries printed to the terminal)."""
     threshold = threshold or PARAMS["small_cell_threshold"]
     try:
         v = int(n)
@@ -44,7 +44,7 @@ def fmt_count(n, threshold: int | None = None) -> str:
 
 
 def suppress_small_counts(df: pd.DataFrame, count_cols, threshold: int | None = None) -> pd.DataFrame:
-    """count_cols içindeki 0 < n < threshold değerlerini '<threshold' ile değiştirir."""
+    """Replaces values 0 < n < threshold in count_cols with '<threshold'."""
     threshold = threshold or PARAMS["small_cell_threshold"]
     out = df.copy()
     for c in count_cols:

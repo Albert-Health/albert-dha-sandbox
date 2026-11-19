@@ -1,4 +1,4 @@
-"""Metrik ve recalibration testleri — kaba kuvvet referanslar ve simülasyon."""
+"""Metric and recalibration tests — brute-force references and simulation."""
 import sys
 import unittest
 from pathlib import Path
@@ -24,7 +24,7 @@ def brute_c(t, e, r):
 
 
 def simulate(n=4000, beta=0.8, lam=0.05, cens=0.08, seed=1):
-    """Cox: h(t|x) = lam·exp(beta·x), üstel; bağımsız üstel sansür."""
+    """Cox: h(t|x) = lam·exp(beta·x), exponential; independent exponential censoring."""
     rng = np.random.default_rng(seed)
     x = rng.normal(size=n)
     t_ev = rng.exponential(1 / (lam * np.exp(beta * x)))
@@ -39,7 +39,7 @@ class TestKM(unittest.TestCase):
         t = np.array([1, 2, 2, 3, 4, 5.0])
         e = np.array([1, 1, 0, 1, 0, 1], bool)
         times, s = metrics.kaplan_meier(t, e)
-        # 6 risk, 1 olay → 5/6; t=2: 5 risk, 1 olay → 5/6·4/5; t=3: 3 risk → ·2/3; t=5: 1 risk → 0
+        # 6 at risk, 1 event → 5/6; t=2: 5 at risk, 1 event → 5/6·4/5; t=3: 3 at risk → ·2/3; t=5: 1 at risk → 0
         np.testing.assert_allclose(s, [5 / 6, 2 / 3, 4 / 9, 0.0])
         self.assertAlmostEqual(metrics.km_risk(t, e, 2.5), 1 - 2 / 3)
 
@@ -47,9 +47,9 @@ class TestKM(unittest.TestCase):
 class TestDiscrimination(unittest.TestCase):
     def test_c_index_matches_brute_force(self):
         rng = np.random.default_rng(3)
-        t = np.round(rng.exponential(5, 300), 1)          # zaman bağları dahil
+        t = np.round(rng.exponential(5, 300), 1)          # includes tied times
         e = rng.random(300) < 0.6
-        r = np.round(rng.normal(size=300) - 0.2 * t, 1)   # risk bağları dahil
+        r = np.round(rng.normal(size=300) - 0.2 * t, 1)   # includes tied risks
         self.assertAlmostEqual(metrics.c_index(t, e, r), brute_c(t, e, r), places=12)
 
     def test_c_index_perfect_and_random(self):
@@ -91,7 +91,7 @@ class TestCalibration(unittest.TestCase):
     def test_threshold_metrics_uncensored(self):
         t = np.array([1, 2, 6, 7, 8.0]); e = np.ones(5, bool); s = np.array([0.9, 0.2, 0.8, 0.1, 0.1])
         m = metrics.threshold_metrics(t, e, s, 0.5, horizon=5)
-        # vakalar (t≤5): 0.9 pos, 0.2 neg → sens 0.5; kontroller: 0.8 pos, 0.1, 0.1 neg → spec 2/3
+        # cases (t≤5): 0.9 pos, 0.2 neg → sens 0.5; controls: 0.8 pos, 0.1, 0.1 neg → spec 2/3
         self.assertAlmostEqual(m["sensitivity"], 0.5)
         self.assertAlmostEqual(m["specificity"], 2 / 3)
         self.assertAlmostEqual(m["ppv"], 0.5)
@@ -100,14 +100,14 @@ class TestCalibration(unittest.TestCase):
 
 class TestDetectionRate(unittest.TestCase):
     def test_wilson_hand_example(self):
-        # 8/10: Wilson %95 GA = 0.4902 – 0.9433 (elle: merkez 0.7167, yarı genişlik 0.2266)
+        # 8/10: Wilson 95% CI = 0.4902 – 0.9433 (by hand: centre 0.7167, half-width 0.2266)
         lo, hi = metrics.wilson_ci(8, 10)
         self.assertAlmostEqual(lo, 0.4902, places=4)
         self.assertAlmostEqual(hi, 0.9433, places=4)
         self.assertTrue(np.isnan(metrics.wilson_ci(0, 0)[0]))
 
     def test_detection_rate_with_missing(self):
-        # 12 pozitif: 8 yakalandı, 2 yakalanmadı, 2 hesaplanamadı (NA)
+        # 12 positives: 8 captured, 2 not captured, 2 not computable (NA)
         flag = [True] * 8 + [False] * 2 + [None] * 2
         r = metrics.detection_rate(flag)
         self.assertEqual((r["n"], r["n_computable"], r["n_flagged"]), (12, 10, 8))
@@ -121,7 +121,7 @@ class TestDetectionRate(unittest.TestCase):
         self.assertTrue(np.isnan(r["sens_computable"]))
 
     def test_detection_rate_none_computable(self):
-        # ör. LRA 2010, bel çevresi yok: 5 hasta, hiçbiri hesaplanamadı → %0 değil, nan
+        # e.g. LRA 2010, no waist circumference: 5 patients, none computable → nan, not 0%
         r = metrics.detection_rate([None] * 5)
         self.assertEqual((r["n"], r["n_computable"], r["n_flagged"]), (5, 0, 0))
         self.assertTrue(np.isnan(r["sens_all"]))
@@ -132,18 +132,18 @@ class TestRecalibration(unittest.TestCase):
         beta, lam, h = 0.8, 0.05, 5.0
         t, e, x = simulate(20000, beta=beta, lam=lam)
         lp = beta * x
-        wrong = 1 - np.exp(-3 * lam * h * np.exp(lp))         # 3× fazla tahmin
+        wrong = 1 - np.exp(-3 * lam * h * np.exp(lp))         # 3× over-prediction
         self.assertLess(metrics.observed_expected(t, e, wrong, h)["oe_ratio"], 0.6)
         m = recalibration.fit(t, e, lp, h, "baseline")
         self.assertAlmostEqual(m["s0_h"], np.exp(-lam * h), delta=0.01)
         p = recalibration.predict(m, lp)
         self.assertAlmostEqual(metrics.observed_expected(t, e, p, h)["oe_ratio"], 1.0, delta=0.05)
-        # sıralama değişmez
+        # ranking does not change
         self.assertAlmostEqual(metrics.c_index(t, e, p), metrics.c_index(t, e, wrong), places=12)
 
     def test_slope_recalibration(self):
         t, e, x = simulate(20000, beta=0.8)
-        m = recalibration.fit(t, e, 2.0 * x, 5.0, "baseline_slope")   # lp 2× abartılı
+        m = recalibration.fit(t, e, 2.0 * x, 5.0, "baseline_slope")   # lp exaggerated 2×
         self.assertAlmostEqual(m["beta"], 0.4, delta=0.05)
 
 

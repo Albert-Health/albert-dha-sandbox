@@ -1,20 +1,20 @@
-"""Repo kökündeki `.env` → os.environ. Yerel kolaylık: her terminalde `export` yazmamak için.
+"""`.env` at the repo root → os.environ. A local convenience, so you need not type `export` in every terminal.
 
-`.env` git dışıdır (.gitignore) ve repoya girmez (AGENTS.md kural 1-2). `import sandbox` onu bir kez yükler; bu
-yüzden notebook'lar, Jupyter kernel'i, tools/ ve `enclave.sh` aynı değerleri görür. Tipik içerik (VM):
+`.env` is untracked (.gitignore) and never enters the repo (AGENTS.md rules 1-2). `import sandbox` loads it once, so
+notebooks, the Jupyter kernel, tools/ and `enclave.sh` all see the same values. Typical content (VM):
 
     SANDBOX_SOURCE=nabidh
     NABIDH_IRIS_PASSWORD=...
 
-Biçim: `KEY=VALUE` satırları. Boş satır ve `#` ile başlayan satır atlanır. `export ` öneki olabilir; böylece dosya
-bash'te `set -a; . ./.env; set +a` ile de okunur. Değer aynı tırnakla (tek ya da çift) sarılıysa tırnak atılır.
-Değişken genişletme ve satır sonu yorumu yoktur: şifrede `#` ya da `$` olabilir.
+Format: `KEY=VALUE` lines. Blank lines and lines starting with `#` are skipped. An `export ` prefix is allowed, so
+bash can also read the file with `set -a; . ./.env; set +a`. If a value is wrapped in matching quotes (single or
+double), the quotes are dropped. No variable expansion and no end-of-line comments: a password may contain `#` or `$`.
 
-Öncelik: zaten ayarlı ortam değişkeni ezilmez. Komut satırında verilen değer
-(`SANDBOX_SOURCE=synthetic python ...`, `SANDBOX_PARAMS=...`) her zaman `.env`'i geçer.
-Audit'e yalnız `.env`'den gelen anahtarların ADLARI yazılır, değerleri asla.
+Precedence: an environment variable that is already set is not overwritten. A value given on the command line
+(`SANDBOX_SOURCE=synthetic python ...`, `SANDBOX_PARAMS=...`) always beats `.env`.
+Only the NAMES of keys from `.env` go to the audit, never their values.
 
-SANDBOX_ENV_FILE: başka bir dosya. Boş ya da "none" verilirse yükleme yapılmaz.
+SANDBOX_ENV_FILE: a different file. If empty or "none", nothing is loaded.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ ENV_FILE_VAR = "SANDBOX_ENV_FILE"
 DEFAULT_PATH = Path(__file__).resolve().parents[2] / ".env"
 _KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-# Son yüklemenin özeti (audit ve teşhis için; değer içermez)
+# Summary of the last load (for audit and diagnostics; holds no values)
 LOADED: dict = {"path": None, "keys": []}
 
 
@@ -59,14 +59,14 @@ def path() -> Path | None:
 
 
 def load(file: Path | None = None, override: bool = False) -> list[str]:
-    """`.env`'i okur, ortamda olmayan anahtarları ekler. → eklenen anahtarların adları."""
+    """Reads `.env` and adds keys not already in the environment. → names of the added keys."""
     file = Path(file) if file is not None else path()
     if file is None or not file.is_file():
         return []
     try:
         values = parse(file.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError) as e:
-        print(f"UYARI: {file} okunamadı ({type(e).__name__}); .env yok sayıldı", file=sys.stderr)
+        print(f"WARNING: cannot read {file} ({type(e).__name__}); .env ignored", file=sys.stderr)
         return []
     added = [k for k in values if override or k not in os.environ]
     for k in added:

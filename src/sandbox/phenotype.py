@@ -1,7 +1,7 @@
-"""Glisemik ölçümler, diyabet/prediyabet kanıtı ve 8 çekirdek değişkenin
-belirli bir referans tarihindeki durumu.
+"""Glycaemic measurements, diabetes/prediabetes evidence and the state of the 8 core variables
+at a given reference date.
 
-Lab değerleri yalnızca outcome / uygunluk tanımında kullanılır; asla model girdisi değildir.
+Lab values are used only for the outcome / eligibility definition; never as model inputs.
 """
 from __future__ import annotations
 
@@ -13,18 +13,18 @@ from .config import PARAMS
 from .io.schema import Dataset
 from .scores import lrs
 
-# Aynı gün birden çok kanıt varsa öncelik (küçük = önce)
+# Priority when several pieces of evidence fall on the same day (smaller = first)
 EVIDENCE_PRIORITY = {"lab_hba1c": 0, "lab_fpg": 1, "lab_ogtt": 2, "lab_random_glucose": 3,
                      "diagnosis": 4, "medication": 5}
 
 
 # --------------------------------------------------------------------------
-# Glisemik ölçümler
+# Glycaemic measurements
 # --------------------------------------------------------------------------
 def glycaemic_events(ds: Dataset, p: dict = PARAMS) -> pd.DataFrame:
-    """Glisemik lablar, birim normalize edilmiş, ADA sınıflı.
+    """Glycaemic labs, unit-normalised, ADA-classified.
 
-    Dönüş: patient_id, date, kind (hba1c/fpg/ogtt_2h/random_glucose), value, status (normal/pre/dm/na)
+    Returns: patient_id, date, kind (hba1c/fpg/ogtt_2h/random_glucose), value, status (normal/pre/dm/na)
     """
     labs = ds["labs"]
     kind = labs["loinc"].map(codelists.LOINC_LAB)
@@ -35,7 +35,7 @@ def glycaemic_events(ds: Dataset, p: dict = PARAMS) -> pd.DataFrame:
     ifcc = (g["kind"] == "hba1c_ifcc") | ((g["kind"] == "hba1c") & unit.str.contains("mmol/mol"))
     g.loc[ifcc, "value"] = g.loc[ifcc, "value"] / 10.929 + 2.15
     g.loc[ifcc, "kind"] = "hba1c"
-    # Glukoz mmol/L → mg/dL
+    # Glucose mmol/L → mg/dL
     gl = g["kind"].isin(["fpg", "ogtt_2h", "random_glucose"]) & unit.str.contains("mmol/l")
     g.loc[gl, "value"] = g.loc[gl, "value"] * 18.016
 
@@ -55,16 +55,16 @@ def glycaemic_events(ds: Dataset, p: dict = PARAMS) -> pd.DataFrame:
             (k == "random_glucose") & (v >= p["random_glucose_dm"]),
         ],
         ["dm", "pre", "normal", "dm", "pre", "normal", "dm", "pre", "normal", "dm"],
-        default="na",  # random glucose < 200 → normallik kanıtı değil
+        default="na",  # random glucose < 200 → not evidence of normal
     )
     g["status"] = status
     return g[["patient_id", "date", "kind", "value", "unit", "status"]].reset_index(drop=True)
 
 
 def dm_evidence(ds: Dataset, glyc: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Diyabet / prediyabet / T1D kanıtları (uzun format).
+    """Diabetes / prediabetes / T1D evidence (long format).
 
-    Dönüş: patient_id, date, status (t2d/pre/t1d), evidence
+    Returns: patient_id, date, status (t2d/pre/t1d), evidence
     """
     glyc = glycaemic_events(ds) if glyc is None else glyc
     parts = []
@@ -88,15 +88,15 @@ def dm_evidence(ds: Dataset, glyc: pd.DataFrame | None = None) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------
-# Çekirdek değişkenler (snapshot)
+# Core variables (snapshot)
 # --------------------------------------------------------------------------
 _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none", "other - not stated"}
-# FamilyHistory kaydının "kayıt var" sayıldığı değerler (unknown / unmapped sayılmaz)
+# FamilyHistory values that count as "record present" (unknown / unmapped do not count)
 FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
 
 
 def _z68_to_bmi(code: pd.Series) -> pd.Series:
-    """Z68.xx bandını yaklaşık BMI'ye çevirir (bant ortası). Sadece yedek kaynak."""
+    """Convert a Z68.xx band to an approximate BMI (band midpoint). Fallback source only."""
     c = codelists.norm_icd(code)
     out = pd.Series(np.nan, index=code.index)
     out[c == "Z681"] = 19.0
@@ -109,7 +109,7 @@ def _z68_to_bmi(code: pd.Series) -> pd.Series:
 
 
 def _window(df: pd.DataFrame, ref: pd.Series, lookback_days: int | None) -> pd.DataFrame:
-    """df satırlarını hastanın referans tarihi penceresine filtreler: (ref - lookback, ref]."""
+    """Filter df rows to the patient's reference-date window: (ref - lookback, ref]."""
     d = df.merge(ref.rename("ref_date"), left_on="patient_id", right_index=True, how="inner")
     keep = d["date"] <= d["ref_date"]
     if lookback_days is not None:
@@ -125,35 +125,35 @@ def _latest(df: pd.DataFrame, value_col: str = "value") -> pd.Series:
 
 def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
                   p: dict = PARAMS) -> pd.DataFrame:
-    """Her hasta için referans tarihindeki 8 çekirdek değişken (+ bel, + QDiabetes ek bayrakları).
+    """The 8 core variables at the reference date for each patient (+ waist, + extra QDiabetes flags).
 
-    ref: index = patient_id, değer = referans tarihi (Timestamp).
-    lookback_days: ölçüm değerleri (BMI, bel, ilaç) için pencere; None = tüm geçmiş.
-    Tanı bayrakları (KVH, HT tanısı, FH vb.) her zaman tüm geçmişe bakar.
+    ref: index = patient_id, value = reference date (Timestamp).
+    lookback_days: window for measured values (BMI, waist, medication); None = full history.
+    Diagnosis flags (CVD, HTN diagnosis, FH etc.) always look at the full history.
     """
     ref = ref.dropna()
     out = pd.DataFrame(index=ref.index.rename("patient_id"))
     pts = ds["patients"].drop_duplicates("patient_id").set_index("patient_id")
 
-    # Demografi
+    # Demographics
     out["sex"] = pts["sex"].reindex(out.index)
     dob = pts["date_of_birth"].reindex(out.index)
     out["age"] = (ref - dob).dt.days / 365.25
-    # Etnik grup: PARAMS["ethnicity_source"] sütunundan (uyruk veya NABIDH etnisitesi)
+    # Ethnic group: from the PARAMS["ethnicity_source"] column (nationality or NABIDH ethnicity)
     src = p.get("ethnicity_source", PARAMS["ethnicity_source"])
     eth = pts[codelists.ETHNICITY_SOURCE_COLUMN[src]].reindex(out.index)
     eth = eth.where(~eth.astype("string").str.strip().str.lower().isin(_MISSING_ETH).fillna(True))
     out["ethnicity_source_value"] = eth
     out["ethnicity"] = codelists.ethnic_group(eth, src)
 
-    # Gözlemler (pencere içi)
+    # Observations (within the window)
     obs_all = ds["observations"]
     obs_win = _window(obs_all, ref, lookback_days)
     num = obs_win.assign(v=pd.to_numeric(obs_win["value"], errors="coerce"))
 
     bmi_direct = _latest(num[(num["concept"] == "bmi") & num["v"].between(12, 80)], "v")
     w = _latest(num[(num["concept"] == "weight_kg") & num["v"].between(25, 350)], "v")
-    # Boy yetişkinde stabil: tüm geçmişten en son değer
+    # Height is stable in adults: latest value from the full history
     obs_hist = _window(obs_all, ref, None)
     numh = obs_hist.assign(v=pd.to_numeric(obs_hist["value"], errors="coerce"))
     h = _latest(numh[(numh["concept"] == "height_cm") & numh["v"].between(120, 230)], "v")
@@ -175,9 +175,9 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
 
     out["waist_cm"] = _latest(num[(num["concept"] == "waist_cm") & num["v"].between(40, 250)], "v").reindex(out.index)
 
-    # Sigara: en son durum (tüm geçmiş, ref'e kadar) — önce yapısal alan, sonra tanı kodu.
-    # Yalnızca tanınan değerler (never/ex/current/light/moderate/heavy …) sayılır; "unknown" veya
-    # adapter'ın eşleyemediği değerler önceki bilgili kaydı ezmez.
+    # Smoking: latest status (full history, up to ref) — structured field first, then diagnosis code.
+    # Only recognised values (never/ex/current/light/moderate/heavy …) count; "unknown" or values
+    # the adapter could not map do not overwrite an earlier informative record.
     sm = obs_hist[obs_hist["concept"] == "smoking_status"]
     sm = sm.assign(v=sm["value"].astype("string").str.strip().str.lower())
     sm = sm[sm["v"].isin(list(codelists.SMOKING_TEXT_TO_CAT)).fillna(False).astype(bool)]
@@ -196,17 +196,17 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out.loc[fill, "smoking_source"] = "diagnosis_code"
     out["smoking_cat"] = out["smoking_raw"].map(codelists.SMOKING_TEXT_TO_CAT)
 
-    # Tanı bayrakları (tüm geçmiş, ref dahil)
+    # Diagnosis flags (full history, ref included)
     for grp, col in [("family_history_dm", "family_history"), ("cvd", "cvd"), ("hypertension", "htn_dx"),
                      ("gdm", "gdm"), ("pcos", "pcos"), ("learning_disability", "learn"),
                      ("schizophrenia_bipolar", "psy")]:
         ids = set(cond_hist.loc[codelists.match_dx(cond_hist, grp), "patient_id"])
         out[col] = out.index.isin(ids)
 
-    # Aile öyküsü: Z83.3 tanısı VEYA FamilyHistory kaydı (adapter → observations concept
-    # family_history_dm; değer positive / negative / positive_non_first_degree / unknown).
-    # Pozitif = birinci derece akrabada diyabet (QDiabetes ve LRS tanımı). Kayıt var = pozitif veya negatif.
-    # family_history_any_date (D27): var / yok; kayıt tarihi kullanılmaz (tarihsiz kayıt da sayılır).
+    # Family history: Z83.3 diagnosis OR a FamilyHistory record (adapter → observations concept
+    # family_history_dm; value positive / negative / positive_non_first_degree / unknown).
+    # Positive = diabetes in a first-degree relative (QDiabetes and LRS definition). Recorded = positive or negative.
+    # family_history_any_date (D27): present / absent; the record date is not used (undated records also count).
     fh_any_date = p.get("family_history_any_date", PARAMS["family_history_any_date"])
     if fh_any_date:
         conds = ds["conditions"]
@@ -221,29 +221,29 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out["family_history"] = dx_fh | out.index.isin(fh_pos)
     out["family_history_recorded"] = dx_fh | out.index.isin(fh_rec)
 
-    # İlaç bayrakları (pencere içi)
+    # Medication flags (within the window)
     med_win = _window(ds["medications"], ref, lookback_days)
     for grp, col in [("antihypertensive", "htn_med"), ("statin", "statin"),
                      ("corticosteroid", "corticosteroid"), ("atypical_antipsychotic", "apsy")]:
         ids = set(med_win.loc[codelists.match_atc(med_win, grp), "patient_id"])
         out[col] = out.index.isin(ids)
 
-    out["htn_treated_qd"] = out["htn_dx"] & out["htn_med"]      # QDiabetes: tanı VE ilaç
-    out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRA 2010: tanı VEYA ilaç
-    # LPRS (Gray 2012) yalnız ilacı kullanır: htn_med
+    out["htn_treated_qd"] = out["htn_dx"] & out["htn_med"]      # QDiabetes: diagnosis AND medication
+    out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRA 2010: diagnosis OR medication
+    # LPRS (Gray 2012) uses medication only: htn_med
 
-    # Tamlık bayrakları (C1 tanımı + KPI'lar)
+    # Completeness flags (C1 definition + KPIs)
     out["ok_sex"] = out["sex"].isin(["Male", "Female"])
     out["ok_age"] = out["age"].notna()
     out["ok_ethnicity"] = out["ethnicity"].notna()
-    out["ok_bmi"] = out["bmi_source"].isin(["direct", "height_weight"])   # Z68 bandı tam sayılmaz
+    out["ok_bmi"] = out["bmi_source"].isin(["direct", "height_weight"])   # a Z68 band does not count as complete
     out["ok_smoking"] = out["smoking_raw"].notna()
     out["ok_family_history"] = out["family_history_recorded"] if p["c1_require_fh_record"] else True
-    out["ok_cvd"] = True            # EHR'de var/yok
-    out["ok_hypertension"] = True   # tanı ve ilaç ayrı alanlar; var/yok
+    out["ok_cvd"] = True            # present/absent in the EHR
+    out["ok_hypertension"] = True   # diagnosis and medication are separate fields; present/absent
     ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
     out["ok_core8"] = out[ok_cols].all(axis=1)
-    # Leicester skoru birlikte tamlığı: bel çevresi yalnız LRA 2010 varyantında gerekir (K-LRS)
+    # Joint completeness for the Leicester score: waist circumference is needed only for the LRA 2010 variant (K-LRS)
     out["ok_lrs"] = out[["ok_sex", "ok_age", "ok_ethnicity", "ok_bmi", "ok_family_history",
                          "ok_hypertension"]].all(axis=1)
     if lrs.needs_waist(p):

@@ -1,7 +1,7 @@
-"""Albert Health x DHA Health Data Sandbox — analiz paketi (S-2025-Y4B7N9).
+"""Albert Health x DHA Health Data Sandbox — analysis package (S-2025-Y4B7N9).
 
-Offline çalışacak şekilde tasarlandı: yalnızca numpy, pandas, matplotlib.
-İlk import repo kökündeki git dışı `.env`'i ortama yükler (envfile.py; ayarlı değişkeni ezmez).
+Designed to run offline: numpy, pandas, matplotlib only.
+The first import loads the untracked `.env` at the repo root into the environment (envfile.py; never overwrites a set variable).
 """
 from . import envfile as _envfile
 

@@ -1,8 +1,8 @@
-"""DFF Health Data Sandbox KPI tablosu (KPI & Graduation Framework v4 / Albert V2.0).
+"""DFF Health Data Sandbox KPI table (KPI & Graduation Framework v4 / Albert V2.0).
 
-NB0 / NB1 / NB2'nin `kpi_values.json` çıktıları, audit log ve son evidence package kontrol
-listesinden Actual / Met değerlerini doldurur. Graduation kuralı: herhangi bir Critical KPI
-Not Met → Do Not Graduate; aksi halde non-critical Met oranı ≥%80 Graduate, %50–79 Graduate with Mitigation.
+Fills the Actual / Met values from the `kpi_values.json` outputs of NB0 / NB1 / NB2, the audit log and the
+latest evidence package checklist. Graduation rule: any Critical KPI
+Not Met → Do Not Graduate; otherwise a non-critical Met rate ≥80% Graduate, 50–79% Graduate with Mitigation.
 """
 from __future__ import annotations
 
@@ -34,12 +34,12 @@ KPI_ROWS = [
 
 
 def latest_run(prefix: str, source: str | None = None, base: Path = OUTPUT_DIR) -> Path | None:
-    """Adı prefix içeren, başarıyla bitmiş en son run klasörü (manifest started_utc'ye göre).
-    source verilirse yalnızca o veri kaynağıyla (synthetic / nabidh / synthetic_pc) çalışmış run'lar."""
+    """Latest successfully finished run folder whose name contains prefix (by manifest started_utc).
+    If source is given, only runs on that data source (synthetic / nabidh / synthetic_pc)."""
     best, best_ts = None, ""
     for m in base.glob(f"*{prefix}*/run_manifest.json"):
         rec = json.loads(m.read_text(encoding="utf-8"))
-        rec_source = rec.get("source") or "synthetic"     # source alanı öncesi run'lar sentetikti
+        rec_source = rec.get("source") or "synthetic"     # runs from before the source field were synthetic
         if source is not None and rec_source != source:
             continue
         if rec.get("status") == "success" and rec.get("started_utc", "") > best_ts:
@@ -82,50 +82,50 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
     if audit.get("runs"):
         set_("Audit Trail Completeness", f"{audit['pct']:.1f}% ({audit['closed']}/{audit['runs']} runs)",
              "Met" if audit["pct"] >= 100 else "Not Met", "outputs/audit/audit_log.jsonl",
-             "Açık run'lar: " + ", ".join(audit["open"][:5]) if audit["open"] else "")
+             "Open runs: " + ", ".join(audit["open"][:5]) if audit["open"] else "")
     if evidence:
-        set_("Evidence Package Completeness", f"{evidence['complete_sections']}/{evidence['total_sections']} bölüm",
+        set_("Evidence Package Completeness", f"{evidence['complete_sections']}/{evidence['total_sections']} sections",
              "Met" if evidence["complete"] else "Not Met", evidence.get("path", ""),
-             "Şablonlar doldurulup imzalanana kadar 'Not Met'" if not evidence["complete"] else "")
+             "'Not Met' until the templates are filled in and signed" if not evidence["complete"] else "")
     set_("Data Security / No-Incident", f"{p['security_incidents']} incidents", "Met" if p["security_incidents"] == 0 else "Not Met",
-         "config.security_incidents (manuel)", "Enclave olay kaydından manuel teyit")
+         "config.security_incidents (manual)", "Manually confirmed from the enclave incident log")
 
     if nb0:
         set_("Applicant Data Requirement Framework Match", "Match" if nb0["framework_match"] else
-             "Eksik: " + ", ".join(nb0["framework_missing_groups"][:6]),
+             "Missing: " + ", ".join(nb0["framework_missing_groups"][:6]),
              "Met" if nb0["framework_match"] else "Not Met", "NB0 nb00/kpi_values.json")
         dc = nb0["data_completeness_min_core8_pct"]
         set_("Data Completeness for Required Variables", "; ".join(f"{c.upper()} {v:.1f}%" for c, v in dc.items()),
              "Met" if all(v >= 90 for v in dc.values()) else "Not Met", "NB0",
-             "Min değişken: " + ", ".join(f"{c}={v}" for c, v in nb0.get("data_completeness_weakest", {}).items()))
+             "Weakest variable: " + ", ".join(f"{c}={v}" for c, v in nb0.get("data_completeness_weakest", {}).items()))
 
     if nb2:
         set_("Joint Completeness - QDiabetes",
              f"{nb2['joint_completeness_qdiabetes_pct']}% (N={nb2['joint_completeness_qdiabetes_n']}/{nb2['c3_eligible_n']})",
-             "Reported", "NB2 (C3 tabanı)", f"Tanım: 8 çekirdek değişken ({nb2.get('qd_variant')}) [DFF ile teyit bekliyor]")
+             "Reported", "NB2 (C3 base)", f"Definition: 8 core variables ({nb2.get('qd_variant')}) [awaiting confirmation with DFF]")
         lname = nb2.get("lrs_label", "LRS")
         set_("Joint Completeness - LRS",
              f"{nb2['joint_completeness_lrs_pct']}% (N={nb2['joint_completeness_lrs_n']}/{nb2['c3_eligible_n']})",
-             "Reported", "NB2 (C3 tabanı)",
-             f"Varyant: {lname} [K-LRS]" + ("" if nb2.get("lrs_variant") == "assessment_2010" else " — bel çevresi gerekmez"))
+             "Reported", "NB2 (C3 base)",
+             f"Variant: {lname} [K-LRS]" + ("" if nb2.get("lrs_variant") == "assessment_2010" else " — no waist circumference needed"))
         auc, ci = nb2.get("auroc_qd"), nb2.get("auroc_qd_ci")
         if auc is not None:
             set_("AUROC", f"{auc:.3f}" + (f" (95% CI {ci[0]:.3f}–{ci[1]:.3f})" if ci else ""), "Met" if auc >= 0.75 else "Not Met",
-                 "NB2 Kol 1, test", f"Zaman-bağımlı AUROC @ {nb2['horizon_years']}y (IPCW). {lname}: {_fmt(nb2.get('auroc_lrs'))}")
+                 "NB2 Arm 1, test", f"Time-dependent AUROC @ {nb2['horizon_years']}y (IPCW). {lname}: {_fmt(nb2.get('auroc_lrs'))}")
         c, cci = nb2.get("c_index_qd"), nb2.get("c_index_qd_ci")
         if c is not None:
             set_("C-Index", f"{c:.3f}" + (f" (95% CI {cci[0]:.3f}–{cci[1]:.3f})" if cci else ""),
-                 "Met" if 0.55 <= c <= 0.90 else "Not Met", "NB2 Kol 1, test", f"{lname}: {_fmt(nb2.get('c_index_lrs'))}")
+                 "Met" if 0.55 <= c <= 0.90 else "Not Met", "NB2 Arm 1, test", f"{lname}: {_fmt(nb2.get('c_index_lrs'))}")
         set_("Recalibration Slope / O:E",
-             f"Kol 1 O:E {_fmt(nb2.get('oe_qd_kol1'))}, slope {_fmt(nb2.get('cal_slope_qd_kol1'))}; "
-             f"Kol 2a O:E {_fmt(nb2.get('oe_qd_kol2a'))}, slope {_fmt(nb2.get('cal_slope_qd_kol2a'))}",
+             f"Arm 1 O:E {_fmt(nb2.get('oe_qd_kol1'))}, slope {_fmt(nb2.get('cal_slope_qd_kol1'))}; "
+             f"Arm 2a O:E {_fmt(nb2.get('oe_qd_kol2a'))}, slope {_fmt(nb2.get('cal_slope_qd_kol2a'))}",
              "Reported", "NB2")
         thr = nb2.get("qd_threshold", {})
         lthr = nb2.get("lrs_threshold", {})
         lrs_note = (f"{lname} ≥{_fmt(lthr.get('threshold'))}: sens {_fmt(lthr.get('sensitivity'))}, "
                     f"spec {_fmt(lthr.get('specificity'))}, PPV {_fmt(lthr.get('ppv'))}, NPV {_fmt(lthr.get('npv'))}, "
                     f"alert/1000 {_fmt(lthr.get('alert_rate_per_1000'), 1)}") if lthr.get("threshold") is not None \
-            else f"{lname}: eşik seçilmedi [karar bekliyor]"
+            else f"{lname}: no threshold chosen [decision pending]"
         if "sensitivity" in thr:
             set_("Sensitivity (Recall, positive class)", f"{thr['sensitivity']:.3f}", "Met" if thr["sensitivity"] >= 0.70 else "Not Met", "NB2", lrs_note)
             set_("Specificity", f"{thr['specificity']:.3f}", "Met" if thr["specificity"] >= 0.70 else "Not Met", "NB2", lrs_note)
@@ -135,7 +135,7 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
         else:
             for k in ["Sensitivity (Recall, positive class)", "Specificity", "NPV & PPV", "Precision / Recall / F1",
                       "Alert Rate per 1,000 Patients"]:
-                set_(k, None, "Pending", "NB2", "QDiabetes eşiği önceden belirlenmedi (qd_risk_threshold_pct) [karar bekliyor]. " + lrs_note)
+                set_(k, None, "Pending", "NB2", "QDiabetes threshold not pre-specified (qd_risk_threshold_pct) [decision pending]. " + lrs_note)
     return pd.DataFrame(rows.values())
 
 
@@ -157,13 +157,13 @@ def graduation(table: pd.DataFrame) -> dict:
 
 
 def to_markdown(table: pd.DataFrame, grad: dict, meta: dict) -> str:
-    lines = ["# KPI raporu — Albert Health × DHA Health Data Sandbox", "",
-             f"- Oluşturma: {meta.get('generated_utc')}  ·  Kaynak: {meta.get('source')}",
-             f"- Girdi run'ları: {', '.join(f'{k}={v}' for k, v in meta.get('runs', {}).items())}",
-             f"- **Graduation ön değerlendirmesi:** {grad['outcome']} (Critical {grad['critical_met']}/{grad['critical_total']}; "
-             f"non-critical Met {grad['non_critical_met']}/{grad['non_critical_evaluable']} değerlendirilebilir)", "",
-             "| KPI | Hedef | Critical | Sahibi | Actual | Durum | Not |", "|---|---|---|---|---|---|---|"]
+    lines = ["# KPI report — Albert Health × DHA Health Data Sandbox", "",
+             f"- Generated: {meta.get('generated_utc')}  ·  Source: {meta.get('source')}",
+             f"- Input runs: {', '.join(f'{k}={v}' for k, v in meta.get('runs', {}).items())}",
+             f"- **Graduation pre-assessment:** {grad['outcome']} (Critical {grad['critical_met']}/{grad['critical_total']}; "
+             f"non-critical Met {grad['non_critical_met']}/{grad['non_critical_evaluable']} evaluable)", "",
+             "| KPI | Target | Critical | Owner | Actual | Status | Note |", "|---|---|---|---|---|---|---|"]
     for _, r in table.iterrows():
-        lines.append(f"| {r['kpi']} | {r['target']} | {'Evet' if r['critical'] else 'Hayır'} | {r['owner']} | "
+        lines.append(f"| {r['kpi']} | {r['target']} | {'Yes' if r['critical'] else 'No'} | {r['owner']} | "
                      f"{r['actual'] if r['actual'] is not None else '—'} | {r['met']} | {r['notes']} |")
     return "\n".join(lines) + "\n"
