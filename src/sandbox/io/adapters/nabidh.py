@@ -46,6 +46,7 @@ Several sources can feed one canonical table (e.g. Observation + SocialHistory �
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -60,6 +61,8 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   1.2.1  2026-11-19  Progress lines on screen: IRIS connection, each view's query, rows so far, mapping time
+#                      (output only; canonical data unchanged)
 #   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
 #                      the C1 "missing required value" ERRORs were empty vital rows)
 #   1.1.1  2026-11-19  English comments, messages and report text (output wording only; mapping unchanged)
@@ -67,7 +70,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.2.0"
+INGEST_VERSION = "1.2.1"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -673,7 +676,7 @@ HANDLERS = {
 # --------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------
-def load(raw_dir: Path, cohort: str, sources: dict | None = None) -> tuple[Dataset, dict]:
+def load(raw_dir: Path, cohort: str, sources: dict | None = None, progress=None) -> tuple[Dataset, dict]:
     """Raw-file path: reads one cohort folder. Returns (canonical Dataset, report).
 
     Report: {"input": "files", "sources": {name: {file, rows_read, rows_out, unparseable_*,
@@ -690,7 +693,7 @@ def load(raw_dir: Path, cohort: str, sources: dict | None = None) -> tuple[Datas
             raise FileNotFoundError(f"{name}: {p}")
         return read_raw_csv(p, **CSV_OPTIONS), {"file": spec["file"]}
 
-    return _load(cohort, sources or SOURCES, read, "files")
+    return _load(cohort, sources or SOURCES, read, "files", progress)
 
 
 def iris_query(conn, spec: dict, name: str, params: dict) -> str:
@@ -715,23 +718,39 @@ def iris_query(conn, spec: dict, name: str, params: dict) -> str:
     return f"SELECT {', '.join(select)} FROM {table}"
 
 
+# While a query streams, a "rows so far" progress line at most this often (seconds)
+PROGRESS_EVERY_S = 15
+
+
 def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dict | None = None,
-              snapshot_dir: Path | None = None) -> tuple[Dataset, dict]:
+              snapshot_dir: Path | None = None, progress=None) -> tuple[Dataset, dict]:
     """IRIS path: reads one cohort from a DB-API connection (io/iris.connect). Returns the same as `load`;
     each source in the report also carries the `query` that ran and the result's `sha256` (audit input).
 
     snapshot_dir: each source's result is written as CSV under its `file` name — `load(snapshot_dir, cohort)`
     gives the same Dataset. When the mapping dictionaries change, ingest can be redone without going back to IRIS.
+    progress(message): where the read is (query sent, rows so far, rows read, mapping) — screen output only.
     """
+    say = progress or (lambda msg: None)
     params = {"cohort": cohort, **(IRIS_COHORTS.get(cohort, {}) if cohort_params is None else cohort_params)}
     snap = Path(snapshot_dir) if snapshot_dir else None
     if snap:
         snap.mkdir(parents=True, exist_ok=True)
 
     def read(name: str, spec: dict):
+        t0 = last = time.monotonic()
+
+        def rows_so_far(n: int) -> None:
+            nonlocal last
+            now = time.monotonic()
+            if now - last >= PROGRESS_EVERY_S:
+                last = now
+                say(f"{name}: {n:,} rows so far ({now - t0:.0f} s)")
+
+        say(f"{name}: querying {spec.get('table', 'custom query').rsplit('.', 1)[-1]}")
         try:
             sql = iris_query(conn, spec, name, params)
-            df, text = iris.fetch(conn, sql)
+            df, text = iris.fetch(conn, sql, progress=rows_so_far)
         except (KeyError, ValueError):
             raise                                   # mapping / query error: never silent, even for an optional source
         except Exception as e:                      # driver error (e.g. no such table)
@@ -739,7 +758,9 @@ def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dic
                 raise
             if snap and (snap / spec["file"]).exists():
                 (snap / spec["file"]).unlink()      # don't mix in a file left over from an earlier snapshot
+            say(f"{name}: absent (optional source)")
             return None, {"status": "absent (optional)", "error": f"{type(e).__name__}: {str(e)[:300]}"}
+        say(f"{name}: {len(df):,} rows read ({time.monotonic() - t0:.0f} s)")
         info = {"query": sql, "sha256": iris.sha256_text(text)}
         if snap:
             p = snap / spec["file"]
@@ -748,10 +769,11 @@ def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dic
             info["snapshot"] = str(p)
         return df, info
 
-    return _load(cohort, sources or SOURCES, read, "iris")
+    return _load(cohort, sources or SOURCES, read, "iris", progress)
 
 
-def _load(cohort: str, sources: dict, read, input_kind: str) -> tuple[Dataset, dict]:
+def _load(cohort: str, sources: dict, read, input_kind: str, progress=None) -> tuple[Dataset, dict]:
+    say = progress or (lambda msg: None)
     parts: dict[str, list[pd.DataFrame]] = {t: [] for t in TABLES}
     report: dict = {"cohort": cohort, "input": input_kind, "sources": {}, "value_counts": []}
     for name, spec in sources.items():
@@ -759,6 +781,7 @@ def _load(cohort: str, sources: dict, read, input_kind: str) -> tuple[Dataset, d
         if raw is None:
             report["sources"][name] = got
             continue
+        t0 = time.monotonic()
         df, info = _select(raw, spec, name, got.get("file") or "IRIS query")
         df = _parse_dates(df, spec, info)
         extra = {"item_filtered": bool(spec.get("filter"))} if spec["kind"] == "smoking" else {}
@@ -768,6 +791,7 @@ def _load(cohort: str, sources: dict, read, input_kind: str) -> tuple[Dataset, d
         report["sources"][name] = info
         for t, d in produced.items():
             parts[t].append(d)
+        say(f"{name}: mapped → {sum(info['rows_out'].values()):,} canonical rows ({time.monotonic() - t0:.0f} s)")
 
     tables = {}
     for t in TABLES:

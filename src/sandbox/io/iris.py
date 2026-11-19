@@ -235,8 +235,9 @@ def quote_ident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def fetch(conn, sql: str, fetch_rows: int = FETCH_ROWS) -> tuple[pd.DataFrame, str]:
+def fetch(conn, sql: str, fetch_rows: int = FETCH_ROWS, progress=None) -> tuple[pd.DataFrame, str]:
     """Runs the query → (text table as from a raw file, CSV text of that table).
+    progress(n): called after each batch with the number of rows fetched so far.
 
     Values are written to CSV and read back with the same reader: dates as ISO text, numbers as text, NULL → empty.
     So a table from IRIS and a raw file take exactly the same path through the adapter; the CSV text can be
@@ -252,6 +253,8 @@ def fetch(conn, sql: str, fetch_rows: int = FETCH_ROWS) -> tuple[pd.DataFrame, s
             if not batch:
                 break
             rows.extend(tuple(r) for r in batch)
+            if progress:
+                progress(len(rows))
     finally:
         cur.close()
     # dtype=object: an integer column with NULLs must not turn into float (8517006 must not become "8517006.0")

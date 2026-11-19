@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -42,6 +43,14 @@ from sandbox.audit import Run  # noqa: E402
 from sandbox.config import CANONICAL_DIR, COHORTS, DATA_DIR, PARAMS, RAW_DIR  # noqa: E402
 from sandbox.io import iris, schema  # noqa: E402
 from sandbox.io.adapters import ddc, nabidh  # noqa: E402
+
+
+_START = time.monotonic()
+
+
+def say(msg: str) -> None:
+    """Progress line on screen (stays inside the enclave; not in the COPY block): clock time + seconds since start."""
+    print(f"[{time.strftime('%H:%M:%S')} +{time.monotonic() - _START:.0f}s] {msg}", flush=True)
 
 
 def main(argv=None) -> int:
@@ -99,7 +108,9 @@ def main(argv=None) -> int:
             try:
                 s = iris.connection_settings(a.iris_url)
                 target, user, driver = s["target"], s["user"], s["driver"]
+                say(f"connecting to IRIS {target} as {user} ...")
                 conn = iris.connect(a.iris_url)
+                say("connected")
             except Exception as e:                  # settings / driver / network / login — no password in the message
                 err = f"{type(e).__name__}: {str(e)[:300]}"
                 print(f"Could not connect to IRIS ({target or 'no connection settings'}): {err}\n"
@@ -128,18 +139,22 @@ def main(argv=None) -> int:
 def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> int:
     n_errors = 0
     for c in cohorts:
+        progress = lambda msg, c=c: say(f"{c} {msg}")      # noqa: E731
         if conn is None:
             d = raw_root / c
             run.add_inputs([d])
-            ds, rep = nabidh.load(d, c)
+            say(f"{c}: reading {d}")
+            ds, rep = nabidh.load(d, c, progress=progress)
         else:
-            ds, rep = nabidh.load_iris(conn, c, snapshot_dir=snap_root / c if snap_root else None)
+            say(f"{c}: reading {len(nabidh.SOURCES)} sources from IRIS")
+            ds, rep = nabidh.load_iris(conn, c, snapshot_dir=snap_root / c if snap_root else None, progress=progress)
             for name, s in rep["sources"].items():
                 if "query" in s:
                     run.add_query_input(target, s["query"], s["rows_read"], s["sha256"], f"{c} {name}")
                 if "snapshot" in s:
                     run.register_output(Path(s["snapshot"]), f"IRIS snapshot {c} {name}")
         ds.source = a.source
+        say(f"{c}: writing canonical tables and checking the schema")
         out_dir = schema.write_dataset(ds, CANONICAL_DIR)
         meta = {"ingest_version": nabidh.INGEST_VERSION, "ingest_run_id": run.run_id, "source": a.source,
                 "cohort": c, "input": "file" if conn is None else "iris"}

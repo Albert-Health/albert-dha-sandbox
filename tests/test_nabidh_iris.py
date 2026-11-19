@@ -88,6 +88,19 @@ class TestFilesVsIris(unittest.TestCase):
         self.assertEqual(s["status"], "absent (optional)")
         self.assertIn("no such table", s["error"])
 
+    def test_progress_lines(self):
+        """Screen progress (where the read is): every source gets a query line; read ones a rows / mapped line."""
+        msgs = []
+        nabidh.load_iris(self.conn, "c1", progress=msgs.append)
+        self.assertIn("patient_profile: querying Patient", msgs)
+        self.assertIn(f"patient_profile: {self.rep_iris['sources']['patient_profile']['rows_read']:,} rows read (0 s)",
+                      msgs)
+        self.assertTrue(any(m.startswith("patient_profile: mapped → ") for m in msgs), msgs)
+        self.assertIn("encounters: absent (optional source)", msgs)
+        counts = []
+        iris.fetch(self.conn, f"SELECT * FROM {SCHEMA}.Patient", fetch_rows=1, progress=counts.append)
+        self.assertEqual(counts, [1, 2, 3, 4])
+
     def test_snapshot_reingests_identically(self):
         ds_snap, _ = nabidh.load(self.snap, "c1")
         for t, df in self.ds_iris.tables.items():
