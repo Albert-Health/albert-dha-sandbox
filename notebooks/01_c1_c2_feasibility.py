@@ -286,6 +286,8 @@ kpi_values = {
     "c1_achievable_note": "C1 achievable N from the NABIDH report (build_report / delivery note)",
     "joint_core8_pct": {r["cohort"]: r["joint_core8_pct"] for _, r in joint[joint["group"] == "all"].iterrows()},
     "joint_lrs_pct": {r["cohort"]: r["joint_lrs_pct"] for _, r in joint[joint["group"] == "all"].iterrows()},
+    "joint_n": {r["cohort"]: {"n": int(r["n"]), "core8_n": int(r["joint_core8_n"]), "lrs_n": int(r["joint_lrs_n"])}
+                for _, r in joint[joint["group"] == "all"].iterrows()},
     "qd_computable_pct": {r["cohort"]: r["qd_computable_pct"] for _, r in computability[computability["group"] == "all"].iterrows()},
     "lrs_computable_pct": {r["cohort"]: r["lrs_computable_pct"] for _, r in computability[computability["group"] == "all"].iterrows()},
     "lrs_variant": P["lrs_variant"], "lrs_label": LRS_LABEL, "lrs_threshold": LRS_THR,

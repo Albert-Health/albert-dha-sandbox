@@ -1,7 +1,9 @@
 """DFF Health Data Sandbox KPI table (KPI & Graduation Framework v4 / Albert V2.0).
 
 Fills the Actual / Met values from the `kpi_values.json` outputs of NB0 / NB1 / NB2, the audit log and the
-latest evidence package checklist. Graduation rule: any Critical KPI
+latest evidence package checklist. Phase 1 (C1 / C2, NB1): joint completeness and score computability per cohort,
+the C1 detection rate in known positives (sensitivity only — C1 / C2 have no negatives) and the C1–C2 selection
+effect. Phase 2 (C3, NB2) adds its own joint completeness and the threshold / discrimination / calibration KPIs. Graduation rule: any Critical KPI
 Not Met → Do Not Graduate; otherwise a non-critical Met rate ≥80% Graduate, 50–79% Graduate with Mitigation.
 """
 from __future__ import annotations
@@ -11,6 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import sdc
 from .config import AUDIT_DIR, OUTPUT_DIR, PARAMS
 
 KPI_ROWS = [
@@ -72,6 +75,48 @@ def _fmt(x, nd=3):
     return round(x, nd) if isinstance(x, float) else x
 
 
+def _pct(x) -> str | None:
+    x = _fmt(x, 1)
+    return None if x is None else f"{x}%"
+
+
+def _cohort_pcts(pcts: dict, ns: dict | None = None, n_key: str | None = None) -> str:
+    """{"c1": 62.5, "c2": 40.0} (+ NB1 joint_n) → "C1 62.5% (N=125/200); C2 40.0% (N=<10/20)"; counts < 10
+    suppressed."""
+    out = []
+    for c, v in (pcts or {}).items():
+        if _pct(v) is None:
+            continue
+        n = (ns or {}).get(c)
+        out.append(f"{c.upper()} {_pct(v)}" + (f" (N={sdc.fmt_count(n[n_key])}/{sdc.fmt_count(n['n'])})"
+                                                 if n and n_key else ""))
+    return "; ".join(out)
+
+
+# NB1 c1_detection_pct keys are "<reference>|<score>" (cohorts.POSITIVE_REFERENCES × qdiabetes / lrs)
+def _c1_detection(nb1: dict) -> str:
+    det = {k: v for k, v in (nb1.get("c1_detection_pct") or {}).items() if _pct(v) is not None}
+    parts = []
+    for score, name in (("qdiabetes", "QDiabetes"), ("lrs", nb1.get("lrs_label", "LRS"))):
+        got = [f"{k.split('|')[0]} {_pct(v)}" for k, v in det.items() if k.split("|")[-1] == score]
+        if got:
+            parts.append(f"{name}: " + ", ".join(got))
+    return ("C1 " + "; ".join(parts)) if parts else ""
+
+
+def _selection_effect(nb1: dict) -> str:
+    smd = _fmt(nb1.get("selection_effect_max_abs_smd"))
+    if smd is None:
+        return ""
+    imb = nb1.get("selection_effect_imbalanced_vars") or []
+    return (f"C1–C2 selection effect: max |SMD| {smd}"
+            + (f"; |SMD| > 0.1: {', '.join(imb[:8])}" if imb else "; no variable with |SMD| > 0.1"))
+
+
+NB2_ONLY = ["Specificity", "NPV & PPV", "AUROC", "C-Index", "Precision / Recall / F1", "Recalibration Slope / O:E",
+            "Alert Rate per 1,000 Patients"]
+
+
 def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict = PARAMS) -> pd.DataFrame:
     rows = {k: {"kpi": k, "category": c, "owner": o, "target": t, "critical": cr,
                 "actual": None, "met": "Pending", "source": "", "notes": ""} for k, c, o, t, cr in KPI_ROWS}
@@ -99,15 +144,48 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
              "Met" if all(v >= 90 for v in dc.values()) else "Not Met", "NB0",
              "Weakest variable: " + ", ".join(f"{c}={v}" for c, v in nb0.get("data_completeness_weakest", {}).items()))
 
+    lname = (nb2 or nb1).get("lrs_label", "LRS")
+    lvariant = (nb2 or nb1).get("lrs_variant")
+    joint = {"Joint Completeness - QDiabetes": ("joint_core8_pct", "core8_n", "qd_computable_pct", "qdiabetes",
+                                                "Definition: 8 core variables"
+                                                + (f" ({nb2['qd_variant']})" if nb2.get("qd_variant") else "")
+                                                + " [awaiting confirmation with DFF]"),
+             "Joint Completeness - LRS": ("joint_lrs_pct", "lrs_n", "lrs_computable_pct", "lrs",
+                                          f"Variant: {lname} [K-LRS]" + ("" if lvariant == "assessment_2010"
+                                                                         else " — no waist circumference needed"))}
+    for k, (pct_key, n_key, comp_key, nb2_key, definition) in joint.items():
+        parts, srcs, notes = [], [], []
+        if nb1 and _cohort_pcts(nb1.get(pct_key)):
+            parts.append(_cohort_pcts(nb1.get(pct_key), nb1.get("joint_n"), n_key))
+            srcs.append("NB1 (C1/C2)")
+            if _cohort_pcts(nb1.get(comp_key)):
+                notes.append("Score computable: " + _cohort_pcts(nb1.get(comp_key)))
+        if nb2:
+            parts.append(f"C3 {nb2[f'joint_completeness_{nb2_key}_pct']}% "
+                         f"(N={sdc.fmt_count(nb2[f'joint_completeness_{nb2_key}_n'])}/{sdc.fmt_count(nb2['c3_eligible_n'])})")
+            srcs.append("NB2 (C3 base)")
+        if parts:
+            set_(k, "; ".join(parts), "Reported", " + ".join(srcs), " · ".join([definition, *notes]))
+
+    c1_det, sel = (_c1_detection(nb1), _selection_effect(nb1)) if nb1 else ("", "")
+    if nb1:
+        sens_k = "Sensitivity (Recall, positive class)"
+        if c1_det:
+            set_(sens_k, c1_det, "Reported", "NB1 (C1 known positives)",
+                 " · ".join(x for x in [
+                     "Detection rate among C1 patients with a computable score (sensitivity only; C1/C2 have no "
+                     "negatives). Not judged against the target: primary score / reference date not pre-specified "
+                     "[decision pending]", sel] if x))
+        else:
+            set_(sens_k, None, "Pending", "NB1 (C1 known positives)",
+                 " · ".join(x for x in [
+                     "C1 detection rate: threshold not pre-specified (qd_risk_threshold_pct / "
+                     "lprs_high_risk_threshold) [decision pending]", sel] if x))
+        if not nb2:
+            for k in NB2_ONLY:
+                set_(k, None, "Pending", "NB2 (C3)", "Phase 2 (C3): C1/C2 hold known positives only")
+
     if nb2:
-        set_("Joint Completeness - QDiabetes",
-             f"{nb2['joint_completeness_qdiabetes_pct']}% (N={nb2['joint_completeness_qdiabetes_n']}/{nb2['c3_eligible_n']})",
-             "Reported", "NB2 (C3 base)", f"Definition: 8 core variables ({nb2.get('qd_variant')}) [awaiting confirmation with DFF]")
-        lname = nb2.get("lrs_label", "LRS")
-        set_("Joint Completeness - LRS",
-             f"{nb2['joint_completeness_lrs_pct']}% (N={nb2['joint_completeness_lrs_n']}/{nb2['c3_eligible_n']})",
-             "Reported", "NB2 (C3 base)",
-             f"Variant: {lname} [K-LRS]" + ("" if nb2.get("lrs_variant") == "assessment_2010" else " — no waist circumference needed"))
         auc, ci = nb2.get("auroc_qd"), nb2.get("auroc_qd_ci")
         if auc is not None:
             set_("AUROC", f"{auc:.3f}" + (f" (95% CI {ci[0]:.3f}–{ci[1]:.3f})" if ci else ""), "Met" if auc >= 0.75 else "Not Met",
@@ -127,15 +205,19 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
                     f"alert/1000 {_fmt(lthr.get('alert_rate_per_1000'), 1)}") if lthr.get("threshold") is not None \
             else f"{lname}: no threshold chosen [decision pending]"
         if "sensitivity" in thr:
-            set_("Sensitivity (Recall, positive class)", f"{thr['sensitivity']:.3f}", "Met" if thr["sensitivity"] >= 0.70 else "Not Met", "NB2", lrs_note)
+            set_("Sensitivity (Recall, positive class)", f"{thr['sensitivity']:.3f}", "Met" if thr["sensitivity"] >= 0.70 else "Not Met", "NB2",
+                 lrs_note + (f" · {c1_det}" if c1_det else ""))
             set_("Specificity", f"{thr['specificity']:.3f}", "Met" if thr["specificity"] >= 0.70 else "Not Met", "NB2", lrs_note)
             set_("NPV & PPV", f"PPV {thr['ppv']:.3f}, NPV {thr['npv']:.3f}", "Reported", "NB2", lrs_note)
             set_("Precision / Recall / F1", f"P {thr['precision']:.3f}, R {thr['recall']:.3f}, F1 {thr['f1']:.3f}", "Reported", "NB2")
             set_("Alert Rate per 1,000 Patients", f"{thr['alert_rate_per_1000']:.1f}", "Reported", "NB2")
         else:
-            for k in ["Sensitivity (Recall, positive class)", "Specificity", "NPV & PPV", "Precision / Recall / F1",
-                      "Alert Rate per 1,000 Patients"]:
+            for k in ["Specificity", "NPV & PPV", "Precision / Recall / F1", "Alert Rate per 1,000 Patients"]:
                 set_(k, None, "Pending", "NB2", "QDiabetes threshold not pre-specified (qd_risk_threshold_pct) [decision pending]. " + lrs_note)
+            if not c1_det:          # otherwise the NB1 C1 detection rate stays in the row
+                set_("Sensitivity (Recall, positive class)", None, "Pending", "NB2",
+                     "QDiabetes threshold not pre-specified (qd_risk_threshold_pct) [decision pending]. " + lrs_note
+                     + (f" · {sel}" if sel else ""))
     return pd.DataFrame(rows.values())
 
 
@@ -165,5 +247,5 @@ def to_markdown(table: pd.DataFrame, grad: dict, meta: dict) -> str:
              "| KPI | Target | Critical | Owner | Actual | Status | Note |", "|---|---|---|---|---|---|---|"]
     for _, r in table.iterrows():
         lines.append(f"| {r['kpi']} | {r['target']} | {'Yes' if r['critical'] else 'No'} | {r['owner']} | "
-                     f"{r['actual'] if r['actual'] is not None else '—'} | {r['met']} | {r['notes']} |")
+                     f"{'—' if pd.isna(r['actual']) else r['actual']} | {r['met']} | {r['notes']} |")   # NaN on pandas 3
     return "\n".join(lines) + "\n"

@@ -231,6 +231,11 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   bash tools/enclave.sh run kpi
   ```
 
+- Faz 1'de NB1'den dolan satırlar: Joint Completeness (QDiabetes / LRS; C1 ve C2 için % ve N, skor
+  hesaplanabilirliği notta) ve Sensitivity (C1 yakalama oranı; eşik yoksa Pending, C1–C2 seçilim etkisi notta).
+  Sensitivity hedefe (≥ %70) göre Met / Not Met diye değerlendirilmez; birincil skor ve referans tarihi önceden
+  belirlenmedi. Specificity, NPV / PPV, AUROC, C-Index, kalibrasyon ve uyarı oranı Faz 2'de (C3, NB2) dolar.
+
 ### 7 · Jupyter'de inceleme (isteğe bağlı)
 
 - [ ] Notebook'ları üret ve aç:
