@@ -88,6 +88,19 @@ class TestLookup(unittest.TestCase):
         self.assertEqual(f("Paracetamol 500mg"), [])
         self.assertEqual(ddc.lookup_name(None), ("no name", []))
 
+    def test_brand_first_word(self):
+        # The DDC name has a suffix ("XIGDUO XR 5MG/1000MG", "TOUJEO SOLOSTAR"); the row does not → brand first word
+        self.assertEqual(ddc.lookup_name("XIGDUO 5/1000 EXTENDED RELEASE TABLETS"),
+                         ("name: brand first word", ["A10BK01", "A10BA02"]))
+        self.assertEqual(ddc.lookup_name("xigduo"), ("name: brand first word", ["A10BK01", "A10BA02"]))
+        self.assertEqual(ddc.lookup_name("XIGDUO XR 10MG/1000MG")[0], "name: trade name")   # full name first
+        self.assertEqual(ddc.lookup_name("TOUJEO"), ("name: brand first word", ["A10A"]))
+        self.assertEqual(ddc.lookup_name("DIAMICRON 60"), ("name: brand first word", ["A10BB09"]))
+        # codes common to the brand, not the union: CONCOR PLUS's thiazide does not reach CONCOR
+        self.assertEqual(ddc.lookup_name("CONCOR 5")[1], ["C07AB07"])
+        self.assertEqual(ddc.lookup_name("XIGDUO eye drops"), ("name: non-systemic", []))
+        self.assertEqual(ddc.lookup_name("Insulin pen needles"), ("name: no study drug class", []))   # device
+
 
 if __name__ == "__main__":
     unittest.main()

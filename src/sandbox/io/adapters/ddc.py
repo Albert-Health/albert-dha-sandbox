@@ -9,8 +9,9 @@ names ("METFORMIN HCL/SITAGLIPTIN"), route of administration and dosage form. Ma
   non-systemic route (eye drops, cream, nasal spray, inhaler, rectal, intra-articular) → no class
   (except insulin: codelists.INGREDIENT_ANY_ROUTE); the row's own route (Route_Description) is checked too
 
-Without a code, the name: (1) if the start of the name matches a DDC trade name, those products' ATCs, (2) the
-active ingredient names found in the name. The union of both is taken. Reference: src/sandbox/reference/ddc.csv.gz
+Without a code, the name: (1) if the start of the name matches a DDC trade name, those products' ATCs; failing
+that, the brand's first word ("XIGDUO 5/1000" → DDC "XIGDUO XR 5MG/1000MG"), (2) the active ingredient names found
+in the name. The union of both is taken. Reference: src/sandbox/reference/ddc.csv.gz
 (tools/build_ddc_reference.py).
 """
 from __future__ import annotations
@@ -143,23 +144,37 @@ def _indexes(path: Path | None = None):
     # drops etc.) is not ambiguity; the row's own text (text_is_local) makes that distinction.
     kinds: dict[str, set[str]] = {}
     atc_by: dict[str, list[str]] = {}
+    # Brand first word: rows often drop the suffix of the DDC name ("XIGDUO" for "XIGDUO XR 5MG/1000MG", "TOUJEO"
+    # for "TOUJEO SOLOSTAR"). Same ambiguity rule over every product whose brand stem starts with that word; ATC =
+    # the codes common to all its study products (not the union: "CONCOR" must not take CONCOR PLUS's thiazide).
+    head_kinds: dict[str, set[str]] = {}
+    head_atc: dict[str, list[str]] = {}
     for full, a, e in zip(ref["trade_key"], ref["atc_codes"], ref["excluded_route"]):
         kind = "study" if a else ("local" if e else "other")
-        for k in {full, _brand_stem(full)}:
+        stem = _brand_stem(full)
+        for k in {full, stem}:
             if len(k) < 4:
                 continue
             kinds.setdefault(k, set()).add(kind)
             cur = atc_by.setdefault(k, [])
             cur.extend(x for x in a if x not in cur)
+        head = stem.split()[0] if stem else ""
+        if len(head) < 4:
+            continue
+        head_kinds.setdefault(head, set()).add(kind)
+        if a:
+            head_atc[head] = list(a) if head not in head_atc else [x for x in head_atc[head] if x in a]
     by_trade = {k: atc_by[k] for k, kd in kinds.items() if "study" in kd and "other" not in kd}
-    return by_code, by_sci, by_trade
+    by_head = {h: head_atc[h] for h, kd in head_kinds.items()
+               if "study" in kd and "other" not in kd and head_atc.get(h)}
+    return by_code, by_sci, by_trade, by_head
 
 
 def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
     """DDC product code (or DDC scientific code) → (status, ATC list).
     status: "DDC code" · "DDC scientific code" · "DDC: not a study drug class" · "DDC: non-systemic route" ·
     "not a DDC code"."""
-    by_code, by_sci, _ = _indexes(path)
+    by_code, by_sci, _, _ = _indexes(path)
     key = norm_code(pd.Series([code])).iloc[0]
     if pd.isna(key):
         return "not a DDC code", []
@@ -178,19 +193,23 @@ def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, li
 
 def lookup_name(name, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
     """Drug name (free text) → (status, ATC list). Trade name (DDC, start of the name) + active ingredients named.
-    status: "name: trade name" · "name: ingredient" · "name: trade name + ingredient" · "name: non-systemic" ·
-    "name: no study drug class"."""
+    status: "name: trade name" · "name: brand first word" · "name: ingredient" · "name: trade name + ingredient" ·
+    "name: brand first word + ingredient" · "name: non-systemic" · "name: no study drug class"."""
     if name is None or pd.isna(name) or not str(name).strip():
         return "no name", []
-    _, _, by_trade = _indexes(path)
+    _, _, by_trade, by_head = _indexes(path)
     norm = _norm_text(name)
+    device = bool(_NOT_A_DRUG.search(str(name).upper()))
     trade: list[str] = by_trade.get(norm, [])
+    trade_how = "trade name"
     words = _brand_stem(norm).split()
     for k in range(min(len(words), 6), 0, -1):          # longest brand stem first ("CONCOR PLUS" > "CONCOR")
         if trade:
             break
         trade = by_trade.get(" ".join(words[:k]), [])
-    ingr = [] if _NOT_A_DRUG.search(str(name).upper()) else ingredient_atc(str(name).replace("/", " "))
+    if not trade and words and not device:              # looser key: never for a device ("INSULIN PEN NEEDLES")
+        trade, trade_how = list(by_head.get(words[0], [])), "brand first word"
+    ingr = [] if device else ingredient_atc(str(name).replace("/", " "))
     atcs = trade + [a for a in ingr if a not in trade]
     if not atcs:
         return "name: no study drug class", []
@@ -198,5 +217,5 @@ def lookup_name(name, row_route=None, path: Path | None = None) -> tuple[str, li
         atcs = _systemic_filter(atcs, False)
         if not atcs:
             return "name: non-systemic", []
-    how = "name: " + " + ".join(w for w, x in (("trade name", trade), ("ingredient", ingr)) if x)
+    how = "name: " + " + ".join(w for w, x in ((trade_how, trade), ("ingredient", ingr)) if x)
     return how, atcs
