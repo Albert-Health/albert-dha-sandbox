@@ -14,6 +14,7 @@ import pandas as pd  # noqa: E402
 
 from sandbox import codelists, phenotype  # noqa: E402
 from sandbox.config import PARAMS  # noqa: E402
+from sandbox.io import schema  # noqa: E402
 from sandbox.io.adapters import nabidh  # noqa: E402
 from sandbox.scores import lrs, qdiabetes2018a as qd  # noqa: E402
 
@@ -292,6 +293,18 @@ class TestAdapterOptions(unittest.TestCase):
         vc = pd.DataFrame(rep["value_counts"])
         self.assertEqual(set(vc.loc[vc["field"] == "condition_text negated → negative", "value"]),
                          {"No History Of Diabetes mellitus type 2 (disorder)"})
+
+        # D27 (2026-11-19): aile öyküsü var / yok — tarihsiz ve referans sonrası kayıt da sayılır
+        ref = pd.Series(pd.Timestamp("2019-12-31"), index=["A1", "A2", "A3", "A4"])
+        s = phenotype.core_snapshot(ds, ref, None)
+        self.assertEqual(list(s["family_history"]), [False, False, True, True])
+        self.assertEqual(list(s["family_history_recorded"]), [True, True, True, True])
+        old = phenotype.core_snapshot(ds, ref, None, dict(PARAMS, family_history_any_date=False))
+        self.assertEqual(list(old["family_history_recorded"]), [False, False, False, False])
+        v = schema.validate(ds).set_index("check")
+        self.assertEqual(v.loc["family history without date (date not used, D27)", "n_affected"], 1)
+        obs_date = v[(v["table"] == "observations")].loc["missing required date"]
+        self.assertEqual((obs_date["severity"], obs_date["n_affected"]), ("INFO", 0))
 
     def test_filter_that_drops_everything_stops(self):
         """C2'de kalem adları farklıysa sigara sessizce boş kalmasın: ingest durur, kalemleri basar."""

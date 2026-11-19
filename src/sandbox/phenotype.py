@@ -206,7 +206,14 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     # Aile öyküsü: Z83.3 tanısı VEYA FamilyHistory kaydı (adapter → observations concept
     # family_history_dm; değer positive / negative / positive_non_first_degree / unknown).
     # Pozitif = birinci derece akrabada diyabet (QDiabetes ve LRS tanımı). Kayıt var = pozitif veya negatif.
-    fh = obs_hist[obs_hist["concept"] == "family_history_dm"]
+    # family_history_any_date (D27): var / yok; kayıt tarihi kullanılmaz (tarihsiz kayıt da sayılır).
+    fh_any_date = p.get("family_history_any_date", PARAMS["family_history_any_date"])
+    if fh_any_date:
+        conds = ds["conditions"]
+        out["family_history"] = out.index.isin(set(conds.loc[codelists.match_dx(conds, "family_history_dm"),
+                                                             "patient_id"]))
+    fh_src = obs_all if fh_any_date else obs_hist
+    fh = fh_src[fh_src["concept"] == "family_history_dm"]
     fh_val = fh["value"].astype("string").str.strip().str.lower()
     fh_pos = set(fh.loc[fh_val.eq("positive").fillna(False).astype(bool), "patient_id"])
     fh_rec = set(fh.loc[fh_val.isin(list(FH_RECORDED_VALUES)).fillna(False).astype(bool), "patient_id"])

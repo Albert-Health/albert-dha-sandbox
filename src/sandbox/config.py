@@ -57,6 +57,11 @@ PARAMS = {
     # True → aile öyküsü için kayıt (FamilyHistory pozitif/negatif veya Z83.3) şartı aranır.
     # [KARAR BEKLİYOR] D17 — enclave'de NABIDH'in C1 tanımı görülünce netleşecek.
     "c1_require_fh_record": False,
+    # Diyabet aile öyküsü (birinci derece akraba; FamilyHistory kaydı ve Z83.3) var / yok olarak alınır. Diyabet dışı
+    # hastalık kayıtları adapter'da atılır. Kayıt tarihi kullanılmaz: tarihsiz ve referans tarihinden sonra
+    # girilmiş kayıt da sayılır. NABIDH FamilyHistory.EnteredOn çoğunlukla boş.
+    # [KARAR: 2026-11-19, ensargunesdogdu] D27. False → yalnız referans tarihine kadar tarihli kayıtlar.
+    "family_history_any_date": True,
 
     # C3 (Non-Diabetic Cohort Spec v2)
     # v2 belgesinin iki sürümü çelişiyor: 24 ay (ilk sürüm) vs 12 ay (2026-11-13).
