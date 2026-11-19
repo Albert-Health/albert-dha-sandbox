@@ -1,0 +1,79 @@
+Step: run nb1 · source nabidh · exit code 0 · 20 s
+Data: c1 ingest v1.2.1 (20261119T120545Z_ingest_nabidh_5e2b7b); c2 ingest v1.2.1 (20261119T120545Z_ingest_nabidh_5e2b7b)
+Run: 20261119T130245Z_nb01_c1_c2_feasibility_de09e3 · status: success · 12 outputs
+
+-- nb01/score_computability.csv (6 rows)
+  cohort       group    n  qd_computable_pct  lrs_computable_pct  lrs_outside_dev_age_pct    qd_variant                 lrs_variant
+      c1         all 2595               97.1                 0.0                     30.2 reduced_8core LPRS (Gray 2012 — no waist)
+      c1 Prediabetes 1376               96.4                 0.0                     38.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c1        T2DM 1219               97.8                 0.0                     20.8 reduced_8core LPRS (Gray 2012 — no waist)
+      c2         all 2567               14.5                 0.0                     23.1 reduced_8core LPRS (Gray 2012 — no waist)
+      c2 Prediabetes 1163               18.1                 0.0                     30.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c2        T2DM 1404               11.5                 0.0                     17.0 reduced_8core LPRS (Gray 2012 — no waist)
+-- nb01/score_missing_reasons.csv (12 rows)
+  cohort     score          reason    n   pct
+      c1 qdiabetes smoking_missing   74   2.9
+      c1 qdiabetes             sex  <10   0.0
+      c1 qdiabetes     bmi_missing  <10   0.0
+      c1       lrs       ethnicity 2595 100.0
+      c1       lrs             sex  <10   0.0
+      c1       lrs     bmi_missing  <10   0.0
+      c2 qdiabetes smoking_missing 2185  85.1
+      c2 qdiabetes     bmi_missing  140   5.5
+      c2 qdiabetes             sex  <10   0.1
+      c2       lrs       ethnicity 2567 100.0
+      c2       lrs     bmi_missing  140   5.5
+      c2       lrs             sex  <10   0.1
+-- nb01/smoking_source.csv (10 rows)
+  cohort             smoking_source    n  pct
+      c1         undated_consistent 2387 92.0
+      c1                 structured  122  4.7
+      c1 missing (undated conflict)   60  2.3
+      c1                    missing   14  0.5
+      c1             diagnosis_code   12  0.5
+      c2                    missing 2177 84.8
+      c2         undated_consistent  336 13.1
+      c2                 structured   31  1.2
+      c2             diagnosis_code   15  0.6
+      c2 missing (undated conflict)  <10  0.3
+-- nb01/c1_detection_rate.csv (24 rows)
+  cohort      reference       group     score    n n_computable n_flagged  sens_computable  ci_low  ci_high                        threshold
+      c1       data_end         all       lrs 2595            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end         all qdiabetes 2595         2519       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end        T2DM       lrs 1219            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end        T2DM qdiabetes 1219         1192       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end Prediabetes       lrs 1376            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end Prediabetes qdiabetes 1376         1327       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence         all       lrs 2595            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence         all qdiabetes 2595         2035       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence        T2DM       lrs 1219            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence        T2DM qdiabetes 1219          900       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence Prediabetes       lrs 1376            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence Prediabetes qdiabetes 1376         1135       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end         all       lrs 2567            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end         all qdiabetes 2567          373       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end        T2DM       lrs 1404            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end        T2DM qdiabetes 1404          162       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end Prediabetes       lrs 1163            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end Prediabetes qdiabetes 1163          211       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence         all       lrs 2567            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence         all qdiabetes 2567          270       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence        T2DM       lrs 1404            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence        T2DM qdiabetes 1404          102       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence Prediabetes       lrs 1163            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence Prediabetes qdiabetes 1163          168       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+-- nb01/score_summary.csv (4 rows)
+       status  qd_median_pct  lrs_median  lrs_p25  lrs_p75  lrs_high_risk_pct cohort                 lrs_variant
+  Prediabetes           3.02         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+         T2DM           7.78         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+  Prediabetes           2.63         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+         T2DM           6.28         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+-- nb01/joint_completeness.csv (6 rows)
+  cohort       group    n joint_core8_n  joint_core8_pct joint_lrs_n  joint_lrs_pct
+      c1         all 2595             0              0.0           0            0.0
+      c1 Prediabetes 1376             0              0.0           0            0.0
+      c1        T2DM 1219             0              0.0           0            0.0
+      c2         all 2567             0              0.0           0            0.0
+      c2 Prediabetes 1163             0              0.0           0            0.0
+      c2        T2DM 1404             0              0.0           0            0.0
+Full screen output (inside the enclave): outputs/20261119T130243Z_enclave_run_409ab4/enclave/nb1.log
