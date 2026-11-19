@@ -843,6 +843,7 @@ FH_FIELDS = [
 # listelerinde < 10 satırlık değer basılmaz.
 LAB_FIELDS = [
     ("study lab: code | unit | name", 15, True), ("value by kind | unit", 15, False),
+    ("value outside plausible range", 10, False),
     ("lab value non-numeric (raw)", 10, True), ("rows dropped: not a study lab", 1, False),
     ("rows dropped: study code, other test by name", 1, False),
     ("study code, other test by name (dropped): code | unit | name", 10, True),

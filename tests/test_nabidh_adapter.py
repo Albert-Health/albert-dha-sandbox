@@ -370,6 +370,7 @@ class TestLabResults(unittest.TestCase):
             "A1,E5,2021-05-01,140,mg/dL,4548-4,EAG (ESTIMATED AVERAGE GLUCOSE)",   # HbA1c kodu, eAG → düşer
             "A2,E6,2021-05-01,180,mg/dL,1558-6,BLOOD SUGAR -RBS",       # açlık kodu, rastgele → düşer
             "P1,E7,2021-05-01,150,mg/dL,1521-4,GLUCOSE POST PRANDIAL (PPBS)",      # tutulur (not: OGTT değil)
+            "A4,E8,2021-06-01,48,,4548-4,HbA1c",                        # birimsiz, mmol/mol gibi → aralık dışı, tutulur
         ])
         cls.ds, cls.rep = nabidh.load(d, "c1")
         cls.vc = pd.DataFrame(cls.rep["value_counts"])
@@ -387,7 +388,7 @@ class TestLabResults(unittest.TestCase):
         lab = labs[labs["patient_id"].isin(["A2", "A3", "A4"]) & labs["unit"].notna()].set_index("patient_id")
         self.assertEqual(lab.loc["A3", ["loinc", "unit"]].tolist(), ["59261-8", "mmol/mol"])
         self.assertEqual(lab.loc["A2", ["loinc", "unit"]].tolist(), ["1558-6", "mmol/L"])
-        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 16})
+        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 17})
         self.assertNotIn("2093-3", set(labs["loinc"]))
         self.assertNotIn("LOC-77", set(labs["loinc"]))
         self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # gözlem değil
@@ -410,8 +411,16 @@ class TestLabResults(unittest.TestCase):
                          {"4548-4 | mg/dL | EAG (ESTIMATED AVERAGE GLUCOSE)", "1558-6 | mg/dL | BLOOD SUGAR -RBS"})
         self.assertEqual(self.field("rows dropped: study code, other test by name"), {"<n rows>": 2})
         g = phenotype.glycaemic_events(self.ds)
-        self.assertFalse((g["kind"].eq("hba1c") & g["value"].gt(20)).any())    # eAG HbA1c sanılmadı
+        self.assertFalse((g["kind"].eq("hba1c") & g["value"].eq(140)).any())   # eAG HbA1c sanılmadı
         self.assertEqual(self.field("lab value non-numeric (raw)"), {"<2.8": 1})
+
+    def test_value_outside_plausible_range_is_reported_and_kept(self):
+        self.assertEqual(self.field("value outside plausible range"), {"hba1c | <no unit> : outside 3–20 % (kept)": 1})
+        labs = self.ds["labs"]
+        self.assertTrue((labs["patient_id"].eq("A4") & labs["value"].eq(48)).any())    # eleme kararı yok, K11
+        rng = nabidh.lab_range_class(pd.Series(["hba1c", "hba1c", "hba1c_ifcc", "fpg", "ogtt_2h"]),
+                                     pd.Series(["%", "mmol/mol", None, "mmol/L", None]))
+        self.assertEqual(list(rng), ["hba1c %", "hba1c mmol/mol", "hba1c mmol/mol", "glucose mmol/L", "glucose mg/dL"])
 
     def test_value_distribution_only_for_ten_patients(self):
         stats = self.field("value by kind | unit")

@@ -432,6 +432,22 @@ GLYCAEMIC_NAME = re.compile(r"a1c|glyc|gluc|ogtt|sugar", re.IGNORECASE)
 LAB_EAG_NAME = re.compile(r"\beag\b|estimated average glucose", re.IGNORECASE)
 LAB_RANDOM_NAME = re.compile(r"\brbs\b|random", re.IGNORECASE)
 LAB_STATS_MIN_PATIENTS = 10                         # değer dağılımı yalnız ≥ 10 hastalı tür | birim grubunda
+# Akla yatkın değer aralığı — yalnız rapor: değer tutulur ve statüye girer (eleme kararı medikal ekipte, K11).
+# Birim yoksa % / mg/dL varsayılır (phenotype.glycaemic_events); birimsiz mmol/mol HbA1c (ör. 48) ya da mmol/L
+# glukoz (ör. 6,1) burada aralık dışı görünür.
+LAB_PLAUSIBLE = {"hba1c %": (3, 20), "hba1c mmol/mol": (10, 200), "glucose mg/dL": (20, 1000),
+                 "glucose mmol/L": (1, 55)}
+
+
+def lab_range_class(kind: pd.Series, unit: pd.Series) -> pd.Series:
+    """Tür + birim → LAB_PLAUSIBLE anahtarı (phenotype.glycaemic_events'in birim kuralıyla aynı)."""
+    u = unit.astype("string").str.lower().fillna("")
+    a1c = kind.isin(["hba1c", "hba1c_ifcc"]).fillna(False).astype(bool)
+    out = pd.Series("glucose mg/dL", index=kind.index, dtype=object)
+    out[~a1c & u.str.contains("mmol/l").astype(bool)] = "glucose mmol/L"
+    out[a1c] = "hba1c %"
+    out[a1c & (kind.eq("hba1c_ifcc") | u.str.contains("mmol/mol")).fillna(False).astype(bool)] = "hba1c mmol/mol"
+    return out
 
 
 def lab_value_stats(labs: pd.DataFrame, kind: pd.Series, unit: pd.Series) -> list[tuple[str, int]]:
@@ -455,7 +471,8 @@ def lab_value_stats(labs: pd.DataFrame, kind: pd.Series, unit: pd.Series) -> lis
 def _h_lab_results(df, name, vc):
     """Lab view'ı (NABIDH LabResultItem): yalnız çalışmanın glisemik lab'ları (codelists.LOINC_LAB) → labs. Diğer
     testler (kolesterol, hemogram …) düşer; gözlem değildir. Rapor: tutulan ve düşen kod | birim | ad, adı glisemik
-    görünen düşen testler, tür | birim başına değer dağılımı (birim → phenotype.glycaemic_events dönüşümü)."""
+    görünen düşen testler, tür | birim başına değer dağılımı (birim → phenotype.glycaemic_events dönüşümü) ve
+    akla yatkın aralık dışındaki değer sayısı (LAB_PLAUSIBLE; yalnız rapor)."""
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = df["code"].astype("string").str.strip()
     test = (df["test_name"] if "test_name" in df else empty).astype("string").str.strip()
@@ -481,6 +498,13 @@ def _h_lab_results(df, name, vc):
     labs = df[keep].assign(code=code[keep], unit=unit[keep]).rename(columns={"code": "loinc"})
     vc += [{"source": name, "field": "value by kind | unit", "value": label, "n_rows": n}
            for label, n in lab_value_stats(labs, kind[keep], unit[keep])]
+    rng = lab_range_class(kind[keep], unit[keep])
+    v = pd.to_numeric(labs["value"], errors="coerce")
+    lo, hi = rng.map(lambda r: LAB_PLAUSIBLE[r][0]), rng.map(lambda r: LAB_PLAUSIBLE[r][1])
+    outside = (v.notna() & ((v < lo) | (v > hi))).astype(bool)
+    label = (kind[keep].astype(str) + " | " + unit[keep].fillna("<no unit>").astype(str) + " : outside "
+             + lo.astype(str) + "–" + hi.astype(str) + " " + rng.str.split(" ").str[1] + " (kept)")
+    vc += _value_counts(name, "value outside plausible range", label[outside], top=20)
     vc += _value_counts(name, "lab value non-numeric (raw)",
                         labs.loc[pd.to_numeric(labs["value"], errors="coerce").isna() & labs["value"].notna(), "value"],
                         top=20)
