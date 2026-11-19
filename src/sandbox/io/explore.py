@@ -317,6 +317,15 @@ def looks_like_date(shape_text: str) -> bool:
     return bool(_DATE_SHAPE.match(shape_text or ""))
 
 
+def _yyyymmdd_share(values: pd.Series) -> float:
+    """8 haneli değerlerin kaçı 1900–2100 arası geçerli YYYYMMDD tarihi (SNOMED 73211009 değil)."""
+    v = values[values.astype(str).str.fullmatch(r"\d{8}")]
+    if not len(v):
+        return 0.0
+    d = pd.to_datetime(v, format="%Y%m%d", errors="coerce")
+    return float(((d.dt.year >= 1900) & (d.dt.year <= 2100)).mean())
+
+
 def profile_column(name: str, s: pd.Series) -> dict:
     """Örneklemdeki bir sütunun özeti: dolu %, farklı değer sayısı, en sık şekil, tür tahmini (değer yok)."""
     t = pd.Series([to_text(v) for v in s], dtype=object)
@@ -327,10 +336,13 @@ def profile_column(name: str, s: pd.Series) -> dict:
     numeric = float(pd.to_numeric(nn, errors="coerce").notna().mean()) if k else 0.0
     decimal = float(nn.astype(str).str.contains(r"\d[.,]\d", regex=True).mean()) if k else 0.0
     top = str(shapes.index[0]) if k else ""
+    code_col = "code" in name_tokens(name)
     if not k:
         kind = "boş"
-    elif looks_like_date(top):
+    elif looks_like_date(top) and not (top == "99999999" and (code_col or _yyyymmdd_share(nn) < 0.9)):
         kind = "tarih"
+    elif code_col and decimal <= 0.5:
+        kind = "kod"                               # sayısal da olsa kod (SNOMED, yerel numara): değer listesi
     elif re.fullmatch(r"9{5}(,9+)?", top) and any(x in _DATE_HINT for x in name_tokens(name)):
         kind = "tarih? (IRIS iç sayı: horolog)"
     elif numeric >= 0.95 and decimal > 0.5:
