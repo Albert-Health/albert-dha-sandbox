@@ -367,6 +367,9 @@ class TestLabResults(unittest.TestCase):
             "A2,E2,2020-02-01,190,mg/dL,2093-3,Cholesterol",            # çalışma lab'ı değil → düşer
             "A1,E3,2021-04-01,6.9,%,LOC-77,Glycated haemoglobin",       # yerel kodlu HbA1c → düşer, ayrı listede
             "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # sayı değil, birim yok
+            "A1,E5,2021-05-01,140,mg/dL,4548-4,EAG (ESTIMATED AVERAGE GLUCOSE)",   # HbA1c kodu, eAG → düşer
+            "A2,E6,2021-05-01,180,mg/dL,1558-6,BLOOD SUGAR -RBS",       # açlık kodu, rastgele → düşer
+            "P1,E7,2021-05-01,150,mg/dL,1521-4,GLUCOSE POST PRANDIAL (PPBS)",      # tutulur (not: OGTT değil)
         ])
         cls.ds, cls.rep = nabidh.load(d, "c1")
         cls.vc = pd.DataFrame(cls.rep["value_counts"])
@@ -384,7 +387,7 @@ class TestLabResults(unittest.TestCase):
         lab = labs[labs["patient_id"].isin(["A2", "A3", "A4"]) & labs["unit"].notna()].set_index("patient_id")
         self.assertEqual(lab.loc["A3", ["loinc", "unit"]].tolist(), ["59261-8", "mmol/mol"])
         self.assertEqual(lab.loc["A2", ["loinc", "unit"]].tolist(), ["1558-6", "mmol/L"])
-        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 15})
+        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 16})
         self.assertNotIn("2093-3", set(labs["loinc"]))
         self.assertNotIn("LOC-77", set(labs["loinc"]))
         self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # gözlem değil
@@ -403,6 +406,11 @@ class TestLabResults(unittest.TestCase):
         self.assertEqual(list(self.field("other tests (dropped): code | unit | name")),
                          ["2093-3 | mg/dL | Cholesterol"])
         self.assertEqual(self.field("rows dropped: not a study lab"), {"<n rows>": 2})
+        self.assertEqual(set(self.field("study code, other test by name (dropped): code | unit | name")),
+                         {"4548-4 | mg/dL | EAG (ESTIMATED AVERAGE GLUCOSE)", "1558-6 | mg/dL | BLOOD SUGAR -RBS"})
+        self.assertEqual(self.field("rows dropped: study code, other test by name"), {"<n rows>": 2})
+        g = phenotype.glycaemic_events(self.ds)
+        self.assertFalse((g["kind"].eq("hba1c") & g["value"].gt(20)).any())    # eAG HbA1c sanılmadı
         self.assertEqual(self.field("lab value non-numeric (raw)"), {"<2.8": 1})
 
     def test_value_distribution_only_for_ten_patients(self):

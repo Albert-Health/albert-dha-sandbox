@@ -844,6 +844,8 @@ FH_FIELDS = [
 LAB_FIELDS = [
     ("study lab: code | unit | name", 15, True), ("value by kind | unit", 15, False),
     ("lab value non-numeric (raw)", 10, True), ("rows dropped: not a study lab", 1, False),
+    ("rows dropped: study code, other test by name", 1, False),
+    ("study code, other test by name (dropped): code | unit | name", 10, True),
     ("glycaemic-looking tests (dropped): code | unit | name", 20, True),
     ("other tests (dropped): code | unit | name", 15, True),
 ]

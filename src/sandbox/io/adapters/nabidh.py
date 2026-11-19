@@ -425,6 +425,12 @@ def _h_measurements(df, name, vc):
 
 # Kodu LOINC_LAB'da olmayan ama adı glisemik testi andıran testler (yerel kodlu HbA1c / glukoz) ayrıca listelenir.
 GLYCAEMIC_NAME = re.compile(r"a1c|glyc|gluc|ogtt|sugar", re.IGNORECASE)
+# Çalışma koduyla gelen ama adı başka test diyen satırlar (C1 LabResultItem, 2026-11-19) düşer:
+#   4548-4 + "EAG (ESTIMATED AVERAGE GLUCOSE)": mg/dL ortalama glukoz; HbA1c sanılırsa ~%140 → yanlış DM kanıtı
+#   1558-6 + "BLOOD SUGAR -RBS" / "GLUCOSE (RANDOM)": açlık değil, rastgele glukoz
+# 1521-4 + "GLUCOSE POST PRANDIAL (PPBS)" / "POSTPRANDIAL BLOOD SUGAR - 2 HRS" tutulur (OGTT değil; medikal ekip).
+LAB_EAG_NAME = re.compile(r"\beag\b|estimated average glucose", re.IGNORECASE)
+LAB_RANDOM_NAME = re.compile(r"\brbs\b|random", re.IGNORECASE)
 LAB_STATS_MIN_PATIENTS = 10                         # değer dağılımı yalnız ≥ 10 hastalı tür | birim grubunda
 
 
@@ -455,15 +461,23 @@ def _h_lab_results(df, name, vc):
     test = (df["test_name"] if "test_name" in df else empty).astype("string").str.strip()
     unit = (df["unit"] if "unit" in df else empty).astype("string").str.strip().replace("", pd.NA)
     kind = code.map(codelists.LOINC_LAB)
-    keep = kind.notna().astype(bool)
+    in_list = kind.notna().astype(bool)
+    txt = test.fillna("")
+    other_by_name = ((kind.eq("hba1c") & txt.str.contains(LAB_EAG_NAME))
+                     | (kind.eq("fpg") & txt.str.contains(LAB_RANDOM_NAME))).fillna(False).astype(bool)
+    keep = in_list & ~other_by_name
     shown = code.fillna("<empty>") + " | " + unit.fillna("") + " | " + test.fillna("")   # ad sona: 80 karakterde kesilir
     vc += _value_counts(name, "study lab: code | unit | name", shown[keep], top=40)
-    look = ~keep & test.fillna("").str.contains(GLYCAEMIC_NAME).astype(bool)
+    if other_by_name.any():
+        vc += _value_counts(name, "study code, other test by name (dropped): code | unit | name", shown[other_by_name])
+        vc.append({"source": name, "field": "rows dropped: study code, other test by name", "value": "<n rows>",
+                   "n_rows": int(other_by_name.sum())})
+    look = ~in_list & txt.str.contains(GLYCAEMIC_NAME).astype(bool)
     vc += _value_counts(name, "glycaemic-looking tests (dropped): code | unit | name", shown[look], top=40)
-    vc += _value_counts(name, "other tests (dropped): code | unit | name", shown[~keep & ~look], top=60)
-    if (~keep).any():
+    vc += _value_counts(name, "other tests (dropped): code | unit | name", shown[~in_list & ~look], top=60)
+    if (~in_list).any():
         vc.append({"source": name, "field": "rows dropped: not a study lab", "value": "<n rows>",
-                   "n_rows": int((~keep).sum())})
+                   "n_rows": int((~in_list).sum())})
     labs = df[keep].assign(code=code[keep], unit=unit[keep]).rename(columns={"code": "loinc"})
     vc += [{"source": name, "field": "value by kind | unit", "value": label, "n_rows": n}
            for label, n in lab_value_stats(labs, kind[keep], unit[keep])]
