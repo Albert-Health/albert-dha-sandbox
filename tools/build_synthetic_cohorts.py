@@ -1,12 +1,12 @@
-"""Sentetik test verisinden kanonik C1 / C2 / C3 kohortlarını üretir.
+"""Builds the canonical C1 / C2 / C3 cohorts from the synthetic test data.
 
-Kullanım:  python tools/build_synthetic_cohorts.py
-Girdi:     data/synthetic/raw/*.csv
-Çıktı:     data/canonical/synthetic/{c1,c2,c3}/*.csv  + build_report.json
+Usage:   python tools/build_synthetic_cohorts.py
+Input:   data/synthetic/raw/*.csv
+Output:  data/canonical/synthetic/{c1,c2,c3}/*.csv  + build_report.json
 
-Amaç: enclave'de NABIDH'in vereceği üç kohortu taklit ederek tüm pipeline'ı
-gerçek veri gelmeden test etmek. Seçim kuralları NABIDH'e iletilen
-spesifikasyonlarla aynıdır (Interim Data Assessment, Cohort Spec v2).
+Goal: test the whole pipeline before real data arrive by emulating the three cohorts
+NABIDH will deliver in the enclave. The selection rules are the same as the
+specifications sent to NABIDH (Interim Data Assessment, Cohort Spec v2).
 """
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ def main() -> None:
 
     sel = cohorts.build_c1_c2(full, PARAMS)
     run.log("C1/C2 selected", **sel["report"])
-    # NABIDH C3'ü v2 spesifikasyonuyla (washout yok) teslim eder; outcome washout (D1) bir analiz
-    # kararıdır ve NB0 / NB2'de uygulanır. Teslimi taklit ederken washout = 0.
+    # NABIDH delivers C3 per the v2 specification (no washout); the outcome washout (D1) is an analysis
+    # decision and is applied in NB0 / NB2. When emulating the delivery, washout = 0.
     c3 = cohorts.build_c3(full, dict(PARAMS, outcome_washout_days=0))
     run.log("C3 built (delivery emulation, washout 0)", **c3["funnel"])
 

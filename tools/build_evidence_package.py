@@ -1,14 +1,14 @@
-"""Evidence package derleyici (KPI: Evidence Package Completeness — Critical).
+"""Evidence package builder (KPI: Evidence Package Completeness — Critical).
 
-Son başarılı NB0 / NB1 / NB2 / KPI çalıştırmalarının manifest'lerini ve çıktılarını,
-docs/evidence_package şablonlarını ve kod parmak izini tek klasörde toplar; dosya hash listesi
-ve bölüm kontrol listesi üretir.
+Collects the manifests and outputs of the latest successful NB0 / NB1 / NB2 / KPI runs,
+the docs/evidence_package templates and the code fingerprint into one folder; produces a file hash list
+and a section checklist.
 
-Kullanım:  python tools/build_evidence_package.py
-Çıktı:     outputs/evidence_package_<UTC>/  (index.md, files_sha256.csv, checklist.json, ...)
+Usage:   python tools/build_evidence_package.py
+Output:  outputs/evidence_package_<UTC>/  (index.md, files_sha256.csv, checklist.json, ...)
 
-"Complete" sayılması için: dört çalıştırma da mevcut olmalı VE şablonlarda doldurulmamış
-{{...}} alanı kalmamalı (doldurulmuş şablonlar docs/evidence_package/filled/ altına konur).
+To count as "Complete": all four runs must exist AND no unfilled {{...}} field may remain
+in the templates (filled templates go under docs/evidence_package/filled/).
 """
 from __future__ import annotations
 
@@ -78,12 +78,12 @@ def main() -> None:
     files = sorted(p for p in out.rglob("*") if p.is_file())
     lines = ["path,bytes,sha256"] + [f"{p.relative_to(out)},{p.stat().st_size},{sha256_file(p)}" for p in files]
     (out / "files_sha256.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    index = [f"# Evidence package {ts}", "", f"- Bölümler: {checklist['complete_sections']}/{checklist['total_sections']} tamam",
-             f"- Dosya sayısı: {len(files)} (hash listesi: files_sha256.csv)", "", "| Bölüm | Belge | Eksik alan | Eksik run |",
+    index = [f"# Evidence package {ts}", "", f"- Sections: {checklist['complete_sections']}/{checklist['total_sections']} complete",
+             f"- Files: {len(files)} (hash list: files_sha256.csv)", "", "| Section | Document | Missing fields | Missing runs |",
              "|---|---|---|---|"]
     for s, v in checklist["sections"].items():
         index.append(f"| {s} | {v['document']} | {len(v['unfilled_placeholders'])} | {', '.join(v['missing_runs']) or '—'} |")
-    index += ["", "Run'lar: " + ", ".join(f"{k}={v}" for k, v in checklist["runs"].items())]
+    index += ["", "Runs: " + ", ".join(f"{k}={v}" for k, v in checklist["runs"].items())]
     (out / "index.md").write_text("\n".join(index) + "\n", encoding="utf-8")
 
     for f in ["index.md", "checklist.json", "files_sha256.csv"]:

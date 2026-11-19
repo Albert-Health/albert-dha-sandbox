@@ -5,18 +5,18 @@
 # ---
 
 # %% [markdown]
-# # NB0 — Veri profili (C1 / C2 / C3)
+# # NB0 — Data profile (C1 / C2 / C3)
 #
-# **Amaç:** DHA enclave'de verilen verinin içinde gerçekten ne var, ne yok — analizden önce.
+# **Goal:** what the data delivered in the DHA enclave actually contains, and what it lacks — before any analysis.
 #
-# - Şema doğrulama (kanonik format)
-# - Tablo hacimleri, tarih aralıkları, tesis temsili
-# - İstenen kodlar vs gelen kodlar (KPI: *Applicant Data Requirement Framework Match*)
-# - 8 çekirdek değişkenin tekil ve birlikte tamlığı (KPI: *Data Completeness ≥ %90*)
-# - Lab dağılımları, zaman çizgisi
+# - Schema validation (canonical format)
+# - Table volumes, date ranges, facility representation
+# - Requested codes vs received codes (KPI: *Applicant Data Requirement Framework Match*)
+# - Single and joint completeness of the 8 core variables (KPI: *Data Completeness ≥ 90%*)
+# - Lab distributions, timeline
 #
-# Çalıştırma: `python notebooks/00_data_profile.py` veya Jupyter/VS Code'da hücre hücre.
-# Tüm çıktılar `outputs/<run_id>/nb00/` altına yazılır ve audit log'a kaydedilir.
+# Run: `python notebooks/00_data_profile.py`, or cell by cell in Jupyter/VS Code.
+# All outputs are written under `outputs/<run_id>/nb00/` and recorded in the audit log.
 
 # %%
 import json
@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import matplotlib
 
-if "ipykernel" not in sys.modules:   # script olarak çalışırken ekran gerekmez
+if "ipykernel" not in sys.modules:   # no display needed when run as a script
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -40,31 +40,31 @@ from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lrs
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # in the enclave: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 pd.set_option("display.width", 160)
 
 P = dict(PARAMS)
-# Duyarlılık çalıştırmaları için: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (audit'e yazılır)
+# For sensitivity runs: SANDBOX_PARAMS='{"predictor_lookback_days": 730}' (written to the audit)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
 run = Run("nb00_data_profile", params=P, source=SOURCE)
-present = schema.require_cohorts(CANONICAL_DIR, SOURCE, COHORTS, require_all=False)   # Faz 1: yalnız C1 / C2
+present = schema.require_cohorts(CANONICAL_DIR, SOURCE, COHORTS, require_all=False)   # Phase 1: C1 / C2 only
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in present])
 data = {c: schema.read_dataset(CANONICAL_DIR, SOURCE, c) for c in present}
 run.log("datasets loaded", source=SOURCE, cohorts=list(data))
 print({c: d.n_patients for c, d in data.items()})
 
 # %% [markdown]
-# ## 1. Şema doğrulama
+# ## 1. Schema validation
 
 # %%
 val = pd.concat([schema.validate(d).assign(cohort=c) for c, d in data.items()], ignore_index=True)
 issues = val[val["severity"] != "INFO"]
-run.save_table(val, "nb00/schema_validation.csv", "Şema ve veri kalitesi kontrolleri")
-print(issues if len(issues) else "Uyarı/hata yok")
-assert not (val["severity"] == "ERROR").any(), "Şema hatası var — adapter'ı düzeltmeden devam etme"
+run.save_table(val, "nb00/schema_validation.csv", "Schema and data quality checks")
+print(issues if len(issues) else "No warnings/errors")
+assert not (val["severity"] == "ERROR").any(), "Schema error — fix the adapter before continuing"
 
 # %% [markdown]
-# ## 2. Hacim, tarih aralığı, tesis temsili
+# ## 2. Volume, date range, facility representation
 
 # %%
 rows = []
@@ -74,7 +74,7 @@ for c, d in data.items():
                      "date_min": df["date"].min() if "date" in df else None,
                      "date_max": df["date"].max() if "date" in df else None})
 volume = pd.DataFrame(rows)
-run.save_table(volume, "nb00/volume.csv", "Tablo hacimleri ve tarih aralıkları")
+run.save_table(volume, "nb00/volume.csv", "Table volumes and date ranges")
 print(volume.to_string(index=False))
 
 fac = []
@@ -84,11 +84,11 @@ for c, d in data.items():
                 "top_facility_share_pct": round(100 * vc.iloc[0] / vc.sum(), 1) if len(vc) else None,
                 "facility_missing_pct": round(100 * d["patients"]["facility_id"].isna().mean(), 1)})
 fac = pd.DataFrame(fac)
-run.save_table(fac, "nb00/facility_representation.csv", "Tesis temsili")
+run.save_table(fac, "nb00/facility_representation.csv", "Facility representation")
 print(fac.to_string(index=False))
 
 # %% [markdown]
-# ## 3. Demografi
+# ## 3. Demographics
 
 # %%
 demo = []
@@ -101,28 +101,28 @@ for c, d in data.items():
                  "age_25_84_pct": round(100 * age.between(25, 84.999).mean(), 1),
                  "male_pct": round(100 * (p["sex"] == "Male").mean(), 1)})
 demo = pd.DataFrame(demo)
-run.save_table(demo, "nb00/demographics.csv", "Demografi özeti")
+run.save_table(demo, "nb00/demographics.csv", "Demographics summary")
 print(demo.to_string(index=False))
 
-# Etnik grup kaynağı P["ethnicity_source"] (uyruk veya etnisite); grup eşlemesi NB1'de
+# Ethnic group source P["ethnicity_source"] (nationality or ethnicity); group mapping is in NB1
 eth_col = codelists.ETHNICITY_SOURCE_COLUMN[P["ethnicity_source"]]
 eth = pd.concat({c: d["patients"][eth_col].fillna("<missing>").value_counts()
                  for c, d in data.items()}, axis=1).fillna(0).astype(int)
 eth_out = sdc.suppress_small_counts(eth.rename_axis(eth_col).reset_index(), list(data))
 run.save_table(eth_out, "nb00/ethnicity_categories.csv",
-               f"Etnik grup kaynağı ({eth_col}) kategorileri (küçük hücre bastırılmış)")
+               f"Ethnic group source ({eth_col}) categories (small cells suppressed)")
 print(eth_out.to_string(index=False))
 
 fig, axes = plt.subplots(1, len(data), figsize=(5 * len(data), 4), squeeze=False)
 for ax, (c, d) in zip(axes[0], data.items()):
     end = cohorts.data_end_date(d)
     ((end - d["patients"]["date_of_birth"]).dt.days / 365.25).plot.hist(bins=30, ax=ax, color="#4C72B0")
-    ax.set_title(f"{c.upper()} — yaş (veri sonu)")
+    ax.set_title(f"{c.upper()} — age (data end)")
 fig.tight_layout()
-run.save_figure(fig, "nb00/age_hist.png", "Yaş dağılımı")
+run.save_figure(fig, "nb00/age_hist.png", "Age distribution")
 
 # %% [markdown]
-# ## 4. İstenen kodlar vs gelen kodlar (Framework Match)
+# ## 4. Requested codes vs received codes (Framework Match)
 
 # %%
 req = codelists.requested_codes_table()
@@ -150,10 +150,10 @@ for c, d in data.items():
 fm = pd.DataFrame(match_rows)
 fm["received"] = fm["patients_with_any"] > 0
 run.save_table(sdc.suppress_small_counts(fm, ["patients_with_any"]), "nb00/framework_match.csv",
-               "İstenen kod grupları — gelen veride hasta sayısı")
+               "Requested code groups — patients in the received data")
 print(fm.pivot_table(index=["domain", "group"], columns="cohort", values="pct_patients").to_string())
 
-# Gelen ama istenmeyen / eşlenemeyen kodlar
+# Received but not requested / unmapped codes
 unmapped = []
 for c, d in data.items():
     o = d["observations"]
@@ -164,16 +164,16 @@ for c, d in data.items():
     for k, v in labs_unknown.items():
         unmapped.append({"cohort": c, "item": f"lab LOINC {k}", "rows": int(v)})
 unmapped = pd.DataFrame(unmapped, columns=["cohort", "item", "rows"])
-run.save_table(unmapped, "nb00/unmapped_codes.csv", "Kod listesinde olmayan gelen kodlar")
-print(unmapped if len(unmapped) else "Eşlenemeyen kod yok")
+run.save_table(unmapped, "nb00/unmapped_codes.csv", "Received codes not in the code lists")
+print(unmapped if len(unmapped) else "No unmapped codes")
 
 # %% [markdown]
-# ## 5. 8 çekirdek değişkenin tamlığı
+# ## 5. Completeness of the 8 core variables
 #
-# C1/C2: veri sonu itibarıyla tüm geçmiş ("as currently recorded").
-# C3: index tarihinde, prediktör lookback = `P["predictor_lookback_days"]`.
-# Bel çevresi yalnız etkin Leicester varyantı isterse (`lrs_variant = "assessment_2010"`) raporlanır;
-# varsayılan LPRS (Gray 2012) bel istemez (K-LRS).
+# C1/C2: full history as of the data end ("as currently recorded").
+# C3: at the index date, predictor lookback = `P["predictor_lookback_days"]`.
+# Waist circumference is reported only if the active Leicester variant needs it (`lrs_variant = "assessment_2010"`);
+# the default LPRS (Gray 2012) does not need waist (K-LRS).
 
 # %%
 comp_rows, joint_rows, snaps = [], [], {}
@@ -200,9 +200,9 @@ for c, d in data.items():
                            "joint_lrs_pct": round(100 * s["ok_lrs"].mean(), 1)})
 comp = pd.DataFrame(comp_rows)
 joint = pd.DataFrame(joint_rows)
-run.save_table(comp, "nb00/core_variable_completeness.csv", "Değişken bazında tamlık")
+run.save_table(comp, "nb00/core_variable_completeness.csv", "Completeness per variable")
 run.save_table(sdc.suppress_small_counts(joint, ["joint_core8_n", "joint_lrs_n"]),
-               "nb00/joint_completeness.csv", f"Birlikte tamlık (8 çekirdek, {lrs.label(P)})")
+               "nb00/joint_completeness.csv", f"Joint completeness (8 core, {lrs.label(P)})")
 print(comp[comp["group"] == "all"].pivot(index="variable", columns="cohort", values="complete_pct").to_string())
 print(joint.to_string(index=False))
 
@@ -210,12 +210,12 @@ bmi_src = pd.concat({c: s["bmi_source"].fillna("missing").value_counts(normalize
                      for c, s in snaps.items()}, axis=1)
 smk_src = pd.concat({c: s["smoking_source"].fillna("missing").value_counts(normalize=True).round(3) * 100
                      for c, s in snaps.items()}, axis=1)
-run.save_table(bmi_src.reset_index(names="bmi_source"), "nb00/bmi_source.csv", "BMI kaynağı (%)")
-run.save_table(smk_src.reset_index(names="smoking_source"), "nb00/smoking_source.csv", "Sigara kaynağı (%)")
+run.save_table(bmi_src.reset_index(names="bmi_source"), "nb00/bmi_source.csv", "BMI source (%)")
+run.save_table(smk_src.reset_index(names="smoking_source"), "nb00/smoking_source.csv", "Smoking source (%)")
 print(bmi_src, "\n", smk_src)
 
 # %% [markdown]
-# ## 6. Lab dağılımları ve zaman çizgisi
+# ## 6. Lab distributions and timeline
 
 # %%
 fig, axes = plt.subplots(len(data), 2, figsize=(11, 3.2 * len(data)), squeeze=False)
@@ -230,18 +230,18 @@ for i, (c, d) in enumerate(data.items()):
             ax.axvline(x, ls="--", color="k", lw=.8)
         ax.set_title(f"{c.upper()} — {kind} (n={len(v):,})")
 fig.tight_layout()
-run.save_figure(fig, "nb00/lab_distributions.png", "HbA1c / FPG dağılımları")
+run.save_figure(fig, "nb00/lab_distributions.png", "HbA1c / FPG distributions")
 
 fig, ax = plt.subplots(figsize=(11, 3.5))
 for c, d in data.items():
     s = pd.concat([d[t]["date"] for t in ("conditions", "labs", "observations", "medications")])
     s.dt.to_period("M").value_counts().sort_index().plot(ax=ax, label=c.upper())
-ax.set_title("Aylık kayıt sayısı")
+ax.set_title("Records per month")
 ax.legend()
-run.save_figure(fig, "nb00/timeline.png", "Aylık kayıt hacmi")
+run.save_figure(fig, "nb00/timeline.png", "Monthly record volume")
 
 # %% [markdown]
-# ## 7. C3 takip yapısı (incident tasarımın fizibilitesi)
+# ## 7. C3 follow-up structure (feasibility of the incident design)
 
 # %%
 if "c3" in snaps:
@@ -256,16 +256,16 @@ if "c3" in snaps:
         "followup_ge_fallback_pct": round(100 * (s["followup_years"] >= P["horizon_years_fallback"]).mean(), 1),
         "n_followup_glycaemic_median": float(s["n_followup_glycaemic"].median()),
     }])
-    run.save_table(c3_sum, "nb00/c3_followup_summary.csv", "C3 takip ve olay özeti")
+    run.save_table(c3_sum, "nb00/c3_followup_summary.csv", "C3 follow-up and event summary")
     print(c3_sum.T)
     ev = s.loc[s["incident_diabetes"], "incident_evidence"].value_counts()
-    run.save_table(ev.reset_index(), "nb00/c3_incident_evidence.csv", "İlk olay kanıt tipi")
-    # Olay index'e ne kadar yakın? (çok yakın olay = muhtemelen başlangıçta tanı konmamış diyabet)
+    run.save_table(ev.reset_index(), "nb00/c3_incident_evidence.csv", "Evidence type of the first event")
+    # How close is the event to the index? (a very close event = probably diabetes undiagnosed at baseline)
     dte = (s["incident_date"] - s["index_date"]).dt.days.dropna()
     bins = pd.cut(dte, [0, 30, 90, 180, 365, 730, 100000],
-                  labels=["≤30g", "31–90g", "91–180g", "181–365g", "1–2y", ">2y"]).value_counts().sort_index()
+                  labels=["≤30d", "31–90d", "91–180d", "181–365d", "1–2y", ">2y"]).value_counts().sort_index()
     run.save_table(bins.rename_axis("days_to_event").reset_index(name="events"), "nb00/c3_days_to_event.csv",
-                   "İlk olaya kadar geçen gün dağılımı")
+                   "Distribution of days to the first event")
     print(bins)
     sens = []
     for w in (0, 90, 180):
@@ -274,17 +274,17 @@ if "c3" in snaps:
                      "events": int(r["cohort"]["incident_diabetes"].sum()),
                      "followup_years_median": round(r["cohort"]["followup_years"].median(), 2)})
     sens = pd.DataFrame(sens)
-    run.save_table(sens, "nb00/c3_washout_sensitivity.csv", "Outcome washout duyarlılığı")
+    run.save_table(sens, "nb00/c3_washout_sensitivity.csv", "Outcome washout sensitivity")
     print(sens.to_string(index=False))
 
     fig, ax = plt.subplots(figsize=(7, 3.5))
     s["followup_years"].plot.hist(bins=30, ax=ax, color="#55A868")
     ax.axvline(P["horizon_years"], ls="--", color="k")
-    ax.set_title("C3 takip süresi (yıl)")
-    run.save_figure(fig, "nb00/c3_followup_hist.png", "C3 takip süresi")
+    ax.set_title("C3 follow-up time (years)")
+    run.save_figure(fig, "nb00/c3_followup_hist.png", "C3 follow-up time")
 
 # %% [markdown]
-# ## 8. KPI ön okuması
+# ## 8. KPI preview
 
 # %%
 kpi = []
@@ -295,18 +295,18 @@ for c in data:
                 "target": ">= 90%", "actual": f"{sub['complete_pct'].min():.1f}%",
                 "met": bool(sub["complete_pct"].min() >= 90),
                 "weakest_variable": sub.sort_values("complete_pct").iloc[0]["variable"]})
-# Gerekli gruplar: 8 çekirdek değişken + statü/outcome kodları + etkin Leicester varyantının ek girdisi
-# (bel çevresi yalnız assessment_2010'da; LPRS istemez — K-LRS, A5).
+# Required groups: 8 core variables + status/outcome codes + the extra input of the active Leicester variant
+# (waist circumference only in assessment_2010; LPRS does not need it — K-LRS, A5).
 required_groups = ["t2d", "prediabetes", "hypertension", "cvd", "family_history_dm", "antihypertensive",
                    "antidiabetic", "hba1c (4548-4)", "fpg (1558-6)", "bmi", "height_cm", "weight_kg",
                    "smoking_status"] + (["waist_cm"] if lrs.needs_waist(P) else [])
 not_received = fm[(~fm["received"]) & fm["group"].isin(required_groups)]
 kpi.append({"kpi": "Applicant Data Requirement Framework Match", "cohort": "all", "target": "Match",
-            "actual": "Match" if not_received.empty else f"{not_received['group'].nunique()} grup eksik",
+            "actual": "Match" if not_received.empty else f"{not_received['group'].nunique()} groups missing",
             "met": not_received.empty,
             "weakest_variable": ", ".join(sorted(not_received["group"].unique())[:6])})
 kpi = pd.DataFrame(kpi)
-run.save_table(kpi, "nb00/kpi_preview.csv", "NB0'dan beslenen KPI'lar")
+run.save_table(kpi, "nb00/kpi_preview.csv", "KPIs fed by NB0")
 core_min = allc[allc["variable"].isin(codelists.CORE_VARIABLES)].groupby("cohort")["complete_pct"].min()
 run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
                "data_completeness_weakest": {c: r["weakest_variable"] for c, r in
@@ -317,7 +317,7 @@ run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
                "lrs_variant": P["lrs_variant"],
                "schema_errors": int((val["severity"] == "ERROR").sum()),
                "schema_warnings": int((val["severity"] == "WARN").sum())},
-              "nb00/kpi_values.json", "NB0 KPI girdileri")
+              "nb00/kpi_values.json", "NB0 KPI inputs")
 print(kpi.to_string(index=False))
 
 # %%

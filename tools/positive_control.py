@@ -1,17 +1,18 @@
-"""Positive control: bilinen bir etnisite etkisini sentetik C3'e enjekte edip NB2 alt-grup O:E
-analizinin onu yakaladığını gösterir.
+"""Positive control: injects a known ethnicity effect into synthetic C3 and shows that the NB2
+subgroup O:E analysis picks it up.
 
-Neden: sentetik veride outcome etnisiteden bağımsız üretildi; asıl hipotez (Emirati / Gulf Arab
-grubunda QDiabetes'in riski düşük tahmin etmesi) bu veride test edilemez. Burada hedef grupta
-kümülatif insidans ≈ PC_FACTOR katına çıkarılır (olaysız hastalara takip içinde diyabetik HbA1c eklenir).
+Why: in the synthetic data the outcome was generated independently of ethnicity, so the actual hypothesis
+(QDiabetes under-predicting risk in the Emirati / Gulf Arab group) cannot be tested on it. Here the
+cumulative incidence in the target group is raised ≈ PC_FACTOR-fold (a diabetic HbA1c is added during
+follow-up to patients without an event).
 
-Kullanım:  python tools/positive_control.py
-Girdi:     data/canonical/synthetic/c3 (değiştirilmez)
-Çıktı:     data/canonical/synthetic_pc/c3 + outputs/<run_id>/positive_control/*
-           NB2'yi bu veriyle görmek için: SANDBOX_SOURCE=synthetic_pc python notebooks/02_c3_benchmark.py
-Başarı:    r = O:E(hedef) / O:E(diğer). r(enjekte) / r(orijinal) ≥ 1.5 → PASS; aksi halde çıkış kodu 1.
-Not:       r(orijinal) 1'den büyük çıkabilir: sentetik outcome etnisiteden bağımsızken QDiabetes "Other"
-           kategorisine (Emirati / Gulf Arab) Güney Asya'ya göre düşük risk verir — eşlemenin yapısal etkisi.
+Usage:    python tools/positive_control.py
+Input:    data/canonical/synthetic/c3 (left unchanged)
+Output:   data/canonical/synthetic_pc/c3 + outputs/<run_id>/positive_control/*
+          To see NB2 on this data: SANDBOX_SOURCE=synthetic_pc python notebooks/02_c3_benchmark.py
+Success:  r = O:E(target) / O:E(others). r(injected) / r(original) ≥ 1.5 → PASS; otherwise exit code 1.
+Note:     r(original) can exceed 1: while the synthetic outcome is independent of ethnicity, QDiabetes gives
+          the "Other" category (Emirati / Gulf Arab) a lower risk than South Asian — a structural effect of the mapping.
 """
 from __future__ import annotations
 
@@ -82,14 +83,14 @@ def main() -> int:
     run.log("injected events", n=n_inj, target=TARGET, factor=PC_FACTOR)
 
     res = pd.concat([group_oe(base, p).assign(data="original"), group_oe(pc, p).assign(data="positive_control")])
-    run.save_table(res, "positive_control/group_oe.csv", "Hedef vs diğer O:E (Kol 2a)")
+    run.save_table(res, "positive_control/group_oe.csv", "Target vs others O:E (Arm 2a)")
     ratio = {k: float(v.set_index("group").loc["target (Emirati+Gulf Arab)", "oe_ratio"] /
                       v.set_index("group").loc["others", "oe_ratio"]) for k, v in res.groupby("data")}
     lift = ratio["positive_control"] / ratio["original"]
     passed = lift >= 1.5
     summary = {"injected_events": n_inj, "oe_ratio_target_vs_others": ratio, "detection_lift": lift,
-               "pass": passed, "criterion": "r(enjekte) / r(orijinal) ≥ 1.5"}
-    run.save_json(summary, "positive_control/summary.json", "Positive control sonucu")
+               "pass": passed, "criterion": "r(injected) / r(original) ≥ 1.5"}
+    run.save_json(summary, "positive_control/summary.json", "Positive control result")
     run.finish("success" if passed else "positive_control_failed")
     print(res.to_string(index=False))
     print(json.dumps(summary, indent=2, ensure_ascii=False))

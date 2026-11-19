@@ -5,26 +5,26 @@
 # ---
 
 # %% [markdown]
-# # NB1 — C1 / C2 fizibilite (kesitsel)
+# # NB1 — C1 / C2 feasibility (cross-sectional)
 #
-# **Kapsam:** Adım 1 — pozitif kohortlar (T2DM + prediyabet). Veri yapısı ve tamlık kontrolü.
+# **Scope:** Step 1 — positive cohorts (T2DM + prediabetes). Data structure and completeness check.
 #
-# Study Flow 1. ve 2. basamak. **C1'in birincil amacı:** diyabetli / prediyabetli olduğu bilinen
-# hastaları QDiabetes ve Leicester skorunun ne oranda "yüksek risk" diye yakaladığı (duyarlılık). **C2:** kayıt
-# tamlığı şartı olmadan değişkenlerin NABIDH'te ne kadar dolu olduğu (completeness).
+# Study Flow steps 1 and 2. **C1's primary aim:** the share of patients known to have diabetes / prediabetes
+# that QDiabetes and the Leicester score flag as "high risk" (sensitivity). **C2:** how well the variables are
+# filled in NABIDH without a record-completeness requirement (completeness).
 #
-# > Tüm hastalar pozitif vakadır, negatif vaka yoktur → yalnızca **duyarlılık** hesaplanır.
-# > Özgüllük, PPV, ayrım gücü (C-index, AUROC) ve kalibrasyon burada HESAPLANMAZ (C3 / NB2).
+# > All patients are positive cases, there are no negative cases → only **sensitivity** is computed.
+# > Specificity, PPV, discrimination (C-index, AUROC) and calibration are NOT computed here (C3 / NB2).
 #
-# - 8 çekirdek değişkenin tekil ve birlikte tamlığı (T2DM vs prediyabet)
-# - C1 (tam kayıt) vs C2 (rastgele) seçilim etkisi: standardize ortalama farkı (SMD)
-# - QDiabetes-2018 A ve Leicester skoru hesaplanabilirlik oranı, eksiklik nedenleri, skor dağılımları
-#   Leicester varyantı `PARAMS["lrs_variant"]`: varsayılan LPRS (Gray 2012, bel çevresi yok)
-#   [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat — K-LRS]; LRA 2010 duyarlılık için.
-# - C1 (ve karşılaştırma için C2) yakalama oranı (duyarlılık) — §4
+# - Single and joint completeness of the 8 core variables (T2DM vs prediabetes)
+# - C1 (complete records) vs C2 (random) selection effect: standardised mean difference (SMD)
+# - QDiabetes-2018 A and Leicester score computability, reasons for missingness, score distributions
+#   Leicester variant `PARAMS["lrs_variant"]`: default LPRS (Gray 2012, no waist circumference)
+#   [DECIDED: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat — K-LRS]; LRA 2010 for sensitivity.
+# - C1 (and C2 for comparison) detection rate (sensitivity) — §4
 #
-# Referans tarih: tamlık ve seçilim etkisi için veri sonu ("as currently recorded"), tüm geçmiş.
-# Duyarlılık iki referansla yan yana raporlanır (veri sonu / ilk kanıt günü) [KARAR BEKLİYOR — D22].
+# Reference date: for completeness and selection effect, the data end ("as currently recorded"), full history.
+# Sensitivity is reported side by side for two references (data end / first evidence day) [DECISION PENDING — D22].
 
 # %%
 import json
@@ -49,9 +49,9 @@ from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lprs, lrs, qdiabetes2018a as qd
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # in the enclave: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 P = dict(PARAMS)
-P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))   # duyarlılık çalıştırmaları (audit'e yazılır)
+P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))   # sensitivity runs (written to the audit)
 run = Run("nb01_c1_c2_feasibility", params=P, source=SOURCE)
 schema.require_cohorts(CANONICAL_DIR, SOURCE, ("c1", "c2"))
 run.add_inputs([CANONICAL_DIR / SOURCE / c for c in ("c1", "c2")])
@@ -70,10 +70,10 @@ for c, d in data.items():
     run.log(f"{c} snapshot", n=len(s), not_in_positive_pool=excluded)
 print({c: len(s) for c, s in snaps.items()})
 LRS_LABEL, LRS_THR = lrs.label(P), lrs.threshold(P)
-print("Leicester varyantı:", LRS_LABEL, "| yüksek risk eşiği:", LRS_THR)
+print("Leicester variant:", LRS_LABEL, "| high-risk threshold:", LRS_THR)
 
 # %% [markdown]
-# ## 1. Tamlık — değişken bazında ve birlikte (T2DM vs prediyabet)
+# ## 1. Completeness — per variable and joint (T2DM vs prediabetes)
 
 # %%
 ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
@@ -83,7 +83,7 @@ for c, s in snaps.items():
         for col in ok_cols:
             rows.append({"cohort": c, "group": grp, "variable": col[3:], "n": len(g),
                          "complete_pct": round(100 * g[col].astype(bool).mean(), 1)})
-        if lrs.needs_waist(P):          # yalnız LRA 2010 (bel zorunlu); LPRS bel istemez
+        if lrs.needs_waist(P):          # LRA 2010 only (waist required); LPRS does not need waist
             rows.append({"cohort": c, "group": grp, "variable": "waist (LRS)", "n": len(g),
                          "complete_pct": round(100 * g["waist_cm"].notna().mean(), 1)})
         joint.append({"cohort": c, "group": grp, "n": len(g),
@@ -91,15 +91,15 @@ for c, s in snaps.items():
                       "joint_lrs_n": int(g["ok_lrs"].sum()), "joint_lrs_pct": round(100 * g["ok_lrs"].mean(), 1)})
 comp = pd.DataFrame(rows)
 joint = pd.DataFrame(joint)
-run.save_table(comp, "nb01/completeness_by_variable.csv", "C1/C2 değişken tamlığı (T2DM / prediyabet)")
+run.save_table(comp, "nb01/completeness_by_variable.csv", "C1/C2 variable completeness (T2DM / prediabetes)")
 run.save_table(sdc.suppress_small_counts(joint, ["joint_core8_n", "joint_lrs_n"]),
-               "nb01/joint_completeness.csv", "C1/C2 birlikte tamlık")
+               "nb01/joint_completeness.csv", "C1/C2 joint completeness")
 print(comp.pivot_table(index="variable", columns=["cohort", "group"], values="complete_pct").to_string())
 print(joint.to_string(index=False))
 
 # %% [markdown]
-# ## 2. Seçilim etkisi: C1 (tam kayıt) vs C2 (rastgele)
-# SMD |d| > 0.1 anlamlı dengesizlik olarak işaretlenir.
+# ## 2. Selection effect: C1 (complete records) vs C2 (random)
+# SMD |d| > 0.1 is flagged as meaningful imbalance.
 
 # %%
 def smd(a: pd.Series, b: pd.Series, binary: bool) -> float:
@@ -137,7 +137,7 @@ for col in f1.columns:
                 "smd": round(smd(f1[col], f2[col], binary), 3)})
 sel = pd.DataFrame(sel)
 sel["imbalance"] = sel["smd"].abs() > 0.1
-run.save_table(sel, "nb01/selection_effect_smd.csv", "C1 vs C2 standardize ortalama farkları")
+run.save_table(sel, "nb01/selection_effect_smd.csv", "C1 vs C2 standardised mean differences")
 print(sel.to_string(index=False))
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
@@ -147,14 +147,14 @@ for ax, col, bins in [(axes[0], "age", 30), (axes[1], "bmi", 30)]:
     ax.set_title(f"{col} — C1 vs C2")
     ax.legend()
 fig.tight_layout()
-run.save_figure(fig, "nb01/selection_age_bmi.png", "C1 vs C2 yaş/BMI dağılımı")
+run.save_figure(fig, "nb01/selection_age_bmi.png", "C1 vs C2 age/BMI distribution")
 
 # %% [markdown]
-# ## 3. Skor hesaplanabilirliği ve dağılımları
-# QDiabetes: indirgenmiş Model A (`PARAMS["qd_force_reduced_model"]`), 10 yıllık risk.
-# Leicester: `lrs_variant`. LPRS (varsayılan) = yaş, cinsiyet, etnisite (BME), BMI, aile öyküsü,
-# antihipertansif ilaç — bel çevresi yok; skor doğrusal öngörücüdür (mutlak risk değil). LRA 2010: bel zorunlu.
-# `lrs_outside_dev_age_pct`: LPRS geliştirme yaş aralığı (40–75) dışındaki hastalar (ekstrapolasyon).
+# ## 3. Score computability and distributions
+# QDiabetes: reduced Model A (`PARAMS["qd_force_reduced_model"]`), 10-year risk.
+# Leicester: `lrs_variant`. LPRS (default) = age, sex, ethnicity (BME), BMI, family history,
+# antihypertensive medication — no waist circumference; the score is a linear predictor (not an absolute risk). LRA 2010: waist required.
+# `lrs_outside_dev_age_pct`: patients outside the LPRS development age range (40–75) (extrapolation).
 
 # %%
 comp_rows, reasons = [], []
@@ -175,8 +175,8 @@ for c, s in snaps.items():
                             "pct": round(100 * v / len(s), 1)})
 computability = pd.DataFrame(comp_rows)
 reasons = pd.DataFrame(reasons, columns=["cohort", "score", "reason", "n", "pct"])
-run.save_table(computability, "nb01/score_computability.csv", f"QDiabetes / {LRS_LABEL} hesaplanabilirlik")
-run.save_table(sdc.suppress_small_counts(reasons, ["n"]), "nb01/score_missing_reasons.csv", "Hesaplanamama nedenleri")
+run.save_table(computability, "nb01/score_computability.csv", f"QDiabetes / {LRS_LABEL} computability")
+run.save_table(sdc.suppress_small_counts(reasons, ["n"]), "nb01/score_missing_reasons.csv", "Reasons a score could not be computed")
 print(computability.to_string(index=False))
 print(reasons.to_string(index=False))
 
@@ -186,15 +186,15 @@ for c, s in snaps.items():
     if s["lrs_score"].notna().any():
         s["lrs_score"].dropna().plot.hist(bins=range(0, 49, 2) if lrs.VARIANTS[P["lrs_variant"]]["points"] else 30,
                                           ax=axes[1], alpha=0.5, density=True, label=c.upper())
-axes[0].set_title("QDiabetes-2018 A — 10 yıllık risk (%)")
-axes[1].set_title(f"{LRS_LABEL} — skor")
+axes[0].set_title("QDiabetes-2018 A — 10-year risk (%)")
+axes[1].set_title(f"{LRS_LABEL} — score")
 if LRS_THR is not None:
     axes[1].axvline(LRS_THR, ls="--", color="k")
 for ax in axes:
     if ax.get_legend_handles_labels()[0]:
         ax.legend()
 fig.tight_layout()
-run.save_figure(fig, "nb01/score_distributions.png", "Skor dağılımları (yalnızca betimleyici)")
+run.save_figure(fig, "nb01/score_distributions.png", "Score distributions (descriptive only)")
 
 dist = pd.concat([
     s.groupby("status").agg(qd_median_pct=("qd_risk_10y", lambda x: round(100 * x.median(), 2)),
@@ -204,22 +204,22 @@ dist = pd.concat([
                             lrs_high_risk_pct=("lrs_score", lambda x: None if LRS_THR is None else
                                                round(100 * (x >= LRS_THR).sum() / max(x.notna().sum(), 1), 1)))
      .assign(cohort=c, lrs_variant=LRS_LABEL).reset_index() for c, s in snaps.items()])
-run.save_table(dist, "nb01/score_summary.csv", "Skor özetleri (betimleyici)")
+run.save_table(dist, "nb01/score_summary.csv", "Score summaries (descriptive)")
 print(dist.to_string(index=False))
 
 # %% [markdown]
-# ## 4. C1 — bilinen pozitiflerde yakalama oranı (duyarlılık)
-# Study Flow 1. basamağın birincil sorusu: diyabetli / prediyabetli olduğu bilinen hastaların yüzde
-# kaçını skor "yüksek risk" buluyor? C2 karşılaştırma için (tamlık şartı olmayan pozitif örneklem).
-# - Leicester: skor ≥ etkin varyantın eşiği (`lrs.threshold(P)`: LPRS → `lprs_high_risk_threshold`,
-#   D23: şimdilik eşik yok → "Pending"; LRA 2010 → `lrs_high_risk_threshold` = 16). `variant` sütunu
-#   hangi skorun kullanıldığını gösterir. QDiabetes: `horizon_years` riski ≥ `qd_risk_threshold_pct`
-#   (NB2 ile aynı eşik; D5: şimdilik eşik yok → "Pending").
-# - Referans tarihi [KARAR BEKLİYOR — D22]: `data_end` (veri sonu; tamlıkla aynı) ve `first_evidence`
-#   (statüyü belirleyen ilk kanıt günü, o gün dahil; tanı sonrası kayıtlar girmez).
-# - `sens_computable`: yakalanan / skoru hesaplanabilen (Wilson %95 GA). `sens_all`: yakalanan / tüm
-#   hastalar (hesaplanamayan = yakalanmadı).
-# - Kısıt: prevalan vakalar (prospektif değil); C1 tam kayıtlı hastalardır (seçilim etkisi §2).
+# ## 4. C1 — detection rate in known positives (sensitivity)
+# The primary question of Study Flow step 1: what percentage of patients known to have diabetes / prediabetes
+# does the score find "high risk"? C2 for comparison (positive sample without a completeness requirement).
+# - Leicester: score ≥ the active variant's threshold (`lrs.threshold(P)`: LPRS → `lprs_high_risk_threshold`,
+#   D23: no threshold yet → "Pending"; LRA 2010 → `lrs_high_risk_threshold` = 16). The `variant` column
+#   shows which score was used. QDiabetes: `horizon_years` risk ≥ `qd_risk_threshold_pct`
+#   (same threshold as NB2; D5: no threshold yet → "Pending").
+# - Reference date [DECISION PENDING — D22]: `data_end` (data end; same as completeness) and `first_evidence`
+#   (the first evidence day that sets the status, that day included; records after diagnosis are excluded).
+# - `sens_computable`: flagged / score computable (Wilson 95% CI). `sens_all`: flagged / all
+#   patients (not computable = not flagged).
+# - Limitation: prevalent cases (not prospective); C1 are patients with complete records (selection effect §2).
 
 # %%
 h = P["horizon_years"]
@@ -259,17 +259,17 @@ for c, d in data.items():
     run.log(f"{c} detection rate", references=list(cohorts.POSITIVE_REFERENCES))
 detection = pd.DataFrame(det_rows, columns=["cohort", "reference", "group", "score", "variant", "threshold", "n",
                                             "n_computable", "n_flagged", *rate_cols])
-detection["n_flagged"] = detection["n_flagged"].astype("Int64")   # "Pending" (eşiksiz) satırlarda NA
+detection["n_flagged"] = detection["n_flagged"].astype("Int64")   # NA in "Pending" (no-threshold) rows
 det_out =sdc.suppress_rates(detection, "n_flagged", ["n_computable", "n"], rate_cols)
 det_out = sdc.suppress_small_counts(det_out, ["n", "n_computable", "n_flagged"])
 run.save_table(det_out, "nb01/c1_detection_rate.csv",
-               f"Bilinen pozitiflerde yakalama oranı (duyarlılık) — {LRS_LABEL} / QDiabetes, iki referans tarihi")
+               f"Detection rate in known positives (sensitivity) — {LRS_LABEL} / QDiabetes, two reference dates")
 print(detection.to_string(index=False))
 
 # %% [markdown]
-# ## 5. Etnik grup eşlemesi kontrolü (uyruk / etnisite → grup → QDiabetes)
-# Kaynak: `PARAMS["ethnicity_source"]`. "Other (unmapped nationality)" satırları eşleme tablosuna
-# (codelists.NATIONALITY_COUNTRIES) eklenecek adaylardır [karar bekliyor — D6].
+# ## 5. Ethnic group mapping check (nationality / ethnicity → group → QDiabetes)
+# Source: `PARAMS["ethnicity_source"]`. "Other (unmapped nationality)" rows are candidates to add to the
+# mapping table (codelists.NATIONALITY_COUNTRIES) [decision pending — D6].
 
 # %%
 src_name = P["ethnicity_source"]
@@ -278,12 +278,12 @@ eth_map = pd.concat({c: s.groupby([s["ethnicity_source_value"].fillna("<missing>
                      for c, s in snaps.items()}, axis=1).fillna(0).astype(int).reset_index()
 eth_map.columns = [f"{src_name}_raw", "ethnic_group", "qdiabetes_category", *snaps]
 run.save_table(sdc.suppress_small_counts(eth_map, list(snaps)), "nb01/ethnicity_mapping.csv",
-               f"{src_name} → etnik grup → QDiabetes eşlemesi [karar bekliyor]")
+               f"{src_name} → ethnic group → QDiabetes mapping [decision pending]")
 print(eth_map.to_string(index=False))
 
 # %%
 kpi_values = {
-    "c1_achievable_note": "C1 achievable N NABIDH raporundan (build_report / teslim notu)",
+    "c1_achievable_note": "C1 achievable N from the NABIDH report (build_report / delivery note)",
     "joint_core8_pct": {r["cohort"]: r["joint_core8_pct"] for _, r in joint[joint["group"] == "all"].iterrows()},
     "joint_lrs_pct": {r["cohort"]: r["joint_lrs_pct"] for _, r in joint[joint["group"] == "all"].iterrows()},
     "qd_computable_pct": {r["cohort"]: r["qd_computable_pct"] for _, r in computability[computability["group"] == "all"].iterrows()},
@@ -291,11 +291,11 @@ kpi_values = {
     "lrs_variant": P["lrs_variant"], "lrs_label": LRS_LABEL, "lrs_threshold": LRS_THR,
     "selection_effect_max_abs_smd": float(sel["smd"].abs().max()),
     "selection_effect_imbalanced_vars": sel.loc[sel["imbalance"], "variable"].tolist(),
-    # C1 birincil amaç: yakalama oranı (% skoru hesaplanabilenlerde); None = eşik yok / hesaplanamadı
+    # C1 primary aim: detection rate (% among those with a computable score); None = no threshold / not computable
     "c1_detection_pct": {f"{r['reference']}|{r['score']}": None if pd.isna(r["sens_computable"])
                          else float(r["sens_computable"])
                          for _, r in detection[(detection["cohort"] == "c1") & (detection["group"] == "all")].iterrows()},
 }
-run.save_json(kpi_values, "nb01/kpi_values.json", "NB1 KPI girdileri")
+run.save_json(kpi_values, "nb01/kpi_values.json", "NB1 KPI inputs")
 manifest = run.finish()
 print("Run:", run.run_id)

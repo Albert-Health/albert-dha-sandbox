@@ -1,7 +1,7 @@
-"""notebooks/*.py (percent format) → .ipynb. Ek paket gerektirmez.
+"""notebooks/*.py (percent format) → .ipynb. Needs no extra package.
 
-Kullanım:  python tools/py2ipynb.py notebooks/00_data_profile.py
-Kaynak (tek doğruluk kaynağı) .py dosyasıdır; .ipynb türetilmiş çıktıdır ve git'e girmez.
+Usage:  python tools/py2ipynb.py notebooks/00_data_profile.py
+The source (single source of truth) is the .py file; the .ipynb is a derived output and stays out of git.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 def convert(src: Path) -> Path:
     text = src.read_text(encoding="utf-8")
-    # jupytext başlığını at
+    # drop the jupytext header
     text = re.sub(r"\A# ---\n(?:#.*\n)*?# ---\n", "", text)
     cells, cur, kind = [], [], None
 

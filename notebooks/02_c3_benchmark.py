@@ -7,27 +7,27 @@
 # %% [markdown]
 # # NB2 — C3 benchmark (incident T2D)
 #
-# **Kapsam:** Adım 3 — non-diabetic kohortta QDiabetes-2018 A ve LRS'in incident diyabeti
-# tahmin performansı. Üç kol: **Kol 1** QDiabetes olduğu gibi, **Kol 2a** baseline recalibration,
-# **Kol 2b** baseline + eğim recalibration (Kol 3 = UAE modeli, NB3, koşullu). Recalibration,
-# QDiabetes'in ayrı kadın/erkek denklemleri nedeniyle cinsiyete göre katmanlıdır.
+# **Scope:** Step 3 — how well QDiabetes-2018 A and the LRS predict incident diabetes in the
+# non-diabetic cohort. Three arms: **Arm 1** QDiabetes as published, **Arm 2a** baseline recalibration,
+# **Arm 2b** baseline + slope recalibration (Arm 3 = UAE model, NB3, conditional). Recalibration is
+# stratified by sex because QDiabetes has separate female/male equations.
 #
-# - Horizon: `PARAMS["horizon_years"]` (birincil) ve `horizon_years_fallback` (yedek); idari sansür.
-# - Washout: `PARAMS["outcome_washout_days"]` [karar bekliyor].
-# - Metrikler: Harrell C, zaman-bağımlı AUROC(h) (IPCW), KM-tabanlı O:E ve kalibrasyon, kalibrasyon
-#   eğimi, eşik metrikleri (IPCW), bootstrap %95 CI.
-# - Recalibration parametreleri eğitim parçasında (temporal split) kestirilir, tüm kollar test
-#   parçasında karşılaştırılır.
+# - Horizon: `PARAMS["horizon_years"]` (primary) and `horizon_years_fallback` (fallback); administrative censoring.
+# - Washout: `PARAMS["outcome_washout_days"]` [decision pending].
+# - Metrics: Harrell's C, time-dependent AUROC(h) (IPCW), KM-based O:E and calibration, calibration
+#   slope, threshold metrics (IPCW), bootstrap 95% CI.
+# - Recalibration parameters are estimated on the training split (temporal split); all arms are compared
+#   on the test split.
 #
-# > **Leicester notu:** Varyant `PARAMS["lrs_variant"]` — varsayılan LPRS (Gray 2012, bel çevresi
-# > yok; [KARAR: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat — K-LRS]), LRA 2010 duyarlılık için.
-# > İkisi de mevcut (tanı konmamış) IGR/T2D tespiti için geliştirilmiş kesitsel skorlardır. Burada
-# > incident diyabet için değerlendirilmesi *dış kullanım (off-label)* olarak raporlanır; mutlak risk
-# > vermedikleri için (LPRS sabit terimsiz doğrusal öngörücü, LRA puan) O:E/kalibrasyon hesaplanmaz.
-# > LPRS eşiği seçilmediyse (D23) eşik metrikleri "Pending".
+# > **Leicester note:** Variant `PARAMS["lrs_variant"]` — default LPRS (Gray 2012, no waist
+# > circumference; [DECIDED: 2026-11-14, ensargunesdogdu + Zeynep Pelin Polat — K-LRS]), LRA 2010 for sensitivity.
+# > Both are cross-sectional scores developed to detect existing (undiagnosed) IGR/T2D. Evaluating them
+# > for incident diabetes here is reported as *off-label use*; since they give no absolute risk
+# > (LPRS is a linear predictor without an intercept, LRA a points score), O:E/calibration is not computed.
+# > If no LPRS threshold is chosen (D23), threshold metrics are "Pending".
 # >
-# > **QDiabetes notu:** Kaynak kod yalnızca 10 yıllık baseline survival içerir; Kol 1'de diğer
-# > horizon'lar `S0(t)=S0(10)^(t/10)` varsayımıyla türetilir [karar bekliyor]. Kol 2 bu varsayıma bağlı değildir.
+# > **QDiabetes note:** The source code only contains the 10-year baseline survival; in Arm 1 other
+# > horizons are derived assuming `S0(t)=S0(10)^(t/10)` [decision pending]. Arm 2 does not depend on this assumption.
 
 # %%
 import json
@@ -52,9 +52,9 @@ from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
 from sandbox.scores import lrs, qdiabetes2018a as qd
 
-SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # enclave'de: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
+SOURCE = os.environ.get("SANDBOX_SOURCE", "synthetic")   # in the enclave: "nabidh" (Jupyter: %env SANDBOX_SOURCE=nabidh)
 P = dict(PARAMS)
-# Duyarlılık çalıştırmaları için: SANDBOX_PARAMS='{"outcome_washout_days": 90}' (audit'e yazılır)
+# For sensitivity runs: SANDBOX_PARAMS='{"outcome_washout_days": 90}' (written to the audit)
 P.update(json.loads(os.environ.get("SANDBOX_PARAMS", "{}")))
 REPS = int(os.environ.get("SANDBOX_BOOTSTRAP_REPS", P["bootstrap_reps"]))
 run = Run("nb02_c3_benchmark", params=P, source=SOURCE)
@@ -63,7 +63,7 @@ run.add_inputs([CANONICAL_DIR / SOURCE / "c3"])
 ds = schema.read_dataset(CANONICAL_DIR, SOURCE, "c3")
 built = cohorts.build_c3(ds, P)
 c3, funnel = built["cohort"], built["funnel"]
-run.save_json(funnel, "nb02/c3_funnel.json", "C3 kohort akışı")
+run.save_json(funnel, "nb02/c3_funnel.json", "C3 cohort flow")
 run.log("C3 built", **funnel)
 
 q = qd.score(c3, years=10, p=P)
@@ -84,11 +84,11 @@ coverage = pd.DataFrame([{
     "lrs_variant": lrs.label(P),
     "washout_days": P["outcome_washout_days"],
 }])
-run.save_table(coverage, "nb02/coverage.csv", "Skor kapsama ve birlikte tamlık (C3)")
+run.save_table(coverage, "nb02/coverage.csv", "Score coverage and joint completeness (C3)")
 print(coverage.T)
 
 # %% [markdown]
-# ## 1. Eğitim / test ayrımı (recalibration için)
+# ## 1. Train / test split (for recalibration)
 
 # %%
 qd_set = df[df["qd_computable"]].copy()
@@ -100,11 +100,11 @@ else:
     qd_set["split"] = np.where(rng.random(len(qd_set)) < P["recal_train_frac"], "train", "test")
 split_tbl = qd_set.groupby("split").agg(n=("E", "size"), events=("E", "sum"),
                                         index_min=("index_date", "min"), index_max=("index_date", "max")).reset_index()
-run.save_table(split_tbl, "nb02/recal_split.csv", "Recalibration eğitim/test ayrımı")
+run.save_table(split_tbl, "nb02/recal_split.csv", "Recalibration train/test split")
 print(split_tbl)
 
 # %% [markdown]
-# ## 2. Kol 1 / 2a / 2b ve Leicester skoru — horizon bazında metrikler
+# ## 2. Arm 1 / 2a / 2b and the Leicester score — metrics per horizon
 
 # %%
 def evaluate(d: pd.DataFrame, p_h: np.ndarray, h: float, label: str, threshold=None, absolute=True,
@@ -136,28 +136,28 @@ qd_thr = None if P["qd_risk_threshold_pct"] is None else P["qd_risk_threshold_pc
 for h in [P["horizon_years"], P["horizon_years_fallback"]]:
     primary = h == P["horizon_years"]
     p1_test = qd.risk(test["qd_lp"], test["sex"], h, P).to_numpy()
-    results.append(evaluate(test, p1_test, h, "Kol 1 — QDiabetes (published)", qd_thr, with_ci=primary))
+    results.append(evaluate(test, p1_test, h, "Arm 1 — QDiabetes (published)", qd_thr, with_ci=primary))
     p1_all = qd.risk(qd_set["qd_lp"], qd_set["sex"], h, P).to_numpy()
-    results.append(evaluate(qd_set, p1_all, h, "Kol 1 — QDiabetes (published), all", qd_thr, with_ci=False))
-    for method, name in [("baseline", "Kol 2a — baseline recal"), ("baseline_slope", "Kol 2b — baseline+slope recal")]:
+    results.append(evaluate(qd_set, p1_all, h, "Arm 1 — QDiabetes (published), all", qd_thr, with_ci=False))
+    for method, name in [("baseline", "Arm 2a — baseline recal"), ("baseline_slope", "Arm 2b — baseline+slope recal")]:
         m = recalibration.fit_stratified(train["T"], train["E"], train["qd_lp"], train["sex"], h, method)
         recal_models.append({"arm": name, "by_sex": m})
         p2 = recalibration.predict_stratified(m, test["qd_lp"], test["sex"])
         results.append(evaluate(test, p2, h, name, qd_thr, with_ci=primary))
         cal_tables[(h, name)] = metrics.calibration_table(test["T"], test["E"], p2, h)
-    cal_tables[(h, "Kol 1 — QDiabetes (published)")] = metrics.calibration_table(test["T"], test["E"], p1_test, h)
+    cal_tables[(h, "Arm 1 — QDiabetes (published)")] = metrics.calibration_table(test["T"], test["E"], p1_test, h)
     if len(lrs_set):
         results.append(evaluate(lrs_set, lrs_set["lrs_score"].to_numpy(dtype=float), h, LRS_ARM,
                                 lrs.threshold(P), absolute=False, with_ci=primary))
 
 res = pd.DataFrame(results)
-run.save_table(res, "nb02/performance.csv", f"Kol 1/2a/2b ve {lrs.label(P)} performansı (test parçası)")
-run.save_json(recal_models, "nb02/recalibration_models.json", "Recalibration parametreleri (eğitim parçası)")
+run.save_table(res, "nb02/performance.csv", f"Arm 1/2a/2b and {lrs.label(P)} performance (test split)")
+run.save_json(recal_models, "nb02/recalibration_models.json", "Recalibration parameters (training split)")
 show = ["arm", "horizon", "n", "events_by_h", "c_index", "c_index_ci", "auroc_h", "oe_ratio", "calibration_slope"]
 print(res[[c for c in show if c in res]].to_string(index=False))
 
 # %% [markdown]
-# ## 3. Kalibrasyon grafiği (test parçası, birincil horizon)
+# ## 3. Calibration plot (test split, primary horizon)
 
 # %%
 h = P["horizon_years"]
@@ -168,19 +168,19 @@ for (hh, name), tbl in cal_tables.items():
         continue
     ax.plot(tbl["mean_predicted"] * 100, tbl["observed_km"] * 100, "o-", label=name)
     mx = max(mx, tbl["mean_predicted"].max() * 100, tbl["observed_km"].max() * 100)
-ax.plot([0, mx * 1.05], [0, mx * 1.05], "--", color="gray", label="İdeal")
-ax.set_xlabel(f"Ortalama tahmin, {h} yıl (%)")
-ax.set_ylabel(f"Gözlenen (KM), {h} yıl (%)")
-ax.set_title("Kalibrasyon — risk ondalıkları")
+ax.plot([0, mx * 1.05], [0, mx * 1.05], "--", color="gray", label="Ideal")
+ax.set_xlabel(f"Mean predicted, {h} years (%)")
+ax.set_ylabel(f"Observed (KM), {h} years (%)")
+ax.set_title("Calibration — risk deciles")
 ax.legend(fontsize=8)
-run.save_figure(fig, "nb02/calibration_plot.png", "Kalibrasyon grafiği (birincil horizon)")
+run.save_figure(fig, "nb02/calibration_plot.png", "Calibration plot (primary horizon)")
 cal_all = pd.concat([t.assign(horizon=k[0], arm=k[1]) for k, t in cal_tables.items()], ignore_index=True)
 run.save_table(sdc.suppress_small_counts(cal_all, ["n", "events_by_h"]), "nb02/calibration_tables.csv",
-               "Kalibrasyon tabloları")
+               "Calibration tables")
 
 # %% [markdown]
-# ## 4. Alt-grup analizi (fairness / gap) — tüm QDiabetes-hesaplanabilir kohort, birincil horizon
-# Kol 2a parametreleri eğitim parçasından. < `min_events_subgroup` olay → "insufficient events".
+# ## 4. Subgroup analysis (fairness / gap) — whole QDiabetes-computable cohort, primary horizon
+# Arm 2a parameters from the training split. < `min_events_subgroup` events → "insufficient events".
 
 # %%
 m2a = recalibration.fit_stratified(train["T"], train["E"], train["qd_lp"], train["sex"], h, "baseline")
@@ -208,18 +208,18 @@ sub = pd.DataFrame(sub_rows).reindex(columns=["group_type", "group", "n", "event
 overall_c = metrics.c_index(*metrics.truncate(qd_set["T"], qd_set["E"], h), qd_set["p1"].to_numpy())
 sub["delta_c"] = sub["c_index"] - overall_c
 run.save_table(sdc.suppress_small_counts(sub, ["n", "events_by_h"]), "nb02/subgroups.csv",
-               "Alt-grup C-index ve O:E (Kol 1 / Kol 2a)")
+               "Subgroup C-index and O:E (Arm 1 / Arm 2a)")
 print(sub.to_string(index=False))
 
 fig, ax = plt.subplots(figsize=(8, max(3, 0.3 * len(sub))))
 s2 = sub.dropna(subset=["oe_kol2a"])
 ax.barh(s2["group_type"] + ": " + s2["group"], s2["oe_kol2a"], color="#4C72B0")
 ax.axvline(1, color="k", lw=0.8)
-ax.set_title(f"O:E Kol 2a (recalibrated), {h} yıl — alt gruplar")
-run.save_figure(fig, "nb02/subgroup_oe.png", "Alt-grup O:E")
+ax.set_title(f"O:E Arm 2a (recalibrated), {h} years — subgroups")
+run.save_figure(fig, "nb02/subgroup_oe.png", "Subgroup O:E")
 
 # %% [markdown]
-# ## 5. KPI girdileri
+# ## 5. KPI inputs
 
 # %%
 def first(arm, horizon):
@@ -227,8 +227,8 @@ def first(arm, horizon):
     return r.iloc[0].to_dict() if len(r) else {}
 
 
-k1 = first("Kol 1 — QDiabetes (published)", h)
-k2 = first("Kol 2a — baseline recal", h)
+k1 = first("Arm 1 — QDiabetes (published)", h)
+k2 = first("Arm 2a — baseline recal", h)
 kl = first(LRS_ARM, h)
 kpi_values = {
     "horizon_years": h,
@@ -248,7 +248,7 @@ kpi_values = {
     "lrs_threshold": {k[4:]: v for k, v in kl.items() if k.startswith("thr_") and v == v},
     "subgroups_insufficient_events": int((sub["note"] == "insufficient events").sum()),
 }
-run.save_json(kpi_values, "nb02/kpi_values.json", "NB2 KPI girdileri")
+run.save_json(kpi_values, "nb02/kpi_values.json", "NB2 KPI inputs")
 print(pd.Series(kpi_values).to_string())
 manifest = run.finish()
 print("Run:", run.run_id)
