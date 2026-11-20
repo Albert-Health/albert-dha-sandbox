@@ -1,0 +1,163 @@
+### 1s · smoking: where the status comes from and where it is lost · cohorts c1 c2
+
+== 1s · c1.SocialHistory · column profile
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory — 3892 rows · 5 columns · profile: first 3892 rows
+   #                     column      type  filled%  distinct        shape (most common)         kind     values
+   1                         ID    bigint    100.0      3892              9999999 (70%) unique (ID?)     hidden
+   2                  EnteredOn timestamp      5.9       221 9999-99-99 99:99:99 (100%)         date use values
+   3                    Patient    bigint    100.0      2596              9999999 (53%)       number     hidden
+   4   SocialHabitCategory_Code   varchar     98.9         8                   a (100%)         code use values
+   5 SocialHabitQty_Description   varchar     98.9        11                   a (100%)     category use values
+shape: digit→9, run of letters→a (2023-01-05→9999-99-99, E11.9→a99.9). filled% and distinct are from the sample. values 'hidden' = sensitive name or ID-like
+Next: python3 sandbox_bundle.py values SBXV_ENCL447CCD80_HSAA.SocialHistory COLUMN
+
+== 1s · c1.SocialHistory.SocialHabitQty_Description · WHERE SocialHabitCategory_Code = 'Smoking'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory.SocialHabitQty_Description (varchar) — 3820 rows, filled 3820 (100.0%) · WHERE SocialHabitCategory_Code = 'Smoking'
+Sample (first 3820 rows): kind category · distinct 8
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+       value  rows  patients
+       Never  2492      2239
+     Unknown   478       478
+       Other   428       428
+         Low   143       143
+        High   135       135
+  Occasional    87        87
+      Medium    55        55
+  + 1 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1s · c1.SocialHistory.SocialHabitCategory_Code · WHERE UPPER(SocialHabitQty_Description) = 'UNKNOWN'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory.SocialHabitCategory_Code (varchar) — 486 rows, filled 486 (100.0%) · WHERE UPPER(SocialHabitQty_Description) = 'UNKNOWN'
+Sample (first 486 rows): kind code · distinct 2
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+  Smoking   478       478
+  + 1 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1s · c1.SocialHistory.EnteredOn
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory.EnteredOn (timestamp) — 3892 rows, filled 230 (5.9%)
+Sample (first 3892 rows): kind date · distinct 221
+Distribution (sample): p5 2014-04 · p50 2024-06 · p95 2026-01
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+                shape     %
+  9999-99-99 99:99:99 100.0
+
+== 1s · c1 · patients (Patient.ID)
+  2596
+
+== 1s · c1 · patients with any SocialHistory row
+  2596
+
+== 1s · c1 · patients with a tobacco item
+  2586
+
+== 1s · c1 · patients with a tobacco item and a usable value (not Unknown / Other / empty)
+  2584
+
+== 1s · c1 · patients whose tobacco records are all Unknown or empty
+  <10
+
+== 1s · c1 · patients whose tobacco records are all Other
+  <10
+
+== 1s · c1 · patients with a smoking diagnosis code (F17 / Z72.0 / Z87.891)
+  13
+
+== 1s · c1 · patients with neither a SocialHistory row nor a smoking diagnosis code
+  0
+
+== 1s · c1 · tables / columns whose name contains 'SMOK'
+  tables: none
+  columns: none
+
+== 1s · c1 · tables / columns whose name contains 'TOBAC'
+  tables: none
+  columns: none
+
+== 1s · c2.SocialHistory · column profile
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory — 1617 rows · 5 columns · profile: first 1617 rows
+   #                     column      type  filled%  distinct        shape (most common)         kind     values
+   1                         ID    bigint    100.0      1617              9999999 (63%) unique (ID?)     hidden
+   2                  EnteredOn timestamp      9.0       143 9999-99-99 99:99:99 (100%)         date use values
+   3                    Patient    bigint    100.0      1455               999999 (60%)       number     hidden
+   4   SocialHabitCategory_Code   varchar     91.5         7                   a (100%)         code use values
+   5 SocialHabitQty_Description   varchar     91.3        10                   a (100%)     category use values
+shape: digit→9, run of letters→a (2023-01-05→9999-99-99, E11.9→a99.9). filled% and distinct are from the sample. values 'hidden' = sensitive name or ID-like
+Next: python3 sandbox_bundle.py values SBXV_ENCL94F43B4B_HSAA.SocialHistory COLUMN
+
+== 1s · c2.SocialHistory.SocialHabitQty_Description · WHERE SocialHabitCategory_Code = 'Smoking'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory.SocialHabitQty_Description (varchar) — 1465 rows, filled 1465 (100.0%) · WHERE SocialHabitCategory_Code = 'Smoking'
+Sample (first 1465 rows): kind category · distinct 7
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+       value  rows  patients
+     Unknown   748       734
+       Never   353       331
+       Other   306       304
+  Occasional    18        18
+        High    14        14
+         Low    14        14
+      Medium    12        11
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1s · c2.SocialHistory.SocialHabitCategory_Code · WHERE UPPER(SocialHabitQty_Description) = 'UNKNOWN'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory.SocialHabitCategory_Code (varchar) — 752 rows, filled 752 (100.0%) · WHERE UPPER(SocialHabitQty_Description) = 'UNKNOWN'
+Sample (first 752 rows): kind code · distinct 2
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+  Smoking   748       734
+  + 1 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1s · c2.SocialHistory.EnteredOn
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory.EnteredOn (timestamp) — 1617 rows, filled 145 (9.0%)
+Sample (first 1617 rows): kind date · distinct 143
+Distribution (sample): p5 1995-06 · p50 2024-04 · p95 2026-02
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+                shape     %
+  9999-99-99 99:99:99 100.0
+
+== 1s · c2 · patients (Patient.ID)
+  2600
+
+== 1s · c2 · patients with any SocialHistory row
+  1455
+
+== 1s · c2 · patients with a tobacco item
+  1315
+
+== 1s · c2 · patients with a tobacco item and a usable value (not Unknown / Other / empty)
+  380
+
+== 1s · c2 · patients whose tobacco records are all Unknown or empty
+  677
+
+== 1s · c2 · patients whose tobacco records are all Other
+  249
+
+== 1s · c2 · patients with a smoking diagnosis code (F17 / Z72.0 / Z87.891)
+  15
+
+== 1s · c2 · patients with neither a SocialHistory row nor a smoking diagnosis code
+  1143
+
+== 1s · c2 · tables / columns whose name contains 'SMOK'
+  tables: none
+  columns: none
+
+== 1s · c2 · tables / columns whose name contains 'TOBAC'
+  tables: none
+  columns: none
+
+checks 1s: 28 queries done, 0 not available
+----8<---- COPY END ----8<----
