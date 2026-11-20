@@ -113,6 +113,17 @@ C2'de sigara bilgisinin nerede kaybolduğu (SocialHistory sütun profili, Unknow
 python3 sandbox_bundle.py checks 1s
 ```
 
+Kullanılabilir sigara durumu olmayan hastalarda ne olduğu (1s'in devamı, gap K19): SocialHistory kalem × değer sınıfı
+(satır, hasta), sigara kalemi olup kullanılabilir değeri olmayan hastaların desenleri (yalnız Unknown, yalnız Other,
+Cigarettes altında miktar …) ve onları neyin sayacağı (ingest 1.5.0 / D7 / D8), sigara kalemi olmayan hastalarda
+SocialHistory'de ne olduğu, sigarayla ilgili tanı kodları her yazımda (kod listesi tanıyor mu). Satırlar enclave içinde
+okunur, blokta yalnız kapalı sınıf listesinden sayımlar (< 10 → "<10"); serbest metin ve hasta anahtarı yok, tanı kodu
+ancak ≥ 10 hastada görünüyorsa adıyla:
+
+```bash
+python3 sandbox_bundle.py checks 2s
+```
+
 ```bash
 python3 sandbox_bundle.py run kpi
 ```

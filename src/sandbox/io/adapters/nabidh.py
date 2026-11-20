@@ -61,6 +61,10 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   1.5.0  2026-11-20  SocialHistory: a plain number under Cigarettes / Cigars (an amount; C1 1 / 1.5 / .25, C2 15,
+#                      each < 10 rows) > 0 → "current" (intensity not recorded → D7 category); SMOKING_AMOUNT_UNIT
+#                      (DHA B7, None until answered) turns it into light / moderate / heavy by the QDiabetes bands;
+#                      0 and text stay unmapped. Report: "smoking amount (unit unknown, DHA B7)" by item | band
 #   1.4.2  2026-11-20  schema check counts rows dated exactly 1970-01-01 (Unix epoch) or 1900-01-01 per table
 #                      and date column (WARN in the ingest summary; rows kept, dropping them is a decision) — report
 #                      only, canonical data unchanged
@@ -97,7 +101,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.4.2"
+INGEST_VERSION = "1.5.0"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -249,6 +253,51 @@ SMOKING_VALUES = {
     "428071000124103": "heavy",     # Heavy tobacco smoker
     "266927001": "unknown",         # Tobacco smoking consumption unknown
 }
+
+# SocialHabitQty under a tobacco-product item (Cigarettes / Cigars) can be a plain number: an amount (C1 ingest 1.4.2:
+# Cigarettes 1 / 1.5, "Cigarettes,Cigars" .25, Cigars 1 · C2: Cigarettes 15 — each < 10 rows). An amount > 0 means the
+# patient smokes → "current"; its unit is not known (DHA B7: cigarettes a day? packs a day? — .25 and 1.5 look like
+# packs, 15 like cigarettes), so the intensity waits: "current" without intensity takes the D7 category
+# (qd_smoking_current_category). Once DHA answers, set SMOKING_AMOUNT_UNIT → the amount becomes light / moderate /
+# heavy by the QDiabetes bands (codelists.qd_smoking_intensity). 0 is not mapped (non-smoker or ex: unknown); under
+# the Smoking item a number is not read as an amount (that item carries a status word). Text ("10 per day") stays
+# unmapped and is listed in the report.
+SMOKING_AMOUNT_ITEMS = ("cigarettes", "cigars", "cigarettes,cigars")
+SMOKING_AMOUNT_UNIT: str | None = None          # None (DHA B7 pending) | "cigarettes_per_day" | "packs_per_day"
+SMOKING_AMOUNT_CIGS = {"cigarettes_per_day": 1.0, "packs_per_day": 20.0}     # 1 unit → cigarettes a day
+SMOKING_AMOUNT_FIELD = "smoking amount (unit unknown, DHA B7): item | amount → canonical"
+
+
+def smoking_amount(text: pd.Series) -> pd.Series:
+    """Plain number ("15", "1.5", ".25") → float; anything else (text, "10 per day", empty) → NaN."""
+    t = text.astype("string").str.strip()
+    plain = t.str.fullmatch(r"\d+(\.\d*)?|\.\d+").fillna(False).astype(bool)
+    return pd.to_numeric(t.astype(object).where(plain), errors="coerce").astype(float)
+
+
+def smoking_amount_band(x: float) -> str:
+    """Amount → band for reports (no value printed): the bands tell packs (fractions) from cigarettes (whole)."""
+    if x == 0:
+        return "0"
+    if x < 1:
+        return "< 1"
+    if x == 1:
+        return "1"
+    if x < 10:
+        return "2–9" if x == int(x) else "1–9, not whole (e.g. 1.5)"
+    return "10–19" if x < 20 else "≥ 20"
+
+
+def smoking_amount_value(amount: pd.Series, unit: str | None = None) -> pd.Series:
+    """Amount → canonical smoking value: > 0 → "current" (unit None) or the QDiabetes intensity; 0 / NaN → NA."""
+    out = pd.Series(pd.NA, index=amount.index, dtype=object)
+    pos = (amount > 0).fillna(False).astype(bool)
+    if unit is None:
+        out[pos] = "current"
+    else:
+        cigs = amount[pos] * SMOKING_AMOUNT_CIGS[unit]
+        out[pos] = cigs.map(codelists.qd_smoking_intensity)
+    return out
 
 # Family history status value → positive / negative / unknown
 FH_STATUS_VALUES = {
@@ -698,6 +747,16 @@ def _h_smoking(df, name, vc, item_filtered: bool = False):
     mapped = key.map(SMOKING_VALUES)
     code = df["code"].astype("string").str.strip() if "code" in df else pd.Series(pd.NA, index=df.index, dtype="string")
     mapped = mapped.fillna(code.map(SMOKING_VALUES))
+    if "item" in df:                                # amount under Cigarettes / Cigars (SMOKING_AMOUNT_ITEMS)
+        amount = smoking_amount(key).where(_norm_text(df["item"]).isin(SMOKING_AMOUNT_ITEMS).fillna(False)
+                                           .astype(bool))
+        is_amount = (mapped.isna() & amount.notna()).astype(bool)
+        mapped = mapped.where(~is_amount, smoking_amount_value(amount, SMOKING_AMOUNT_UNIT))
+        if is_amount.any():
+            res = mapped[is_amount].astype(object).where(mapped[is_amount].notna(), "not mapped (0: non or ex?)")
+            vc += _value_counts(name, SMOKING_AMOUNT_FIELD,
+                                df.loc[is_amount, "item"].astype("string").fillna("<empty>").astype(str) + " | "
+                                + amount[is_amount].map(smoking_amount_band) + " → " + res.astype(str))
     has_any = key.notna() | code.notna()
     value = mapped.astype(object).where(mapped.notna(), "unmapped:" + key.fillna(code).astype(object).astype(str))
     shown = key.fillna("<empty>").astype(str) + " → " + value.astype(str)

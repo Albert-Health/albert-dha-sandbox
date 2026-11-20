@@ -428,6 +428,108 @@ class TestSmokingCheck(unittest.TestCase):
         self.assertNotIn("P00", text)                                       # no patient ids in the block
 
 
+class TestSmokingPatternsCheck(unittest.TestCase):
+    """`checks 2s`: what patients without a usable smoking status have — closed classes only, counts < 10 suppressed,
+    no free-text value, no patient key, diagnosis codes only when ≥ 10 patients have them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.tmp.name)
+        ids = [f"P{i:03d}" for i in range(60)]
+
+        def row(p, item, value):
+            return {"Patient": p, "SocialHabitCategory_Code": item, "SocialHabitQty_Description": value, "EnteredOn": ""}
+
+        sh = [row(p, "Smoking", "Never") for p in ids[0:12]]                       # usable
+        sh += [row(p, "Smoking", "Unknown") for p in ids[12:24]]                   # unknown only (12)
+        sh += [row(p, "Smoking", "Other") for p in ids[24:35]]                     # other only (11)
+        sh += [row(p, "Smoking", v) for p in ids[35:38] for v in ("Unknown", "Other")]   # mix (3)
+        sh += [row(p, "Cigarettes", "15") for p in ids[38:40]]                     # amount (2)
+        sh += [row(ids[40], "Cigarettes", None), row(ids[41], "Smoking", "smokes since childhood xyz")]
+        sh += [row(p, None, None) for p in ids[42:53]]                             # empty item and value (11)
+        sh += [row(ids[53], "ALCOHOL", "Never"), row(ids[53], "Hubbly bubbly pipe", "Daily"), row(ids[59], "SHISHA", None)]
+        sh += [row(None, "Smoking", "Never")]                                      # no patient key: not read
+        dx = [{"Patient": p, "Diagnosis_Code": "Z72.0", "Diagnosis_Description": "Tobacco use"} for p in ids[12:22]]
+        dx += [{"Patient": p, "Diagnosis_Code": "F17.2", "Diagnosis_Description": "Nicotine dependence"}
+               for p in ids[54:56]]
+        dx += [{"Patient": ids[56], "Diagnosis_Code": "Z720", "Diagnosis_Description": ""},
+               {"Patient": ids[57], "Diagnosis_Code": "E11.9", "Diagnosis_Description": "Tobacco use disorder xyz"},
+               {"Patient": ids[58], "Diagnosis_Code": "I10", "Diagnosis_Description": "Hypertension"},
+               {"Patient": ids[42], "Diagnosis_Code": "E11.9,Z87.891", "Diagnosis_Description": "Diabetes"}]
+        iris.write_sqlite_standin(cls.dir / "c1.sqlite", {
+            "Patient": pd.DataFrame({"ID": ids, "Gender_Code": ["M"] * 60}),
+            "SocialHistory": pd.DataFrame(sh), "Diagnosis": pd.DataFrame(dx)})
+        with temp_outputs():
+            cls.rc, cls.text = run_main(["checks", "2s", "--cohorts", "c1", "--iris-sqlite", str(cls.dir)])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def section(self, label):
+        i = self.text.index(f"== 2s · c1 · {label}")
+        j = self.text.find("\n== ", i + 1)
+        return self.text[i:j if j > 0 else None]
+
+    def line(self, section, *words, exclude="codes <"):
+        hits = [ln for ln in section.splitlines() if all(w in ln for w in words) and exclude not in ln]
+        self.assertEqual(len(hits), 1, f"{words} in\n{section}")
+        return hits[0].split()
+
+    def test_runs_and_nothing_identifying(self):
+        self.assertEqual(self.rc, 0, self.text)
+        self.assertIn("checks 2s: 8 queries done, 0 not available", self.text)
+        for leak in ("P0", "xyz", "smokes since", "Hubbly", "Daily", "Nicotine dependence", "F17.2 "):
+            self.assertNotIn(leak, self.text)
+
+    def test_patterns_of_unusable_records(self):
+        s = self.section("patients with a tobacco item but no usable value")
+        self.assertEqual(self.line(s, "unknown only")[-1], "12")
+        self.assertEqual(self.line(s, "other only")[-1], "11")
+        self.assertEqual(self.line(s, "other + unknown")[-1], "<10")
+        self.assertIn("ingest 1.5.0: amount → current", " ".join(self.line(s, "amount > 0 only")))
+        self.assertEqual(self.line(s, "empty only")[-1], "<10")
+        self.assertEqual(self.line(s, "text only")[-1], "<10")
+        self.assertNotIn("usable", s.split("\n", 1)[1])               # patients with a usable value are not listed
+
+    def test_rows_table(self):
+        s = self.section("SocialHistory rows")
+        self.assertEqual(self.line(s, "yes", "Smoking", "unknown")[-2:], ["15", "15"])      # 12 + 3 with Other too
+        self.assertEqual(self.line(s, "yes", "Smoking", " other ")[-2:], ["14", "14"])
+        self.assertEqual(self.line(s, "yes", "Cigarettes", "number: 10–19")[-1], "<10")
+        self.assertIn(["no", "<empty>", "<empty>", "11", "11"], [ln.split() for ln in s.splitlines()])
+        self.assertIn("(other item, tobacco word)", s)                   # the free-text item is not printed
+        self.assertEqual(self.line(s, "no", "Shisha", "<empty>")[-1], "<10")    # a known item by name
+        self.assertIn("(other text)", s)
+
+    def test_without_tobacco_item(self):
+        s = self.section("patients without a tobacco item")
+        self.assertEqual(self.line(s, "SocialHistory items: <empty> (empty-item values: empty)", "none")[-1], "10")
+        self.assertEqual(self.line(s, "SocialHistory items: <empty> (empty-item values: empty)", "code list")[-1], "<10")
+        self.assertEqual(self.line(s, "no SocialHistory row", "none")[-1], "<10")
+        self.assertEqual(self.line(s, "SocialHistory items: Shisha", "none")[-1], "<10")
+        self.assertEqual(self.line(s, "no SocialHistory row", "other tobacco code / text only")[-1], "<10")
+        self.assertIn("(other item, tobacco word) + ALCOHOL", s)
+
+    def test_tobacco_codes(self):
+        s = self.section("tobacco-related diagnosis codes")
+        self.assertEqual(self.line(s, "Z72.0 tobacco use", "Z72.0", "yes")[-3:], ["10", "10", "0"])
+        self.assertEqual(self.line(s, "F17 nicotine dependence", "no", exclude="@")[-3:], ["<10", "<10", "<10"])
+        self.assertIn("Z87.891 history of nicotine dependence", s)        # second code of a multi-code cell
+        self.assertIn("other code, description mentions tobacco", s)
+        self.assertNotIn("I10", s)
+
+    def test_classifiers(self):
+        self.assertEqual(enclave.sh_value_class(" .25 "), "number: < 1")
+        self.assertEqual(enclave.sh_value_class("NULL"), "<empty>")
+        self.assertEqual(enclave.sh_value_class("Occasional"), "occasional")
+        self.assertEqual(enclave.sh_item_class("cigarettes,cigars"), "Cigarettes,Cigars")
+        self.assertEqual(enclave.sh_coarse("Smoking", "number: 1"), "number, not an amount item")
+        self.assertEqual(enclave.sh_coarse("Cigars", "number: 0"), "amount 0")
+        self.assertEqual(enclave.sh_coarse("Smoking", "low"), "usable")
+
+
 class TestIrisSetup(unittest.TestCase):
     def test_writes_private_file_keeps_other_lines(self):
         with tempfile.TemporaryDirectory() as d, temp_outputs():

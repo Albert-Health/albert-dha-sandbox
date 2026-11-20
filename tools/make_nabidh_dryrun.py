@@ -127,9 +127,17 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
 
     sm = obs[obs["concept"] == "smoking_status"]
     item = "SocialHabitCategory_Description" if cohort == "c3" else "SocialHabitCategory_Code"
-    out["social_history.csv"] = pd.DataFrame({
-        "ID": range(1, len(sm) + 1), "EnteredOn": _d(sm["date"]), "Patient": sm["patient_id"],
-        item: "Tobacco", "SocialHabitQty_Description": sm["value"]})
+    sh = pd.DataFrame({"EnteredOn": _d(sm["date"]), "Patient": sm["patient_id"], item: "Tobacco",
+                       "SocialHabitQty_Description": sm["value"]})
+    # NABIDH shapes (VM 2026-11-20): undated amounts under Cigarettes / Cigars (unit unknown, DHA B7; ingest 1.5.0
+    # → current) and rows with neither item nor value (C2: 137 patients)
+    amt = sh.iloc[::40].assign(EnteredOn=pd.NA, SocialHabitQty_Description=lambda x: [
+        ("15", "1.5", ".25", "0", "20")[i % 5] for i in range(len(x))])
+    amt[item] = ["Cigarettes", "Cigarettes,Cigars", "Cigars"] * (len(amt) // 3) + ["Cigarettes"] * (len(amt) % 3)
+    empty = sh.iloc[5::60].assign(EnteredOn=pd.NA, SocialHabitQty_Description=pd.NA, **{item: pd.NA})
+    sh = pd.concat([sh, amt, empty], ignore_index=True)
+    out["social_history.csv"] = sh.assign(ID=range(1, len(sh) + 1))[
+        ["ID", "EnteredOn", "Patient", item, "SocialHabitQty_Description"]]
 
     fh = cond[codelists.match_dx(cond, "family_history_dm")]
     out["family_history.csv"] = pd.DataFrame({
