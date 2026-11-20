@@ -86,7 +86,7 @@ python3 sandbox_bundle.py checks            # = bash tools/enclave.sh checks; ya
 
   ```bash
   bash tools/enclave.sh values c1.SocialHistory SocialHabitCategory_Code
-  bash tools/enclave.sh values c2.SocialHistory SocialHabitCategory_Description
+  bash tools/enclave.sh values c2.SocialHistory SocialHabitCategory_Code
   bash tools/enclave.sh values c1.SocialHistory SocialHabitQty_Description
   bash tools/enclave.sh values c2.SocialHistory SocialHabitQty_Description
   ```

@@ -187,7 +187,7 @@ SEX_MAP = {"M": "Male", "MALE": "Male", "1": "Male", "F": "Female", "FEMALE": "F
 # "yes" / "no" are meaningful only if the source (or filter) is specific to smoking.
 # NABIDH SocialHabitQty (C1 / C2 ingest, 2026-11-19): low / medium / high = intensity → light / moderate / heavy.
 # occasional / rare (not daily, < 10 / day) → light [DECISION PENDING] D7; alternative: current (→ D7 category).
-# "other" not mapped (C1 428, C2 531 rows): may be other tobacco (shisha / midwakh?) → counted as missing, D7.
+# "other" not mapped (C1 428, C2 306, C3 531 rows): may be other tobacco (shisha / midwakh?) → counted as missing, D7.
 SMOKING_VALUES = {
     **{k: "never" for k in ["never", "never smoker", "never smoked", "never smoked tobacco", "non-smoker",
                             "non smoker", "nonsmoker", "non", "no", "lifetime non-smoker"]},

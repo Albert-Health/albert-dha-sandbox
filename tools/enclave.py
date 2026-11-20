@@ -757,8 +757,7 @@ def cmd_values(a, out: Block, run) -> int:
 VITAL_CODES = ("39156-5", "8302-2", "3141-9")          # BMI, height, weight (Observation has no unit column)
 CHECKS = {
     "1a": ("smoking item", [
-        ("SocialHistory", "SocialHabitCategory_Code", 30, None),
-        ("SocialHistory", "SocialHabitCategory_Description", 30, None),
+        ("SocialHistory", "SocialHabitCategory_Code", 30, None),         # _Description: C3 only
         ("SocialHistory", "SocialHabitQty_Description", 30, None)]),
     "1c": ("lab and vital units", [
         ("LabResultItem", "TestItemCode_Code", 40, None),
