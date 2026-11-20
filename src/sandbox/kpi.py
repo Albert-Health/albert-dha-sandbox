@@ -117,24 +117,34 @@ def _pct(x) -> str | None:
 
 
 def _cohort_pcts(pcts: dict, ns: dict | None = None, n_key: str | None = None) -> str:
-    """{"c1": 62.5, "c2": 40.0} (+ NB1 joint_n) → "C1 62.5% (N=125/200); C2 40.0% (N=<10/20)"; counts < 10
-    suppressed."""
+    """{"c1": 62.5, "c2": 40.0} (+ NB1 joint_n) → "C1 62.5% (N=125/200); C2 suppressed (<10) (N=<10/200)"; counts
+    < 10 suppressed, and with the counts the rate too where its count or (N − count) is < 10."""
     out = []
     for c, v in (pcts or {}).items():
         if _pct(v) is None:
             continue
         n = (ns or {}).get(c)
-        out.append(f"{c.upper()} {_pct(v)}" + (f" (N={sdc.fmt_count(n[n_key])}/{sdc.fmt_count(n['n'])})"
-                                                 if n and n_key else ""))
+        if n and n_key:
+            out.append(f"{c.upper()} {_safe_pct(v, n[n_key], n['n'])} "
+                       f"(N={sdc.fmt_count(n[n_key])}/{sdc.fmt_count(n['n'])})")
+        else:
+            out.append(f"{c.upper()} {_pct(v)}")
     return "; ".join(out)
 
 
-# NB1 c1_detection_pct keys are "<reference>|<score>" (cohorts.POSITIVE_REFERENCES × qdiabetes / lrs)
+# NB1 c1_detection_pct keys are "<reference>|<score>" (cohorts.POSITIVE_REFERENCES × qdiabetes / lrs); the counts
+# (c1_detection_counts, NB1 runs from 2026-11-20 on) hide a rate whose flagged or (computable − flagged) is < 10
 def _c1_detection(nb1: dict) -> str:
     det = {k: v for k, v in (nb1.get("c1_detection_pct") or {}).items() if _pct(v) is not None}
+    counts = nb1.get("c1_detection_counts") or {}
+
+    def shown(k, v):
+        n = counts.get(k)
+        return _safe_pct(v, n["n_flagged"], n["n_computable"]) if n else _pct(v)
+
     parts = []
     for score, name in (("qdiabetes", "QDiabetes"), ("lrs", nb1.get("lrs_label", "LRS"))):
-        got = [f"{k.split('|')[0]} {_pct(v)}" for k, v in det.items() if k.split("|")[-1] == score]
+        got = [f"{k.split('|')[0]} {shown(k, v)}" for k, v in det.items() if k.split("|")[-1] == score]
         if got:
             parts.append(f"{name}: " + ", ".join(got))
     return ("C1 " + "; ".join(parts)) if parts else ""
@@ -150,21 +160,27 @@ def _selection_effect(nb1: dict) -> str:
 
 
 def _safe_pct(pct, k, n) -> str:
-    """A rate as text, unless its count or (n − count) is under the small-cell threshold (sdc.suppress_rates)."""
-    t = PARAMS["small_cell_threshold"]
-    if any(0 < x < t for x in (k, n - k)):
-        return f"suppressed (<{t})"
-    return _pct(pct) or "—"
+    """A rate as text, unless its count or (n − count) is under the small-cell threshold (sdc.safe_rate)."""
+    shown = sdc.safe_rate(pct, k, n)
+    return shown if isinstance(shown, str) else (_pct(shown) or "—")
+
+
+def _core8_min(nb0: dict) -> dict[str, str]:
+    """{cohort: the Data Completeness value as text}: the minimum over the 8 core variables, hidden where its
+    count or (n − count) is < 10 (data_completeness_min_core8 has the counts; NB0 runs before 2026-11-20 only the %)."""
+    with_n = nb0.get("data_completeness_min_core8") or {}
+    return {c: _safe_pct(v, with_n[c]["complete_n"], with_n[c]["n"]) if c in with_n else (_pct(v) or "—")
+            for c, v in (nb0.get("data_completeness_min_core8_pct") or {}).items()}
 
 
 def _completeness_note(nb0: dict) -> str:
     """Data Completeness note: the weakest variable, the weakest of the other 7 (without ethnicity), joint core-7 and
     the present / absent variables (100% by definition). The KPI value itself stays the minimum over the 8."""
     parts = []
-    weakest, mins = nb0.get("data_completeness_weakest") or {}, nb0.get("data_completeness_min_core8_pct") or {}
+    weakest, mins = nb0.get("data_completeness_weakest") or {}, _core8_min(nb0)
     if weakest:
         parts.append("Weakest variable: " + "; ".join(
-            f"{c.upper()} {v}" + (f" {_pct(mins[c])}" if c in mins else "") for c, v in weakest.items()))
+            f"{c.upper()} {v}" + (f" {mins[c]}" if c in mins else "") for c, v in weakest.items()))
     wo = nb0.get("data_completeness_without_ethnicity") or {}
     if wo:
         parts.append("Without ethnicity (weakest of the other 7): " + "; ".join(
@@ -250,7 +266,7 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
         fw = _framework_match(nb0)
         set_("Applicant Data Requirement Framework Match", *fw)
         dc = nb0["data_completeness_min_core8_pct"]
-        set_("Data Completeness for Required Variables", "; ".join(f"{c.upper()} {v:.1f}%" for c, v in dc.items()),
+        set_("Data Completeness for Required Variables", "; ".join(f"{c.upper()} {v}" for c, v in _core8_min(nb0).items()),
              "Met" if all(v >= 90 for v in dc.values()) else "Not Met", "NB0",
              _completeness_note(nb0))
 
@@ -271,8 +287,9 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
             if _cohort_pcts(nb1.get(comp_key)):
                 notes.append("Score computable: " + _cohort_pcts(nb1.get(comp_key)))
         if nb2:
-            parts.append(f"C3 {nb2[f'joint_completeness_{nb2_key}_pct']}% "
-                         f"(N={sdc.fmt_count(nb2[f'joint_completeness_{nb2_key}_n'])}/{sdc.fmt_count(nb2['c3_eligible_n'])})")
+            k3, n3 = nb2[f"joint_completeness_{nb2_key}_n"], nb2["c3_eligible_n"]
+            parts.append(f"C3 {_safe_pct(nb2[f'joint_completeness_{nb2_key}_pct'], k3, n3)} "
+                         f"(N={sdc.fmt_count(k3)}/{sdc.fmt_count(n3)})")
             srcs.append("NB2 (C3 base)")
         if parts:
             set_(k, "; ".join(parts), "Reported", " + ".join(srcs), " · ".join([definition, *notes]))

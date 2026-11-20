@@ -1,5 +1,7 @@
 """sdc.collapse_rare_rows: a source label seen in fewer than 10 patients in every cohort is not printed; its counts
-go into one merged row per group, so totals still add up (NB1 nb01/ethnicity_mapping_by_source.csv)."""
+go into one merged row per group, so totals still add up (NB1 nb01/ethnicity_mapping_by_source.csv).
+sdc.safe_rate / suppress_small_group_stats: a rate whose count or (N − count) is < 10 and a median over < 10 patients
+are not printed (KPI text, NB0 demographics, NB1 score_summary)."""
 import sys
 import unittest
 from pathlib import Path
@@ -39,6 +41,23 @@ class TestCollapseRareRows(unittest.TestCase):
         df = self.table().iloc[[0, 4]]
         out = sdc.collapse_rare_rows(df, ["c1", "c2"], ["value"], by=["source"])
         self.assertEqual(out["value"].tolist(), ["Indian", "<missing>"])
+
+
+
+class TestRatesAndGroupStats(unittest.TestCase):
+    def test_safe_rate(self):
+        self.assertEqual(sdc.safe_rate(40.0, 8, 20), "suppressed (<10)")          # 8 patients
+        self.assertEqual(sdc.safe_rate(85.0, 17, 20), "suppressed (<10)")         # 3 without
+        self.assertEqual(sdc.safe_rate(50.0, 10, 20), 50.0)
+        self.assertEqual(sdc.safe_rate(0.0, 0, 2600), 0.0)                        # 0 is not a small cell
+        self.assertEqual(sdc.safe_rate(100.0, 2600, 2600), 100.0)
+        self.assertEqual(sdc.safe_rate(12.5, None, 200), 12.5)                    # no count: as before
+
+    def test_small_group_stats(self):
+        df = pd.DataFrame({"g": ["a", "b", "c"], "n": [4, 30, 0], "median": [61.0, 55.5, None]})
+        out = sdc.suppress_small_group_stats(df, "n", ["median"])
+        self.assertEqual(out["median"].tolist()[:2], ["suppressed (<10)", 55.5])
+        self.assertTrue(pd.isna(out["median"].iloc[2]))
 
 
 if __name__ == "__main__":

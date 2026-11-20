@@ -160,6 +160,14 @@ class TestOverallAndOutput(unittest.TestCase):
         self.assertEqual(by_var(out).loc["sex", "patients_with_value"], N)
         self.assertNotIn("15.0", by_var(out).loc["ethnicity", "reason"])         # no percentage of the small count
 
+    def test_percentage_hidden_when_the_rest_is_small(self):
+        """44 of 50 with a value: 88.0% × 50 would give the 6 without one back."""
+        ds = make_ds(nationality=[None] * N, ethnicity=["Emirati"] * 44 + [None] * 6)
+        out = framework.suppressed(framework.match_table({"c1": ds}, {"c1": FULL}))
+        r = by_var(out).loc["ethnicity"]
+        self.assertEqual((r["patients_with_value"], r["pct_patients"]), (44, "suppressed (<10)"))
+        self.assertEqual(by_var(out).loc["sex", "pct_patients"], 100.0)            # 50 of 50: nothing to hide
+
 
 class TestDeliveryFacts(unittest.TestCase):
     def test_read_delivery(self):

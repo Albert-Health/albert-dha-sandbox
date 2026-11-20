@@ -75,7 +75,11 @@ RUN_ALL = ("ingest", "nb0", "nb1", "kpi")
 # summary tables printed into the block after a run: (file, row filter, columns)
 SUMMARY_TABLES = {
     "nb0": [("nb00/schema_validation.csv", "issues", None), ("nb00/volume.csv", None, None),
+            ("nb00/facility_representation.csv", "facility", None),     # one line while no facility is mapped
             ("nb00/vital_plausibility.csv", None, None),
+            ("nb00/demographics.csv", None,                               # age_outside_25_84 = QDiabetes age range
+             ["cohort", "n", "age_median", "age_iqr", "age_missing_n", "age_outside_25_84_n", "age_outside_25_84_pct",
+              "male_pct"]),
             ("nb00/framework_match.csv", "framework_pivot", None),
             ("nb00/framework_variables.csv", None,
              ["cohort", "variable", "source_field", "route", "patients_with_value", "pct_patients", "status", "reason"]),
@@ -84,6 +88,7 @@ SUMMARY_TABLES = {
     "nb1": [("nb01/completeness_by_variable.csv", "group_all", None),
             ("nb01/ethnicity_source_compare.csv", "group_all", None),
             ("nb01/ethnicity_mapping_by_source.csv", None, None),
+            ("nb01/selection_effect_smd.csv", "smd", ["variable", "c1", "c2", "smd", "|smd|>0.1"]),
             ("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None), ("nb01/smoking_source.csv", None, None),
             ("nb01/htn_derivation.csv", "group_all", None), ("nb01/smoking_level.csv", None, None),
             ("nb01/c1_detection_rate.csv", None,
@@ -1051,6 +1056,14 @@ def framework_pivot(df):
     return wide.reset_index()
 
 
+def no_facility(df) -> bool:
+    """nb00/facility_representation.csv has no known facility in any cohort (empty table, or n_facilities 0)."""
+    import pandas as pd
+
+    return df.empty or "n_facilities" not in df.columns or \
+        pd.to_numeric(df["n_facilities"], errors="coerce").fillna(0).eq(0).all()
+
+
 # Step statuses whose details the block's summary already reports: no error tail then (for ingest "schema_errors" the
 # screen tail is the raw unmapped-values table, with counts < 10 not suppressed)
 REPORTED_STATUSES = {"schema_errors"}
@@ -1212,6 +1225,12 @@ def summary_tables(step: str):
                 df = framework_pivot(df)
             elif filt == "group_all" and "group" in df.columns:
                 df = df[df["group"].astype(str) == "all"]
+            elif filt == "facility" and no_facility(df):
+                out(f"-- {rel}: no facility in any cohort (facility_id empty / unknown; the adapter maps none yet — "
+                    "DHA question)")
+                continue
+            elif filt == "smd":
+                df = df.rename(columns={"imbalance": "|smd|>0.1"})
             elif filt == "audit_notes":
                 if "notes" not in df.columns:
                     continue

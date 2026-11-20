@@ -79,12 +79,17 @@ coverage = pd.DataFrame([{
     "c3_n": len(df), "events": int(df["E"].sum()),
     "qd_computable_n": int(df["qd_computable"].sum()), "qd_computable_pct": round(100 * df["qd_computable"].mean(), 1),
     "lrs_computable_n": int(df["lrs_computable"].sum()), "lrs_computable_pct": round(100 * df["lrs_computable"].mean(), 1),
-    "joint_core8_pct": round(100 * df["ok_core8"].mean(), 1), "joint_lrs_pct": round(100 * df["ok_lrs"].mean(), 1),
+    "joint_core8_n": int(df["ok_core8"].sum()), "joint_core8_pct": round(100 * df["ok_core8"].mean(), 1),
+    "joint_lrs_n": int(df["ok_lrs"].sum()), "joint_lrs_pct": round(100 * df["ok_lrs"].mean(), 1),
     "qd_variant": df["qd_variant"].iloc[0] if len(df) else None,
     "lrs_variant": lrs.label(P),
     "washout_days": P["outcome_washout_days"],
 }])
-run.save_table(coverage, "nb02/coverage.csv", "Score coverage and joint completeness (C3)")
+# A rate is hidden where its count or (C3 N − count) is < 10; then the counts (and events) < 10 → "<10"
+cov_out = sdc.suppress_count_rate_pairs(coverage, "c3_n", [(f"{k}_n", f"{k}_pct") for k in
+                                                           ("qd_computable", "lrs_computable", "joint_core8", "joint_lrs")])
+run.save_table(sdc.suppress_small_counts(cov_out, ["events"]), "nb02/coverage.csv",
+               "Score coverage and joint completeness (C3)")
 print(coverage.T)
 
 # %% [markdown]

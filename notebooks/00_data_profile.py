@@ -78,14 +78,10 @@ volume = pd.DataFrame(rows)
 run.save_table(volume, "nb00/volume.csv", "Table volumes and date ranges")
 print(volume.to_string(index=False))
 
-fac = []
-for c, d in data.items():
-    vc = d["patients"]["facility_id"].value_counts(dropna=False)
-    fac.append({"cohort": c, "n_facilities": int(d["patients"]["facility_id"].nunique()),
-                "top_facility_share_pct": round(100 * vc.iloc[0] / vc.sum(), 1) if len(vc) else None,
-                "facility_missing_pct": round(100 * d["patients"]["facility_id"].isna().mean(), 1)})
-fac = pd.DataFrame(fac)
-run.save_table(fac, "nb00/facility_representation.csv", "Facility representation")
+# Facility: top_facility_share_pct = % of the patients with a facility; empty / "unknown" ids count as missing. The
+# NABIDH adapter does not map a facility yet (DHA question) → facility_missing_pct 100, n_facilities 0.
+fac = pd.DataFrame([{"cohort": c, **breakdowns.facility_representation(d["patients"])} for c, d in data.items()])
+run.save_table(breakdowns.suppressed_facility(fac), "nb00/facility_representation.csv", "Facility representation")
 print(fac.to_string(index=False))
 
 # %% [markdown]
@@ -103,19 +99,14 @@ print(vit.to_string(index=False))
 
 # %% [markdown]
 # ## 3. Demographics
+# Age at the data end. `age_outside_25_84_n / _pct`: a known age outside the QDiabetes range (25 ≤ age < 85;
+# QDiabetes not computable); a missing age is in `age_missing_n` only. All % of `n`.
 
 # %%
-demo = []
-for c, d in data.items():
-    end = cohorts.data_end_date(d)
-    p = d["patients"]
-    age = (end - p["date_of_birth"]).dt.days / 365.25
-    demo.append({"cohort": c, "n": len(p), "age_median": round(age.median(), 1),
-                 "age_iqr": f"{age.quantile(.25):.0f}–{age.quantile(.75):.0f}",
-                 "age_25_84_pct": round(100 * age.between(25, 84.999).mean(), 1),
-                 "male_pct": round(100 * (p["sex"] == "Male").mean(), 1)})
-demo = pd.DataFrame(demo)
-run.save_table(demo, "nb00/demographics.csv", "Demographics summary")
+demo = pd.DataFrame([{"cohort": c, **breakdowns.demographics(d["patients"], cohorts.data_end_date(d))}
+                     for c, d in data.items()])
+run.save_table(breakdowns.suppressed_demographics(demo), "nb00/demographics.csv",
+               "Demographics: age (share outside the QDiabetes range 25–84), sex")
 print(demo.to_string(index=False))
 
 # Ethnic group source P["ethnicity_source"] (nationality or ethnicity); group mapping is in NB1
@@ -163,7 +154,10 @@ for c, d in data.items():
                            "pct_patients": round(100 * n / d.n_patients, 1)})
 fm = pd.DataFrame(match_rows)
 fm["received"] = fm["patients_with_any"] > 0
-run.save_table(sdc.suppress_small_counts(fm, ["patients_with_any"]), "nb00/framework_match.csv",
+# % hidden where the count or (cohort N − count) is < 10 (sdc.suppress_rates), then the counts
+fm_out = sdc.suppress_rates(fm.assign(_n=fm["cohort"].map({c: d.n_patients for c, d in data.items()})),
+                            "patients_with_any", ["_n"], ["pct_patients"]).drop(columns="_n")
+run.save_table(sdc.suppress_small_counts(fm_out, ["patients_with_any"]), "nb00/framework_match.csv",
                "Requested code groups — patients in the received data")
 print(fm.pivot_table(index=["domain", "group"], columns="cohort", values="pct_patients").to_string())
 
@@ -331,12 +325,17 @@ if "c3" in snaps:
 # %%
 kpi = []
 allc = comp[comp["group"] == "all"]
+core8_min = {}           # the weakest of the 8 per cohort, with its counts (the KPI text hides a rate with < 10)
 for c in data:
     sub = allc[(allc["cohort"] == c) & (allc["variable"].isin(codelists.CORE_VARIABLES))]
+    w = sub.sort_values("complete_pct").iloc[0]
+    core8_min[c] = {"variable": w["variable"], "pct": float(w["complete_pct"]), "complete_n": int(w["complete_n"]),
+                    "n": int(w["n"])}
+    shown = sdc.safe_rate(w["complete_pct"], w["complete_n"], w["n"])
     kpi.append({"kpi": "Data Completeness for Required Variables (min over 8 core)", "cohort": c,
-                "target": ">= 90%", "actual": f"{sub['complete_pct'].min():.1f}%",
+                "target": ">= 90%", "actual": shown if isinstance(shown, str) else f"{shown:.1f}%",
                 "met": bool(sub["complete_pct"].min() >= 90),
-                "weakest_variable": sub.sort_values("complete_pct").iloc[0]["variable"]})
+                "weakest_variable": w["variable"]})
 # Required groups: 8 core variables + status/outcome codes + the extra input of the active Leicester variant
 # (waist circumference only in assessment_2010; LPRS does not need it — K-LRS, A5).
 required_groups = ["t2d", "prediabetes", "hypertension", "cvd", "family_history_dm", "antihypertensive",
@@ -353,6 +352,7 @@ kpi = pd.DataFrame(kpi)
 run.save_table(kpi, "nb00/kpi_preview.csv", "KPIs fed by NB0")
 core_min = allc[allc["variable"].isin(codelists.CORE_VARIABLES)].groupby("cohort")["complete_pct"].min()
 run.save_json({**completeness_kpi, "data_completeness_min_core8_pct": core_min.to_dict(),
+               "data_completeness_min_core8": core8_min,     # + counts: kpi.py suppresses the rate (sdc.safe_rate)
                "data_completeness_weakest": {c: r["weakest_variable"] for c, r in
                                              kpi[kpi["cohort"] != "all"].set_index("cohort").iterrows()},
                "framework_status": fw_status,                  # Match | Partial | No match (section 5b + groups)

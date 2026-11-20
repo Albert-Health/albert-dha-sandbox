@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pandas as pd  # noqa: E402
 
 import enclave  # noqa: E402
-from sandbox import audit, sdc  # noqa: E402
+from sandbox import audit, breakdowns, sdc  # noqa: E402
 from sandbox.io import explore, iris  # noqa: E402
 from sandbox.io.adapters import nabidh  # noqa: E402
 
@@ -507,6 +507,103 @@ class TestOutputTables(unittest.TestCase):
         self.assertIn("joint_core7_pct", text)
         self.assertIn(note, text)                                                # not truncated
         self.assertEqual(sum("Data Completeness for Required Variables" in ln for ln in block.lines), 2)
+
+    END = pd.Timestamp("2025-12-31")
+
+    def block_tables(self, facility_ids):
+        """NB0 / NB1 block tables written as the notebooks write them (breakdowns + sdc), with small cells: C1 smoking
+        3 / 4 / 5 of 60, C2 5 of 200 missing; C2 demographics 4 of 30 outside 25–84, 3 women; SMD 3 of 50; facility.
+        Returns (block lines, raw tables: the leak scan's input)."""
+        def patients(n_in, n_out, males):
+            dob = [self.END - pd.Timedelta(days=round(a * 365.25)) for a in [50.0] * n_in + [90.0] * n_out]
+            return pd.DataFrame({"sex": ["Male"] * males + ["Female"] * (n_in + n_out - males),
+                                 "date_of_birth": pd.to_datetime(pd.Series(dob)), "facility_id": None})
+
+        demo = pd.DataFrame([{"cohort": "c1", **breakdowns.demographics(patients(170, 30, 120), self.END)},
+                             {"cohort": "c2", **breakdowns.demographics(patients(26, 4, 27), self.END)}])
+        fac = pd.DataFrame([{"cohort": "c1", **breakdowns.facility_representation(
+            pd.DataFrame({"facility_id": facility_ids}))}])
+        snap = lambda src, conflict=0: pd.DataFrame({       # noqa: E731
+            "smoking_source": pd.Series(src, dtype=object),
+            "smoking_undated_conflict": [False] * (len(src) - conflict) + [True] * conflict})
+        sm = pd.concat([breakdowns.smoking_source(snap(["structured"] * 48 + ["diagnosis_code"] * 3 + [None] * 9, 5))
+                        .assign(cohort="c1"),
+                        breakdowns.smoking_source(snap(["structured"] * 195 + [None] * 5)).assign(cohort="c2")],
+                       ignore_index=True)[["cohort", "smoking_source", "n", "n_cohort", "pct"]]
+        f1 = pd.DataFrame({"age": [40.0, 61.0] * 25, "rare": [True] * 3 + [False] * 47, "male": [True] * 30 + [False] * 20})
+        f2 = pd.DataFrame({"age": [44.0, 66.0] * 25, "rare": [True] * 12 + [False] * 38, "male": [True] * 26 + [False] * 24})
+        sel = breakdowns.selection_effect(f1, f2)
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "nb00").mkdir()
+            (d / "nb01").mkdir()
+            breakdowns.suppressed_demographics(demo).to_csv(d / "nb00" / "demographics.csv", index=False)
+            breakdowns.suppressed_facility(fac).to_csv(d / "nb00" / "facility_representation.csv", index=False)
+            breakdowns.suppressed_shares(sm).to_csv(d / "nb01" / "smoking_source.csv", index=False)
+            breakdowns.suppressed_selection_effect(sel).to_csv(d / "nb01" / "selection_effect_smd.csv", index=False)
+            block = enclave.Block("HEADER")
+            with contextlib.redirect_stdout(io.StringIO()):
+                enclave.summary_tables("nb0")(d, block, mock.Mock(max_rows=60))
+                enclave.summary_tables("nb1")(d, block, mock.Mock(max_rows=60))
+        return block.lines, {"demo": demo, "fac": fac, "sm": sm, "sel": sel}
+
+    def test_new_tables_in_block(self):
+        lines, _ = self.block_tables(["F1"] * 60 + ["F2"] * 25 + [None] * 15)
+        text = "\n".join(lines)
+        self.assertIn("-- nb00/demographics.csv (2 rows)", text)
+        header = next(ln for ln in lines if "age_outside_25_84_pct" in ln).split()
+        self.assertEqual(header, ["cohort", "n", "age_median", "age_iqr", "age_missing_n", "age_outside_25_84_n",
+                                  "age_outside_25_84_pct", "male_pct"])
+        c1 = next(ln for ln in lines if ln.split()[:2] == ["c1", "200"]).split()
+        self.assertEqual(c1[5:], ["30", "15.0", "60.0"])                         # 30 of 200 outside 25–84
+        self.assertIn("-- nb00/facility_representation.csv (1 rows)", text)      # a facility is known: the table
+        self.assertIn("-- nb01/selection_effect_smd.csv (3 rows)", text)
+        self.assertEqual(next(ln for ln in lines if "|smd|>0.1" in ln).split(), ["variable", "c1", "c2", "smd", "|smd|>0.1"])
+        self.assertEqual(next(ln for ln in lines if ln.split()[:1] == ["male"]).split()[1:3], ["0.6", "0.52"])
+        self.assertIn("-- nb01/smoking_source.csv (6 rows)", text)
+        self.assertNotIn("n_cohort", text)
+
+    def test_facility_not_mapped_is_one_line(self):
+        lines, _ = self.block_tables([None] * 50 + ["unknown"] * 5)
+        fac = [ln for ln in lines if "facility" in ln]
+        self.assertEqual(fac, ["-- nb00/facility_representation.csv: no facility in any cohort (facility_id empty / "
+                               "unknown; the adapter maps none yet — DHA question)"])
+        self.assertTrue(enclave.no_facility(pd.DataFrame()))
+        self.assertFalse(enclave.no_facility(pd.DataFrame({"n_facilities": [0, 3]})))
+
+    def test_no_small_count_or_rate_in_block(self):
+        """No count 0 < n < 10 in a count column, and no rate whose count or (N − count) is < 10 (rate × N gives the
+        count back), in any of the new block tables or smoking_source; checked against the unsuppressed values."""
+        lines, raw = self.block_tables(["F1"] * 95 + ["F2"] * 3 + [None] * 2)
+        tokens = {t for ln in lines for t in ln.split()}
+
+        def small(x):
+            return pd.notna(x) and 0 < x < 10
+
+        def forms(v):
+            return {str(v), f"{v:.1f}", f"{v:.2f}", f"{v:.3f}"}
+
+        leaked_rates, small_counts = set(), set()
+        for name, num, den, rate in [("sm", "n", "n_cohort", "pct"),
+                                     ("demo", "age_outside_25_84_n", "n", "age_outside_25_84_pct"),
+                                     ("demo", "age_25_84_n", "n", "age_25_84_pct"), ("demo", "male_n", "n", "male_pct"),
+                                     ("fac", "top_facility_n", "facility_known_n", "top_facility_share_pct"),
+                                     ("sel", "c1_k", "c1_n", "c1"), ("sel", "c1_k", "c1_n", "smd")]:
+            for _, r in raw[name].iterrows():
+                k, n = r[num], r[den]
+                if small(k) or small(n - k):
+                    leaked_rates |= forms(r[rate])
+                if small(k):
+                    small_counts.add(str(int(k)))
+        fac = raw["fac"].iloc[0]
+        leaked_rates |= forms(fac["facility_missing_pct"])                       # 2 of 100 missing
+        self.assertTrue({"8.3", "97.5", "13.3", "86.7", "90.0", "96.9", "2.0", "0.06"} <= leaked_rates)   # fixture check
+        self.assertEqual(small_counts, {"3", "4", "5"})
+        self.assertFalse(leaked_rates & tokens, sorted(leaked_rates & tokens))
+        self.assertFalse(small_counts & tokens, sorted(small_counts & tokens))
+        self.assertIn("<10", tokens)
+        self.assertIn("suppressed (<10)", "\n".join(lines))
+        self.assertIn("80.0", tokens)                                            # 48 of 60: shown (12 others)
 
     def test_failure_lines(self):
         log = ["x", "Traceback (most recent call last):", f'  File "{ROOT}/tools/x.py", line 3, in <module>',

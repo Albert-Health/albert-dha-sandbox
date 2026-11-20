@@ -33,6 +33,33 @@ def suppress_rates(df: pd.DataFrame, num_col: str, den_cols, rate_cols,
     return out
 
 
+def safe_rate(rate, k, n, threshold: int | None = None):
+    """One rate for a text summary (KPI actual / note): f"suppressed (<threshold)" if its count k or (n − k) is
+    0 < x < threshold (the rule of suppress_rates), else the rate unchanged. k or n None → the rate unchanged."""
+    threshold = threshold or PARAMS["small_cell_threshold"]
+    try:
+        k, n = float(k), float(n)
+    except (TypeError, ValueError):
+        return rate
+    if any(0 < x < threshold for x in (k, n - k)):
+        return f"suppressed (<{threshold})"
+    return rate
+
+
+def suppress_small_group_stats(df: pd.DataFrame, n_col: str, stat_cols, threshold: int | None = None) -> pd.DataFrame:
+    """Summary statistics (median, quartiles, mean) over 0 < n < threshold patients → f"suppressed (<threshold)": over
+    so few patients they come close to one patient's value. n_col = the number of values the statistic is over; call
+    it while n_col is still numeric."""
+    threshold = threshold or PARAMS["small_cell_threshold"]
+    out = df.copy()
+    n = pd.to_numeric(out[n_col], errors="coerce")
+    mask = n.notna() & (n > 0) & (n < threshold)
+    for c in stat_cols:
+        out[c] = out[c].astype(object)
+        out.loc[mask, c] = f"suppressed (<{threshold})"
+    return out
+
+
 def fmt_count(n, threshold: int | None = None) -> str:
     """One count → text: '<threshold' if 0 < n < threshold (for summaries printed to the terminal)."""
     threshold = threshold or PARAMS["small_cell_threshold"]
