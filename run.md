@@ -17,3 +17,7 @@ python3 sandbox_bundle.py bundle-info
 python3 sandbox_bundle.py audit-close 20261119T054135Z_nb00_data_profile_b068d0 --reason "terminal closed before run_end (19 Nov)"
 
 python3 sandbox_bundle.py run all
+
+
+****
+SANDBOX_PARAMS='{"qd_missing_smoking_as_non": true}' python3 sandbox_bundle.py run nb1
