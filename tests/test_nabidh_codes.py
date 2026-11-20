@@ -76,6 +76,37 @@ def _field(vc, field):
     return vc[vc["field"] == field].set_index("value")["n_rows"].to_dict()
 
 
+class TestCodeNameClash(unittest.TestCase):
+    """VM ingest 1.3.0 (2026-11-20): C1 and C2 each had 134 rows whose DDC code is a cholecalciferol product while the
+    name is dapagliflozin + metformin (Xigduo XR 5/1000, three spellings). Mapping rule: a code outside every study
+    class gives way to a name that is about a study drug."""
+    CHOLECALCIFEROL = "1499-348905-1171"       # VITA-D 10000IU tablets (DDC)
+
+    def test_name_leads_with_study_drug(self):
+        f = ddc.name_leads_with_study_drug
+        for n in ("DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TABLET", "DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDED",
+                  "DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,000", "XIGDUO XR 5/1000", "xigduo", "TAB CRESTOR 10 MG"):
+            self.assertTrue(f(n), n)
+        for n in ("VITAMIN D3 1000 IU (ON METFORMIN)", "PANADOL 500 MG, TAKES METFORMIN", "Insulin pen needles",
+                  "500 MG", None, ""):
+            self.assertFalse(f(n), n)
+
+    def test_xigduo_with_a_cholecalciferol_code(self):
+        self.assertEqual(ddc.lookup_code(self.CHOLECALCIFEROL), ("DDC: not a study drug class", []))
+        r = nabidh._resolve_drug
+        for n in ("DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TAB", "DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDE",
+                  "DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,0"):
+            self.assertEqual(r(self.CHOLECALCIFEROL, n, None),
+                             ("DDC: not a study drug class → name: ingredient", ["A10BK01", "A10BA02"]), n)
+        self.assertEqual(r(self.CHOLECALCIFEROL, "VITAMIN D3 10000 IU", None), ("DDC: not a study drug class", []))
+        self.assertEqual(r(self.CHOLECALCIFEROL, None, None), ("DDC: not a study drug class", []))
+
+    def test_local_route_code_keeps_the_final_say(self):
+        """A study ingredient by a local route (timolol eye drops) is not a clash: the code still decides."""
+        self.assertEqual(nabidh._resolve_drug(TIMOLOL_EYE, "TIMOLOL 0.5 MG TABLET", None),
+                         ("DDC: non-systemic route", []))
+
+
 class TestMedicationHandler(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -86,13 +117,14 @@ class TestMedicationHandler(unittest.TestCase):
             ("VMP182,2 %,OA", "diltiazem HCl 2 % Ointment (gram)", None),   # topical diltiazem: not counted
             (TIMOLOL_EYE, "TIMOLOL 0.5% EYE DROPS", "Ophthalmic"),
             *[(PARACETAMOL, "PANADOL 500 MG", "Oral")] * 12,               # ≥ 10 rows: listed by DDC ingredient
-            (PARACETAMOL, "METFORMIN 500 MG TABLET", "Oral"),              # code and name disagree
+            (PARACETAMOL, "METFORMIN 500 MG TABLET", "Oral"),              # name is about a study drug → name
+            (PARACETAMOL, "PANADOL 500 MG, TAKES METFORMIN", "Oral"),      # name only mentions one → code kept
         ]
         cls.out, cls.vc = _meds(rows)
 
     def test_canonical_rows(self):
         self.assertEqual(sorted(zip(self.out["patient_id"], self.out["atc_code"])),
-                         [("P0", "C09CA03"), ("P1", "C09CA03"), ("P2", "A10BA02")])   # the code keeps the final say
+                         [("P0", "C09CA03"), ("P1", "C09CA03"), ("P17", "A10BA02"), ("P2", "A10BA02")])
 
     def test_methods(self):
         how = _field(self.vc, "drug → ATC method")
@@ -102,11 +134,12 @@ class TestMedicationHandler(unittest.TestCase):
         self.assertEqual(how["code not ATC/DDC → name: non-systemic"], 1)
         self.assertEqual(how["DDC: non-systemic route"], 1)
         self.assertEqual(how["DDC: not a study drug class"], 13)
+        self.assertEqual(how["DDC: not a study drug class → name: trade name + ingredient"], 1)
         self.assertEqual(set(_field(self.vc, "drug code not ATC/DDC")), {"VMP4763,750 MG,TI", "VMP182,2 %,OA"})
 
     def test_code_format_counts(self):
         self.assertEqual(_field(self.vc, "drug code format"), {
-            "DDC product code (9999-999999-9999)": 14, "VMP<id>,<dose>,<form> (no reference)": 2,
+            "DDC product code (9999-999999-9999)": 15, "VMP<id>,<dose>,<form> (no reference)": 2,
             "6 digits (DDC scientific code stem)": 1, "placeholder (all zeros) → no code": 1})
 
     def test_no_class_lists(self):
@@ -115,10 +148,14 @@ class TestMedicationHandler(unittest.TestCase):
                          {"PARACETAMOL | ORAL": 13})
         self.assertEqual(_field(self.vc, "DDC: non-systemic route (DDC ingredients | route | row route)"),
                          {"TIMOLOL | OCULAR | row: Ophthalmic": 1})
-        self.assertEqual(_field(self.vc, "DDC code without study class, drug name has one"), {"<n rows>": 1})
-        self.assertEqual(
-            _field(self.vc, "DDC code without study class, drug name has one: DDC ≠ name ATC ← name"),
-            {"PARACETAMOL ≠ A10BA02 ← METFORMIN 500 MG TABLET": 1})
+        used = "DDC code without study class → name used"
+        kept = "DDC code without study class, name has one (code kept)"
+        self.assertEqual(_field(self.vc, used), {"<n rows>": 1})
+        self.assertEqual(_field(self.vc, f"{used}: DDC ≠ name ATC ← name"),
+                         {"PARACETAMOL ≠ A10BA02 ← METFORMIN 500 MG TABLET": 1})
+        self.assertEqual(_field(self.vc, kept), {"<n rows>": 1})
+        self.assertEqual(_field(self.vc, f"{kept}: DDC ≠ name ATC ← name"),
+                         {"PARACETAMOL ≠ A10BA02 ← PANADOL 500 MG, TAKES METFORMIN": 1})
         self.assertEqual(_field(self.vc, "rows dropped: no study drug class"), {"<no ATC>": 15})
 
     def test_no_code_column(self):
@@ -220,10 +257,10 @@ class TestIngestBlock(unittest.TestCase):
     def test_medication_summary_new_lists(self):
         """Block: format counts always; DDC ingredient / disagreement lists only for values with ≥ 10 rows."""
         f_nc = "DDC: not a study drug class (DDC ingredients | route)"
-        f_clash = "DDC code without study class, drug name has one: DDC ≠ name ATC ← name"
+        f_clash = "DDC code without study class → name used: DDC ≠ name ATC ← name"
         v = pd.DataFrame({"source": ["medications"] * 7,
                           "field": ["drug code format", "drug code format", f_nc, f_nc,
-                                    "DDC code without study class, drug name has one", f_clash, f_clash],
+                                    "DDC code without study class → name used", f_clash, f_clash],
                           "value": ["DDC product code (9999-999999-9999)", "placeholder (all zeros) → no code",
                                     "PARACETAMOL | ORAL", "RARE INGREDIENT | ORAL", "<n rows>",
                                     "PARACETAMOL ≠ A10BA02 ← METFORMIN 500", "X ≠ C09CA03 ← RARE"],
