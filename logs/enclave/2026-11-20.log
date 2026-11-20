@@ -2552,3 +2552,219 @@ Full screen output (inside the enclave): outputs/20261120T120704Z_enclave_run_57
 
 run all · exit codes: ingest 0 · nb0 0 · nb1 0 · kpi 0
 ----8<---- COPY END ----8<----
+
+----8<---- COPY START | enclave run nb1 | SANDBOX_PARAMS {"qd_missing_smoking_as_non": true} | 2026-11-20 12:16 UTC | ingest v1.5.0 | commit e5ec95a bundle 3baab23a0f1d | python 3.10.12 | 20261120T121627Z_enclave_run_29af8c ----8<----
+Step: run nb1 · source nabidh · exit code 0 · 26 s
+Data: c1 ingest v1.5.0 (20261120T120705Z_ingest_nabidh_47d7f0); c2 ingest v1.5.0 (20261120T120705Z_ingest_nabidh_47d7f0)
+Run: 20261120T121629Z_nb01_c1_c2_feasibility_ea61b7 · status: success · 18 outputs · params override {"qd_missing_smoking_as_non": true}
+
+-- nb01/completeness_by_variable.csv (18 rows)
+  cohort group                variable        measure    n complete_n     complete_pct meets_90                                                                 note
+      c1   all                     sex       recorded 2599       2598 suppressed (<10)     True                                                a value in the record
+      c1   all                     age       recorded 2599       2599            100.0     True                                                a value in the record
+      c1   all               ethnicity       recorded 2599          0              0.0    False                                                a value in the record
+      c1   all                     bmi       recorded 2599       2598 suppressed (<10)     True                                                a value in the record
+      c1   all                 smoking       recorded 2599       2527             97.2     True                                                a value in the record
+      c1   all          family_history present_absent 2599       2599            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c1   all family_history_recorded       recorded 2599       2588             99.6     True FamilyHistory record (positive / negative / other relative) or Z83.3
+      c1   all                     cvd present_absent 2599       2599            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c1   all            hypertension present_absent 2599       2599            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all                     sex       recorded 2564       2562 suppressed (<10)     True                                                a value in the record
+      c2   all                     age       recorded 2564       2564            100.0     True                                                a value in the record
+      c2   all               ethnicity       recorded 2564          0              0.0    False                                                a value in the record
+      c2   all                     bmi       recorded 2564       2424             94.5     True                                                a value in the record
+      c2   all                 smoking       recorded 2564        382             14.9    False                                                a value in the record
+      c2   all          family_history present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all family_history_recorded       recorded 2564        507             19.8    False FamilyHistory record (positive / negative / other relative) or Z83.3
+      c2   all                     cvd present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all            hypertension present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+-- nb01/ethnicity_source_compare.csv (4 rows)
+  cohort group ethnicity_source  default    n ethnicity_known_n  ethnicity_known_pct qd_computable_n qd_computable_pct lrs_computable_n  lrs_computable_pct joint_core7_n  joint_core7_pct joint_core8_n  joint_core8_pct
+      c1   all      nationality     True 2599                 0                  0.0            2597  suppressed (<10)                0                 0.0          2525             97.2             0              0.0
+      c2   all      nationality     True 2564                 0                  0.0            2422              94.5                0                 0.0           373             14.5             0              0.0
+      c1   all        ethnicity    False 2599               168                  6.5            2597  suppressed (<10)              168                 6.5          2525             97.2           163              6.3
+      c2   all        ethnicity    False 2564               266                 10.4            2422              94.5              237                 9.2           373             14.5            31              1.2
+-- nb01/ethnicity_mapping_by_source.csv (6 rows)
+  ethnicity_source                     source_value                     ethnic_group               qdiabetes_category   c1   c2
+       nationality                        <missing>                        <missing>                          WhiteNA 2599 2564
+         ethnicity                        <missing>                        <missing>                          WhiteNA 2431 2298
+         ethnicity                            Arabs                            Arabs                            Other   13  <10
+         ethnicity                    Not Available                    Not Available                            Other   43  121
+         ethnicity                                U                                U                            Other   91  119
+         ethnicity (values with < 10 patients each) (values with < 10 patients each) (values with < 10 patients each)   21   20
+-- nb01/selection_effect_smd.csv (14 rows)
+               variable     c1     c2    smd  |smd|>0.1
+                    age 46.137 49.723 -0.331       True
+                    bmi 28.245 28.524 -0.050      False
+                   male  0.400  0.607 -0.423       True
+  t2dm (vs prediabetes)  0.469  0.547 -0.155       True
+         family_history  0.987  0.196  2.706       True
+                    cvd  0.193  0.172  0.056      False
+                 htn_dx  0.384  0.462 -0.158       True
+                htn_med  0.331  0.368 -0.078      False
+        smoking_current  0.133  0.022  0.422       True
+                has_a10  0.473  0.432  0.083      False
+            eth_Emirati    NaN    NaN    NaN      False
+             eth_Indian    NaN    NaN    NaN      False
+          eth_Pakistani    NaN    NaN    NaN      False
+           eth_Filipino    NaN    NaN    NaN      False
+-- nb01/score_computability.csv (6 rows)
+  cohort       group    n qd_computable_pct  lrs_computable_pct  lrs_outside_dev_age_pct    qd_variant                 lrs_variant
+      c1         all 2599  suppressed (<10)                 0.0                     30.2 reduced_8core LPRS (Gray 2012 — no waist)
+      c1 Prediabetes 1379  suppressed (<10)                 0.0                     38.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c1        T2DM 1220             100.0                 0.0                     20.8 reduced_8core LPRS (Gray 2012 — no waist)
+      c2         all 2564              94.5                 0.0                     23.1 reduced_8core LPRS (Gray 2012 — no waist)
+      c2 Prediabetes 1162              96.2                 0.0                     30.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c2        T2DM 1402              93.0                 0.0                     17.0 reduced_8core LPRS (Gray 2012 — no waist)
+-- nb01/score_missing_reasons.csv (10 rows)
+  cohort     score      reason    n              pct
+      c1 qdiabetes         sex  <10 suppressed (<10)
+      c1 qdiabetes bmi_missing  <10 suppressed (<10)
+      c1       lrs   ethnicity 2599            100.0
+      c1       lrs         sex  <10 suppressed (<10)
+      c1       lrs bmi_missing  <10 suppressed (<10)
+      c2 qdiabetes bmi_missing  140              5.5
+      c2 qdiabetes         sex  <10 suppressed (<10)
+      c2       lrs   ethnicity 2564            100.0
+      c2       lrs bmi_missing  140              5.5
+      c2       lrs         sex  <10 suppressed (<10)
+-- nb01/smoking_source.csv (10 rows)
+  cohort             smoking_source    n              pct
+      c1         undated_consistent 2392             92.0
+      c1                 structured  123              4.7
+      c1 missing (undated conflict)   60              2.3
+      c1             diagnosis_code   12              0.5
+      c1                    missing   12              0.5
+      c2                    missing 2174             84.8
+      c2         undated_consistent  336             13.1
+      c2                 structured   31              1.2
+      c2             diagnosis_code   15              0.6
+      c2 missing (undated conflict)  <10 suppressed (<10)
+-- nb01/htn_derivation.csv (8 rows)
+  cohort group             htn_category    n n_group  pct     counted_as_treated_by
+      c1   all           diagnosis only  269    2599 10.4 QDiabetes, LPRS, LRA 2010
+      c1   all          medication only  131    2599  5.0 QDiabetes, LPRS, LRA 2010
+      c1   all diagnosis and medication  729    2599 28.0 QDiabetes, LPRS, LRA 2010
+      c1   all                  neither 1470    2599 56.6                      none
+      c2   all           diagnosis only  328    2564 12.8 QDiabetes, LPRS, LRA 2010
+      c2   all          medication only   88    2564  3.4 QDiabetes, LPRS, LRA 2010
+      c2   all diagnosis and medication  856    2564 33.4 QDiabetes, LPRS, LRA 2010
+      c2   all                  neither 1292    2564 50.4                      none
+-- nb01/smoking_level.csv (20 rows)
+  cohort qd_smoking_level                                                   recorded_as    n              pct n_from_diagnosis_code
+      c1              non                                                         never 2180             83.9                     0
+      c1              non                                undated records disagree (D28)   60              2.3                     0
+      c1              non                                             no smoking record   10              0.4                     0
+      c1              non records present, none usable (unknown / unmapped, e.g. other)  <10 suppressed (<10)                     0
+      c1               ex                                                            ex  <10 suppressed (<10)                   <10
+      c1            light                                                         light  179              6.9                     0
+      c1         moderate                                                      moderate   45              1.7                     0
+      c1         moderate               current, intensity not recorded (D7 → moderate)   13              0.5                    10
+      c1            heavy                                                         heavy  108              4.2                     0
+      c1          missing                                                             -    0              0.0                     0
+      c2              non                                             no smoking record 1248             48.7                     0
+      c2              non records present, none usable (unknown / unmapped, e.g. other)  926             36.1                     0
+      c2              non                                                         never  318             12.4                     0
+      c2              non                                undated records disagree (D28)  <10 suppressed (<10)                     0
+      c2               ex                                                            ex  <10 suppressed (<10)                   <10
+      c2            light                                                         light   26              1.0                     0
+      c2         moderate                                                      moderate   11              0.4                     0
+      c2         moderate               current, intensity not recorded (D7 → moderate)  <10 suppressed (<10)                   <10
+      c2            heavy                                                         heavy   11              0.4                     0
+      c2          missing                                                             -    0              0.0                     0
+-- nb01/c1_detection_rate.csv (24 rows)
+  cohort      reference       group     score    n n_computable n_flagged  sens_computable  ci_low  ci_high                        threshold
+      c1       data_end         all       lrs 2599            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end         all qdiabetes 2599         2597       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end        T2DM       lrs 1220            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end        T2DM qdiabetes 1220         1220       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end Prediabetes       lrs 1379            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end Prediabetes qdiabetes 1379         1377       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence         all       lrs 2599            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence         all qdiabetes 2599         2143       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence        T2DM       lrs 1220            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence        T2DM qdiabetes 1220          944       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence Prediabetes       lrs 1379            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence Prediabetes qdiabetes 1379         1199       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end         all       lrs 2564            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end         all qdiabetes 2564         2422       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end        T2DM       lrs 1402            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end        T2DM qdiabetes 1402         1304       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end Prediabetes       lrs 1162            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end Prediabetes qdiabetes 1162         1118       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence         all       lrs 2564            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence         all qdiabetes 2564         1830       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence        T2DM       lrs 1402            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence        T2DM qdiabetes 1402          909       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence Prediabetes       lrs 1162            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence Prediabetes qdiabetes 1162          921       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+-- nb01/lprs_ethnicity_scenarios.csv (4 rows)
+  cohort group                  scenario    n n_computable   pct_computable  median  p25  p75
+      c1   all unknown ethnicity = white 2599         2597 suppressed (<10)    4.94 4.35 5.54
+      c1   all unknown ethnicity = other 2599         2597 suppressed (<10)    5.69 5.11 6.29
+      c2   all unknown ethnicity = white 2564         2422             94.5    4.79 4.24 5.38
+      c2   all unknown ethnicity = other 2564         2422             94.5    5.54 5.00 6.13
+-- nb01/detection_sweep.csv (46 rows)
+  cohort      score  threshold n_computable n_flagged  sens_computable           ci_low          ci_high
+      c1  qdiabetes        1.0         2597      2290             88.2             86.9             89.4
+      c1  qdiabetes        2.5         2597      1820             70.1             68.3             71.8
+      c1  qdiabetes        5.0         2597      1338             51.5             49.6             53.4
+      c1  qdiabetes        7.5         2597      1012             39.0             37.1             40.9
+      c1  qdiabetes       10.0         2597       787             30.3             28.6             32.1
+      c1  qdiabetes       15.0         2597       482             18.6             17.1             20.1
+      c1  qdiabetes       20.0         2597       298             11.5             10.3             12.8
+      c1 lprs_white        4.0         2597      2342             90.2             89.0             91.3
+      c1 lprs_white        4.5         2597      1800             69.3             67.5             71.1
+      c1 lprs_white        5.0         2597      1229             47.3             45.4             49.2
+      c1 lprs_white        5.5         2597       692             26.6             25.0             28.4
+      c1 lprs_white        6.0         2597       295             11.4             10.2             12.6
+      c1 lprs_white        6.5         2597       110              4.2              3.5              5.1
+      c1 lprs_white        7.0         2597        24              0.9              0.6              1.4
+      c1 lprs_white        7.5         2597       <10 suppressed (<10) suppressed (<10) suppressed (<10)
+      c1 lprs_other        4.0         2597      2586             99.6             99.2             99.8
+      c1 lprs_other        4.5         2597      2483             95.6             94.8             96.3
+      c1 lprs_other        5.0         2597      2074             79.9             78.3             81.4
+      c1 lprs_other        5.5         2597      1503             57.9             56.0             59.8
+      c1 lprs_other        6.0         2597       974             37.5             35.7             39.4
+      c1 lprs_other        6.5         2597       451             17.4             16.0             18.9
+      c1 lprs_other        7.0         2597       178              6.9              5.9              7.9
+      c1 lprs_other        7.5         2597        46              1.8              1.3              2.4
+      c2  qdiabetes        1.0         2422      2141             88.4             87.1             89.6
+      c2  qdiabetes        2.5         2422      1645             67.9             66.0             69.7
+      c2  qdiabetes        5.0         2422      1064             43.9             42.0             45.9
+      c2  qdiabetes        7.5         2422       724             29.9             28.1             31.7
+      c2  qdiabetes       10.0         2422       505             20.9             19.3             22.5
+      c2  qdiabetes       15.0         2422       263             10.9              9.7             12.2
+      c2  qdiabetes       20.0         2422       148              6.1              5.2              7.1
+      c2 lprs_white        4.0         2422      2054             84.8             83.3             86.2
+      c2 lprs_white        4.5         2422      1547             63.9             61.9             65.8
+      c2 lprs_white        5.0         2422       987             40.8             38.8             42.7
+      c2 lprs_white        5.5         2422       511             21.1             19.5             22.8
+      c2 lprs_white        6.0         2422       203              8.4              7.3              9.6
+      c2 lprs_white        6.5         2422        73              3.0              2.4              3.8
+      c2 lprs_white        7.0         2422        18              0.7              0.5              1.2
+      c2 lprs_white        7.5         2422       <10 suppressed (<10) suppressed (<10) suppressed (<10)
+      c2 lprs_other        4.0         2422      2396             98.9             98.4             99.3
+      c2 lprs_other        4.5         2422      2237             92.4             91.2             93.4
+      c2 lprs_other        5.0         2422      1816             75.0             73.2             76.7
+      c2 lprs_other        5.5         2422      1262             52.1             50.1             54.1
+      c2 lprs_other        6.0         2422       734             30.3             28.5             32.2
+      c2 lprs_other        6.5         2422       338             14.0             12.6             15.4
+      c2 lprs_other        7.0         2422       123              5.1              4.3              6.0
+      c2 lprs_other        7.5         2422        33              1.4              1.0              1.9
+-- nb01/score_summary.csv (4 rows)
+       status  qd_median_pct  lrs_median  lrs_p25  lrs_p75  lrs_high_risk_pct cohort                 lrs_variant
+  Prediabetes           3.18         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+         T2DM           8.33         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+  Prediabetes           2.96         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+         T2DM           5.52         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+-- nb01/joint_completeness.csv (6 rows)
+  cohort       group    n joint_core7_n  joint_core7_pct joint_core8_n  joint_core8_pct joint_lrs_n  joint_lrs_pct
+      c1         all 2599          2525             97.2             0              0.0           0            0.0
+      c1 Prediabetes 1379          1332             96.6             0              0.0           0            0.0
+      c1        T2DM 1220          1193             97.8             0              0.0           0            0.0
+      c2         all 2564           373             14.5             0              0.0           0            0.0
+      c2 Prediabetes 1162           211             18.2             0              0.0           0            0.0
+      c2        T2DM 1402           162             11.6             0              0.0           0            0.0
+Full screen output (inside the enclave): outputs/20261120T121627Z_enclave_run_29af8c/enclave/nb1.log
+----8<---- COPY END ----8<----
