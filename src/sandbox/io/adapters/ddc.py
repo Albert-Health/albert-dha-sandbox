@@ -1,8 +1,13 @@
 """Dubai Drug Code (DDC) → ATC: drug code or drug name in the Medication view → study drug classes.
 
-The NABIDH Medication view has no ATC: C1 has DrugProduct_Code (DDC product code, e.g. "0005-379302-1171"), C2
-only DrugProduct_Description (drug name). The DDC list has no ATC either; per product it has active ingredient
-names ("METFORMIN HCL/SITAGLIPTIN"), route of administration and dosage form. Mapping:
+The NABIDH Medication view has no ATC. C1 and C2 have DrugProduct_Code (mostly the DDC product code, e.g.
+"0005-379302-1171", or the DDC scientific code; VM ingest 2026-11-19) and DrugProduct_Description (drug name); C3
+has only the name (the earlier "C2 has no drug code" was C3, read as C2 before ingest 1.1.0). Other code shapes seen
+(C1 / C2, 2026-11-19): 6 digits = the DDC scientific code stem without its dosage-form suffix ("166101" → valsartan;
+the middle part of the product code) → looked up as a stem; "VMP<id>,<dose>,<form>" (another formulary, no reference
+here) and the all-zero placeholder "0000-000000-0000" (= no code) → the name decides (code_format). The DDC list has
+no ATC either; per product it has active ingredient names ("METFORMIN HCL/SITAGLIPTIN"), route of administration
+and dosage form. Mapping:
 
   product → active ingredients → codelists.INGREDIENT_ATC (whole-word search) → ATC codes
   combination product → one ATC per active ingredient (one Medication row → several canonical rows)
@@ -53,6 +58,39 @@ _ANY_ROUTE_ATC = {codelists.INGREDIENT_ATC[k] for k in codelists.INGREDIENT_ANY_
 def norm_code(s: pd.Series) -> pd.Series:
     """Code comparison: upper case, letters + digits only ("0005-379302-1171" = "00053793021171")."""
     return s.astype("string").str.upper().str.replace(r"[^0-9A-Z]", "", regex=True).replace("", pd.NA)
+
+
+def _norm_one(code) -> str:
+    return "" if code is None or pd.isna(code) else re.sub(r"[^0-9A-Z]", "", str(code).upper())
+
+
+# Drug code shapes in Medication.DrugProduct_Code (C1 / C2 ingest, 2026-11-19), checked in this order on the code
+# (upper case, stripped). Report only (ingest block "drug code format"), except: a placeholder counts as no code, a
+# stem is looked up in the DDC list (lookup_code).
+STEM_SHAPE = re.compile(r"^(?:\d{6}|[A-Z]\d{5})$")      # DDC scientific code without the "-999" form suffix
+CODE_FORMATS = [
+    ("DDC product code (9999-999999-9999)", re.compile(r"^\d{4}-?\d{6}-?\d{4}$")),
+    ("DDC scientific code (999999-999)", re.compile(r"^(?:\d{6}|[A-Z]\d{5})-?\d{3}$")),
+    ("6 digits (DDC scientific code stem)", STEM_SHAPE),
+    ("VMP<id>,<dose>,<form> (no reference)", re.compile(r"^VMP\d+(?:,|$)")),
+    ("ATC", re.compile(r"^[A-Z]\d{2}(?:[A-Z]{1,2}\d{0,2})?$")),
+]
+
+
+def is_placeholder(code) -> bool:
+    """All-zero code ("0000-000000-0000", 0000…): a filler, not a product → treated as no code."""
+    k = _norm_one(code)
+    return bool(k) and set(k) == {"0"}
+
+
+def code_format(code) -> str:
+    """Drug code → shape label (CODE_FORMATS; "no code", "placeholder (all zeros) → no code", "other")."""
+    c = "" if code is None or pd.isna(code) else str(code).strip().upper()
+    if not c:
+        return "no code"
+    if is_placeholder(c):
+        return "placeholder (all zeros) → no code"
+    return next((lab for lab, rx in CODE_FORMATS if rx.match(c)), "other")
 
 
 def _norm_text(s) -> str:
@@ -170,17 +208,63 @@ def _indexes(path: Path | None = None):
     return by_code, by_sci, by_trade, by_head
 
 
+@lru_cache(maxsize=4)
+def _stem_index(path: Path | None = None) -> dict[str, tuple[list[str], bool]]:
+    """Scientific code stem (first 6 characters, = the middle part of the product code: ingredient + strength without
+    the dosage form) → (ATC list, excluded_route). Every product of the stem must agree: all study products → the
+    ATC codes common to all of them; all without a class → ([], False) or all local route → ([], True). A stem that
+    mixes systemic and local forms (prednisolone tablets + enema) is left out → the drug name decides."""
+    ref = load_reference(path)
+    kinds: dict[str, set[str]] = {}
+    atc: dict[str, list[str]] = {}
+    for k, a, e in zip(ref["sci_key"].str.slice(0, 6), ref["atc_codes"], ref["excluded_route"]):
+        if pd.isna(k):
+            continue
+        kinds.setdefault(k, set()).add("study" if a else ("local" if e else "other"))
+        if a:
+            atc[k] = list(a) if k not in atc else [x for x in atc[k] if x in a]
+    out = {}
+    for k, kd in kinds.items():
+        if kd == {"study"} and atc.get(k):
+            out[k] = (atc[k], False)
+        elif kd in ({"other"}, {"local"}):
+            out[k] = ([], kd == {"local"})
+    return out
+
+
+@lru_cache(maxsize=4)
+def _info_index(path: Path | None = None) -> dict[str, str]:
+    """Product / scientific code / stem key → "ACTIVE INGREDIENTS | route" from the DDC list (first product) — for the
+    ingest report (which ingredient a code without a study class carries; reference data, not patient data)."""
+    ref = load_reference(path)
+    text = (ref["ingredients"].fillna("?").str.upper() + " | " + ref["route"].fillna(ref["dosage_form"]).fillna("?"))
+    out: dict[str, str] = {}
+    for keys in (ref["key"], ref["sci_key"], ref["sci_key"].str.slice(0, 6)):
+        for k, t in zip(keys, text):
+            if not pd.isna(k):
+                out.setdefault(k, t)
+    return out
+
+
+def code_info(code, path: Path | None = None) -> str | None:
+    """DDC code (product, scientific or stem) → "ACTIVE INGREDIENTS | route" from the DDC list; None if not in it."""
+    k = _norm_one(code)
+    return _info_index(path).get(k) if k else None
+
+
 def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
-    """DDC product code (or DDC scientific code) → (status, ATC list).
-    status: "DDC code" · "DDC scientific code" · "DDC: not a study drug class" · "DDC: non-systemic route" ·
-    "not a DDC code"."""
+    """DDC product code (or DDC scientific code, or its 6-character stem) → (status, ATC list).
+    status: "DDC code" · "DDC scientific code" · "DDC scientific code stem" · "DDC: not a study drug class" ·
+    "DDC: non-systemic route" · "not a DDC code". A placeholder (all zeros) is "not a DDC code"."""
     by_code, by_sci, _, _ = _indexes(path)
     key = norm_code(pd.Series([code])).iloc[0]
-    if pd.isna(key):
+    if pd.isna(key) or is_placeholder(key):
         return "not a DDC code", []
     hit, how = by_code.get(key), "DDC code"
     if hit is None:
         hit, how = by_sci.get(key), "DDC scientific code"
+    if hit is None and STEM_SHAPE.match(key):
+        hit, how = _stem_index(path).get(key), "DDC scientific code stem"
     if hit is None:
         return "not a DDC code", []
     atcs, excluded = hit

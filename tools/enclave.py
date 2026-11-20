@@ -850,10 +850,14 @@ def failure_lines(lines: list[str]) -> list[str]:
 # Drug → ATC summary (ingest value_counts, source "medications"): (field, max rows, hide small values).
 # Code / name lists never print a value seen in < 10 rows; counts are already suppressed in the file.
 MED_FIELDS = [
-    ("drug → ATC method", 20, False), ("rows dropped: no study drug class", 1, False),
+    ("drug → ATC method", 20, False), ("drug code format", 10, False), ("rows dropped: no study drug class", 1, False),
     ("combination products (rows → several ATC rows)", 1, False), ("ATC (3 chars) after mapping", 20, False),
     ("drug code not ATC/DDC", 10, True), ("ATC ← drug_name (name match)", 15, True),
     ("drug_name without study drug class", 15, True),
+    ("DDC: not a study drug class (DDC ingredients | route)", 15, True),
+    ("DDC: non-systemic route (DDC ingredients | route | row route)", 10, True),
+    ("DDC code without study class, drug name has one", 1, False),
+    ("DDC code without study class, drug name has one: DDC ≠ name ATC ← name", 10, True),
 ]
 
 

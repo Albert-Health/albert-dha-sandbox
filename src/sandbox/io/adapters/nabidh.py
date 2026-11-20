@@ -61,6 +61,10 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   unreleased (1d)  2026-11-20  Medication: a 6-digit code = DDC scientific code stem, looked up when every product
+#                      of the stem agrees; the all-zero placeholder "0000-000000-0000" = no code (→ name). Report:
+#                      "drug code format" counts; DDC codes without a study class listed by DDC ingredient | route
+#                      (i22) and code / name disagreement counted (code keeps the final say)
 #   1.2.1  2026-11-19  Progress lines on screen: IRIS connection, each view's query, rows so far, mapping time
 #                      (output only; canonical data unchanged)
 #   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
@@ -108,10 +112,11 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 #   date_format       overrides DATE_FORMAT for this source
 #
 # HSAA views (2026-11-18, check_environment [mapping] output): the patient key is the numeric `ID` in the
-# Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C2 has
-# SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in Medication; C1 has no SELECT
-# permission on Encounter (optional, skipped). Code systems (ICD-10 / LOINC) and value dictionaries are not
-# verified yet — to be checked with enclave.sh values / columns (docs/gap.md K3).
+# Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C3 (read as
+# "C2" before ingest 1.1.0) has SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in
+# Medication — the real C2 has drug codes (VM ingest 2026-11-19: DDC code 21,099 rows, scientific code 3,127); C1
+# has no SELECT permission on Encounter (optional, skipped). Code systems (ICD-10 / LOINC) and value dictionaries
+# are not verified yet — to be checked with enclave.sh values / columns (docs/gap.md K3).
 # In the C1 DDL (2026-11-19) but not mapped: Diagnosis.DiagnosisGroup (values unknown), Medication
 # ToTime / DoseQuantity / DoseUoM_Description, Observation.Encounter, LabResultItem ID / Encounter.
 SOURCES: dict[str, dict] = {
@@ -169,7 +174,8 @@ SOURCES: dict[str, dict] = {
     "medications": {
         "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
         "columns": {"patient_id": "Patient", "date": "FromTime"},
-        # atc_code ← DrugProduct_Code: ATC or DDC product code (C1); absent in C2 → name (DrugProduct_Description)
+        # atc_code ← DrugProduct_Code: ATC or DDC product / scientific code (C1, C2); absent in C3 → name
+        # (DrugProduct_Description)
         "optional_columns": {"atc_code": "DrugProduct_Code", "drug_name": "DrugProduct_Description",
                              "route": "Route_Description"},
     },
@@ -610,8 +616,11 @@ ATC_LIKE = re.compile(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$")
 
 
 def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
-    """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code via the
-    DDC reference (a recognised code has the final say); no code or an unrecognised one → from the drug name."""
+    """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code (or its
+    6-digit stem) via the DDC reference (a recognised code has the final say); no code or an unrecognised one → from
+    the drug name. The all-zero placeholder ("0000-000000-0000", C1 / C2 2026-11-19) counts as no code."""
+    if code is not None and ddc.is_placeholder(code):
+        code = None
     if code is not None:
         if ATC_LIKE.match(code):
             return "ATC code", [code]
@@ -627,11 +636,22 @@ def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
     return ddc.lookup_name(drug, route)
 
 
+DDC_NO_CLASS = ("DDC: not a study drug class", "DDC: non-systemic route")
+
+
+def _ddc_no_class_check(code, drug, route) -> tuple[str, list[str]]:
+    """A DDC code without a study class: (DDC "ingredients | route", ATC the drug name would give). A non-empty ATC
+    means code and name disagree — report only; the code keeps the final say."""
+    info = ddc.code_info(code) or "?"
+    return info, (ddc.lookup_name(drug, route)[1] if drug is not None else [])
+
+
 def _h_medications(df, name, vc):
-    """Drug → ATC (io/adapters/ddc.py). C1: DrugProduct_Code = DDC product code; C2: no code, DrugProduct_Description
-    (name) → DDC trade name + active ingredient. Combination product → one row per active ingredient. A record
-    outside the study drug classes does not enter the canonical table (atc_code is required); how many dropped and
-    why is in value_counts."""
+    """Drug → ATC (io/adapters/ddc.py). C1 / C2: DrugProduct_Code = DDC product or scientific code (a few rows carry a
+    6-digit stem, a VMP formulary code or the all-zero placeholder); C3: no code, DrugProduct_Description (name) →
+    DDC trade name + active ingredient. Combination product → one row per active ingredient. A record outside the
+    study drug classes does not enter the canonical table (atc_code is required); how many dropped and why is in
+    value_counts, with the DDC active ingredient of the codes without a study class."""
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = (df["atc_code"] if "atc_code" in df else empty).astype("string").str.strip().str.upper().replace("", pd.NA)
     drug = (df["drug_name"] if "drug_name" in df else empty).astype("string").str.strip().replace("", pd.NA)
@@ -643,8 +663,32 @@ def _h_medications(df, name, vc):
     n_atc = atcs.map(len)
 
     vc += _value_counts(name, "drug → ATC method", how)
+    fmt_of = {c: ddc.code_format(c) for c in {k[0] for k in keys}}
+    vc += _value_counts(name, "drug code format", pd.Series([fmt_of[k[0]] for k in keys], index=df.index))
     unknown = how.str.startswith("code not ATC/DDC").fillna(False).astype(bool)
     vc += _value_counts(name, "drug code not ATC/DDC", code[unknown], top=30)
+    # i22: which DDC products the codes without a study class are (DDC active ingredient | route; reference data),
+    # and whether the row's drug name would have given a study class (code and name disagree → listed, not used)
+    no_class = how.isin(DDC_NO_CLASS).fillna(False).astype(bool)
+    if no_class.any():
+        chk = {k: _ddc_no_class_check(*k) for k in {k for k, nc in zip(keys, no_class) if nc}}
+        nc_keys = [k for k, nc in zip(keys, no_class) if nc]
+        info = pd.Series([chk[k][0] for k in nc_keys], index=df.index[no_class], dtype="string")
+        h = how[no_class]
+        vc += _value_counts(name, "DDC: not a study drug class (DDC ingredients | route)",
+                            info[h.eq("DDC: not a study drug class")], top=30)
+        vc += _value_counts(name, "DDC: non-systemic route (DDC ingredients | route | row route)",
+                            info[h.eq("DDC: non-systemic route")] + " | row: "
+                            + route[no_class & how.eq("DDC: non-systemic route")].fillna("-"), top=20)
+        name_atc = pd.Series([chk[k][1] for k in nc_keys], index=df.index[no_class], dtype=object)
+        clash = name_atc.map(len) > 0
+        vc.append({"source": name, "field": "DDC code without study class, drug name has one", "value": "<n rows>",
+                   "n_rows": int(clash.sum())})
+        if clash.any():
+            shown = (info[clash].str.split(" | ", regex=False).str[0].str.slice(0, 28) + " ≠ "
+                     + name_atc[clash].str.join("+") + " ← " + drug[no_class][clash])
+            vc += _value_counts(name, "DDC code without study class, drug name has one: DDC ≠ name ATC ← name",
+                                shown, top=20)
     by_name = how.str.contains("name: ", regex=False).fillna(False).astype(bool)
     hit = by_name & (n_atc > 0)
     vc += _value_counts(name, "ATC ← drug_name (name match)", atcs[hit].str.join("+") + " ← " + drug[hit], top=50)

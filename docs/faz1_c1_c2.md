@@ -125,15 +125,30 @@ hastada geçen değerleri ya da yüzdelikleri basar.
 
   ```bash
   for s in c1 c2; do bash tools/enclave.sh values $s.Diagnosis Diagnosis_Code --top 40; bash tools/enclave.sh values $s.Observation ObservationCode_Code --top 40; bash tools/enclave.sh values $s.FamilyHistory FamilyMember_Description; bash tools/enclave.sh values $s.FamilyHistory Diagnosis_Code; done
-  bash tools/enclave.sh values c1.Medication DrugProduct_Code --top 40
-  bash tools/enclave.sh values c2.Medication DrugProduct_Description --top 40
   ```
 
   Ne çıkar: Diagnosis_Code gerçekten ICD-10 mu, noktalı mı (`a99.9`); ObservationCode_Code LOINC mi
-  (`9999-9`); `FH_RELATION_DEGREE`. DrugProduct_Code DDC ürün kodu mu: şekil `9999-999999-9999` (tiresiz
-  `99999999999999` ya da bilimsel kod `999999-999` de olur), ATC (`a99aa99`) gelirse o da çalışır. C2'de kod yok:
-  ad DDC ticari adıyla (marka kökü, ör. `CRESTOR 10 MG` → rosuvastatin) ya da adda geçen etken maddeyle eşlenir
-  (K12). Adların biçimi (ticari ad mı, etken madde + doz mu) bu blokta görünür.
+  (`9999-9`); `FH_RELATION_DEGREE`.
+
+  İlaç için ayrı komut gerekmez, ingest bloğunun **"drug → ATC"** bölümü yeterli (adım 3). C1 ve C2'de
+  `DrugProduct_Code` var (VM ingest 2026-11-19: C2'de DDC ürün kodu 21.099, bilimsel kod 3.127 satır). Daha önce
+  "C2'de kod yok" diye yazılan durum C3'e aitti: C2 ve C3 şemaları 1.1.0'dan önce yer değiştirmişti. Yalnız C3 ad
+  yoluyla eşlenir: DDC ticari adı (marka kökü, ör. `CRESTOR 10 MG` → rosuvastatin) ya da adda geçen etken madde
+  (K12). Kod biçimleri bloktaki `drug code format` satırlarında sayılır:
+
+  | Biçim | Örnek | Ne yapılır |
+  |---|---|---|
+  | DDC ürün kodu | `9999-999999-9999` (tiresiz de olur) | DDC listesinden |
+  | DDC bilimsel kod | `999999-999` | DDC listesinden |
+  | 6 hane | `166101` | DDC bilimsel kodunun ilk 6 hanesi (etken madde + doz, form eki yok). Gruptaki ürünlerin hepsi aynı sınıftaysa koddan eşlenir. Sistemik ve yerel formlar karışıksa adla eşlenir |
+  | `VMP<id>,<doz>,<form>` | `VMP4763,750 MG,TI` | Referansı yok, adla eşlenir |
+  | Hep sıfır | `0000-000000-0000` | Boş kod sayılır, adla eşlenir |
+  | ATC | `a99aa99` | Olduğu gibi |
+
+  Kodu tanınan ama çalışma sınıfı olmayan satırlar blokta DDC etken maddesiyle listelenir (≥ 10 satır). Bunlar
+  `DDC: not a study drug class` ve `DDC: non-systemic route` satırlarıdır. Kod sınıfsız, ad sınıflı çıkarsa
+  `DDC code without study class, drug name has one` satırında görünür. Böyle satırda kod geçerli kalır; liste
+  kaçan çalışma ilacını görmek için.
 
 - [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
 
@@ -270,7 +285,8 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 - [ ] Uyruk sütunu verilebilir mi? (D6)
 - [ ] Observation (vital: BMI, boy, kilo) için birim sütunu verilebilir mi? (Lab birimi LabResultItem'da var.)
 - [ ] LabResultItem.TestItemCode_Code LOINC mi? C2 / C3 şemalarında da LabResultItem var mı?
-- [ ] C1 `DrugProduct_Code` DDC ürün kodu mu? C2 Medication'da neden yok, verilebilir mi? (K12)
+- [ ] C1 / C2 `DrugProduct_Code` içindeki 6 haneli ve `VMP<id>,<doz>,<form>` kodlar hangi sistemden geliyor? C3
+  Medication'da kod sütunu verilebilir mi? (K12)
 - [ ] C1 "complete case" tanımı nedir? C2'nin N'i ve örnekleme yöntemi nedir? C1 ile C2 örtüşüyor mu?
 - [ ] Veri çekim tarihi nedir? (Referans tarihi "veri sonu" için, D22.)
 - [ ] Çıktı çıkarma kuralları: küçük hücre eşiği, figür onayı, izinli formatlar.
@@ -306,7 +322,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 | Sigara | ✓ | — | SocialHistory (kalem + Qty) + F17.2 / Z72.0 / Z87.891 | Kalem filtresi (1a) |
 | Aile öyküsü (diyabet) | ✓ | ✓ | FamilyHistory (Diagnosis_Code / _Description, FamilyMember) + Z83.3 | Yalnız birinci derece pozitif |
 | KVH | ✓ | — | Diagnosis I20–I25, I50, I6x, G45 | — |
-| Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication (DDC → ATC) | C2'de kod yok → addan (1d, K12) |
+| Hipertansiyon | tanı ve ilaç | yalnız ilaç | Diagnosis I10–I16 + Medication (DDC → ATC) | C1 / C2 DDC kodundan; kod tanınmazsa ve C3'te addan (1d, K12) |
 | Statin, kortikosteroid, atipik antipsikotik | ✓ | — | Medication (DDC → ATC: C10AA, H02AB, N05AH / AX / AL) | Yalnız sistemik yol; D26 |
 | Glisemik lab (yalnız statü, model girdisi değil) | — | — | LabResultItem 4548-4, 1558-6, 1521-4 (TestItemCode_Code) | Birim `ResultValueUnits`; LOINC teyit (1c) |
 
