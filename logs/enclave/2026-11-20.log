@@ -1133,3 +1133,43 @@ Full screen output (inside the enclave): outputs/20261120T102546Z_enclave_run_ad
 
 run all · exit codes: ingest 0 · nb0 0 · nb1 0 · kpi 0
 ----8<---- COPY END ----8<----
+
+----8<---- COPY START | enclave audit-close 20261119T054135Z_nb00_data_profile_b068d0 --reason 'terminal closed before run_end (19 Nov)' | 2026-11-20 10:40 UTC | ingest v1.4.2 | commit 0366596 bundle a5e21e3435d8 | python 3.10.12 | 20261120T104024Z_enclave_audit_close_a2e24f ----8<----
+Closed as abandoned: 20261119T054135Z_nb00_data_profile_b068d0 · nb00_data_profile · started 2026-11-19T05:41:35+00:00 · 0 outputs registered
+Appended to outputs/audit/audit_log.jsonl: run_end status=abandoned closed_after_the_fact=true closed_by_run=20261120T104024Z_enclave_audit_close_a2e24f ts=2026-11-20T10:40:24+00:00
+Reason: terminal closed before run_end (19 Nov)
+Open runs left (without this command's own run): 0
+The KPI shows the closure in its note: python3 sandbox_bundle.py run kpi
+----8<---- COPY END ----8<----
+
+----8<---- COPY START | enclave run kpi | 2026-11-20 10:40 UTC | ingest v1.4.2 | commit 0366596 bundle a5e21e3435d8 | python 3.10.12 | 20261120T104048Z_enclave_run_1c006a ----8<----
+Step: run kpi · source nabidh · exit code 0 · 1 s
+Data: c1 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e); c2 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e)
+Run: 20261120T104049Z_kpi_report_3412ca · status: success · 3 outputs
+KPI inputs: nb00 20261120T102626Z_nb00_data_profile_308dbb · nb01 20261120T102647Z_nb01_c1_c2_feasibility_879aa1 · nb02 none
+
+-- kpi/kpi_table.csv (15 rows)
+                                         kpi         target                                                    actual      met
+                    Audit Trail Completeness           100%                                       100.0% (90/90 runs)      Met
+               Evidence Package Completeness       Complete                                                       NaN  Pending
+                 Data Security / No-Incident    0 incidents                                               0 incidents      Met
+  Applicant Data Requirement Framework Match          Match Partial: ethnicity, smoking, family_history, hypertension  Partial
+    Data Completeness for Required Variables         >= 90%                                          C1 0.0%; C2 0.0%  Not Met
+                    Joint Completeness - LRS Report % and N                    C1 0.0% (N=0/2595); C2 0.0% (N=0/2564) Reported
+              Joint Completeness - QDiabetes Report % and N                    C1 0.0% (N=0/2595); C2 0.0% (N=0/2564) Reported
+        Sensitivity (Recall, positive class)         >= 70%                                                       NaN  Pending
+                                 Specificity         >= 70%                                                       NaN  Pending
+                                   NPV & PPV     Documented                                                       NaN  Pending
+                                       AUROC        >= 0.75                                                       NaN  Pending
+                                     C-Index      0.55-0.90                                                       NaN  Pending
+                     Precision / Recall / F1     Documented                                                       NaN  Pending
+                   Recalibration Slope / O:E     Documented                                                       NaN  Pending
+               Alert Rate per 1,000 Patients Pending NABIDH                                                       NaN  Pending
+-- kpi/kpi_table.csv (1 rows)
+                       kpi                                                                                                 notes
+  Audit Trail Completeness Closed after the fact as abandoned (run_end appended, D34): 20261119T054135Z_nb00_data_profile_b068d0
+-- kpi/kpi_table.csv (1 rows)
+                                       kpi                                                                                                                                                                                                                                                                                                                 notes
+  Data Completeness for Required Variables Weakest variable: C1 ethnicity 0.0%; C2 ethnicity 0.0% · Without ethnicity (weakest of the other 7): C1 smoking 97.1%; C2 smoking 14.9% · Joint core-7 (all but ethnicity): C1 97.1% (N=2519/2595); C2 14.5% (N=372/2564) · Present / absent, 100% by definition (not a fill rate): family_history, cvd, hypertension
+Full screen output (inside the enclave): outputs/20261120T104048Z_enclave_run_1c006a/enclave/kpi.log
+----8<---- COPY END ----8<----
