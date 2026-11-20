@@ -8,7 +8,8 @@ Follows the views seen in the enclave (2026-11-18):
   some rows have an empty ObservationValue or the placeholder "0" — the adapter drops them — and a few heights
   are in metres),
   LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19; as on the VM, units in several spellings
-  (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit and some empty ResultValue rows), SocialHistory (smoking),
+  (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit, some empty ResultValue rows and a few results that are not a
+  plain number: decimal comma, ">14", text), SocialHistory (smoking),
   FamilyHistory (diabetes), Medication; Encounter only in C3 here (on the VM the real C2 has Encounter too, C1's
   is not readable: SELECT privilege)
 - C3 differences: SocialHabitCategory_Description (not _Code; C1 and C2 have _Code, VM checks 2026-11-20)
@@ -112,7 +113,13 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
     unit = unit.where(lab.index % 5 != 1, unit.str.upper()).where(lab.index % 11 != 2, unit.str.lower())
     a1c = lab["loinc"].eq("4548-4")
     unit = unit.where(~(a1c & (lab.index % 40 == 3)), "0").where(~(a1c & (lab.index % 40 == 23)), "NULL")
-    lab = pd.concat([lab.assign(unit=unit), lab.iloc[::60].assign(value=pd.NA)], ignore_index=True)
+    lab = lab.assign(unit=unit)
+    # As in the VM ingest 1.3.0 (2026-11-20): a few results that are not a plain number (copies of existing rows, so
+    # no status changes): a decimal comma (read), a comparator and text (dropped and counted by the adapter)
+    comma = lab[lab["value"].round(2).eq(lab["value"])].iloc[4::150]          # ≤ 2 decimals: the copy is the same value
+    comma = comma.assign(value=comma["value"].astype(str).str.replace(".", ",", regex=False))
+    lab = pd.concat([lab, lab.iloc[::60].assign(value=pd.NA), comma, lab.iloc[7::300].assign(value=">14"),
+                     lab.iloc[11::400].assign(value="Haemolysed")], ignore_index=True)
     out["lab_results.csv"] = pd.DataFrame({
         "ID": range(1, len(lab) + 1), "Encounter": pd.NA, "Patient": lab["patient_id"], "ResultDate": _d(lab["date"]),
         "ResultValue": lab["value"], "ResultValueUnits": lab["unit"], "TestItemCode_Code": lab["loinc"],
