@@ -61,7 +61,7 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
-#   unreleased (breakdowns): schema check counts rows dated exactly 1970-01-01 (Unix epoch) or 1900-01-01 per table
+#   1.4.2  2026-11-20  schema check counts rows dated exactly 1970-01-01 (Unix epoch) or 1900-01-01 per table
 #                      and date column (WARN in the ingest summary; rows kept, dropping them is a decision) — report
 #                      only, canonical data unchanged
 #   1.4.1  2026-11-20  Framework Match by variable: the ingest report carries `delivery` (delivery_facts: view /
@@ -97,7 +97,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.4.1"
+INGEST_VERSION = "1.4.2"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
