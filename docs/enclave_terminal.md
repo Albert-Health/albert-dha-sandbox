@@ -117,6 +117,18 @@ python3 sandbox_bundle.py checks 1s
 python3 sandbox_bundle.py run kpi
 ```
 
+**Keşif run'ı KPI'ya girmez, blokta görünür.** `SANDBOX_PARAMS='{"qd_risk_threshold_pct": 5.6, "ethnicity_source":
+"ethnicity"}' python3 sandbox_bundle.py run nb1` gibi örnek parametreli bir run karar değildir. Blok başlığında
+komuttan sonra `SANDBOX_PARAMS {…}` görünür; adımın satırı `Run: … · status: success · … outputs · params override {…}`
+olur (manifest'te `params_override`: `config.PARAMS`'tan farklı parametreler; `env_overrides`: ortam değişkeninin
+kendisi). `run kpi` (ve `run all`'un KPI adımı) en son override'sız run'ı alır, atladığını blokta yazar:
+`KPI inputs: nb00 … · nb01 … · nb02 none` ve `Not used (parameter overrides, SANDBOX_PARAMS): nb01=<run_id>`.
+Override'sız run yoksa o defterin KPI satırları Pending kalır, notu `Only runs with parameter overrides found for NB1
+(<run_id>)`. Keşif değerleriyle tablo görmek için `run kpi --allow-overrides`: rapor ve blok `EXPLORATORY
+(--allow-overrides), not for the DFF report` diye işaretlenir, evidence package bu KPI run'ını kullanmaz. Bu
+alandan önceki manifest'lerde parametreler bugünkü `config.PARAMS` ile karşılaştırılır (20 Kasım 08:18 UTC NB1
+keşif run'ı da böyle ayıklanır).
+
 Diğer `enclave.sh` komutları da bundle'ın koduyla çalışır (`python3 sandbox_bundle.py mapping c1 c2`, `help`).
 Bundle'da olmayan bir adım (`run nb2`) reddedilir; gerekirse dışarıda `--steps ingest nb0 nb1 kpi nb2` ile
 yeniden üretilir. Gömülü kodu okumak için: `python3 sandbox_bundle.py bundle-extract /tmp/bundle_src`.

@@ -11,12 +11,14 @@ docs/enclave_terminal.md; tools/enclave.sh finds the project's Python:
   bash tools/enclave.sh show nb1 nb01/score_summary.csv | last
 
 Each command's result is printed between two marker lines:
-  ----8<---- COPY START | <command> | <time> | ingest v<version> | commit <sha> | python <version> | <run_id> ----8<----
+  ----8<---- COPY START | <command> | [SANDBOX_PARAMS {…} |] <time> | ingest v<version> | commit <sha> | python <version> | <run_id> ----8<----
   ...
   ----8<---- COPY END ----8<----
 Only this block is copied out of the enclave. The block holds metadata and summaries only: table / column names,
 types, statuses, counts (< 10 → "<10"), value shapes and categorical values seen in ≥ 10 patients. No patient-level
 value is printed (rules: src/sandbox/io/explore.py). The full screen output of `run` steps stays outside the block.
+SANDBOX_PARAMS, when set, is in the header (parameter values only); a `run` step's "Run:" line says "params override"
+for a run that differs from config.PARAMS — the KPI report does not use such runs (kpi.find_run).
 Every block (header … end marker, nothing else) is also appended to logs/enclave/<UTC date>.log in the repo root,
 the file carried to the repo outside the enclave; the line under the block names it. Every command is audited:
 outputs/<run_id>/enclave/block.txt (+ the full output .log for run steps); `last` reprints the last block (not
@@ -162,6 +164,55 @@ def commit_label() -> str:
     commit it was built from and its own id."""
     sha = _git("rev-parse", "--short", "HEAD") or "?"
     return sha + ("+changes" if _git("status", "--porcelain", "--", "src", "notebooks", "tools") else "")
+
+
+def short_json(obj, limit: int = 200) -> str:
+    text = json.dumps(obj, ensure_ascii=False)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def params_label() -> str:
+    """Block header: SANDBOX_PARAMS when set — a sensitivity / exploratory run, not a decision. Parameter values only
+    (no patient data). The KPI report does not use runs with an override."""
+    raw = os.environ.get("SANDBOX_PARAMS", "").strip()
+    if not raw:
+        return ""
+    try:
+        val = json.loads(raw)
+    except ValueError:
+        text = " ".join(raw.split())
+        return f"SANDBOX_PARAMS (not valid JSON) {text[:120]}{'...' if len(text) > 120 else ''}"
+    return "" if val == {} else f"SANDBOX_PARAMS {short_json(val)}"
+
+
+def run_line(name: str, rec: dict) -> str:
+    """`run` step: one line per audit run the step made; "params override" = parameters that differ from config.PARAMS
+    (exploratory: the KPI report does not use it)."""
+    from sandbox.audit import recorded_override
+
+    line = f"Run: {name} · status: {rec.get('status')} · {len(rec.get('outputs', []))} outputs"
+    ov = recorded_override(rec)
+    if ov:
+        line += f" · params override {short_json(ov)}"
+    if rec.get("override_inputs"):
+        line += " · KPI inputs with params override (--allow-overrides): " + ", ".join(rec["override_inputs"])
+    return line
+
+
+def kpi_input_lines(d: Path) -> list[str]:
+    """`run kpi`: which NB runs the KPI table used and which it left out for a parameter override (run ids only)."""
+    f = d / "kpi" / "graduation.json"
+    if not f.is_file():
+        return []
+    try:
+        meta = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    skipped = meta.get("skipped_override_runs") or {}
+    used = " · ".join(f"{k} {v or ('none (only runs with params override)' if k in skipped else 'none')}"
+                      for k, v in (meta.get("runs") or {}).items())
+    from sandbox.kpi import override_lines
+    return ([f"KPI inputs: {used}"] if used else []) + override_lines(meta)
 
 
 def open_run(cmd: str):
@@ -1227,6 +1278,8 @@ def cmd_run(a, out: Block, run) -> int:
            "SANDBOX_PARENT_RUN": run.run_id if run else ""}      # still open while the step runs (kpi skips it)
     if a.bootstrap_reps:
         env["SANDBOX_BOOTSTRAP_REPS"] = str(a.bootstrap_reps)
+    if a.step == "kpi" and getattr(a, "allow_overrides", False):
+        cmd += ["--allow-overrides"]
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     before = {p.name for p in OUTPUT_DIR.iterdir()}
     print(f"Running: SANDBOX_SOURCE={a.source} python {' '.join(cmd[1:])}\n"
@@ -1255,7 +1308,10 @@ def cmd_run(a, out: Block, run) -> int:
             d = json.loads(m.read_text(encoding="utf-8"))
             found.append(OUTPUT_DIR / n)
             statuses.add(d.get("status"))
-            out(f"Run: {n} · status: {d.get('status')} · {len(d.get('outputs', []))} outputs")
+            out(run_line(n, d))
+            if a.step == "kpi":
+                for ln in kpi_input_lines(OUTPUT_DIR / n):
+                    out(ln)
     a.statuses = statuses                                  # read by `run all`
     if not found:
         out("No run record found (the script stopped before opening its audit)")
@@ -1398,6 +1454,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--source", default="nabidh", help="SANDBOX_SOURCE / ingest --source (default nabidh)")
     p.add_argument("--snapshot", action="store_true", help="ingest: from the last snapshot, without going to IRIS")
     p.add_argument("--bootstrap-reps", type=int, default=None, help="nb2: SANDBOX_BOOTSTRAP_REPS")
+    p.add_argument("--allow-overrides", action="store_true",
+                   help="kpi: also use runs with parameter overrides (SANDBOX_PARAMS) — exploratory KPI table")
 
     p = sub.add_parser("show", parents=[common], help="print a run's output table (counts suppressed)")
     p.add_argument("run", metavar="RUN", help="step name (ingest, nb0, nb1, nb2, kpi), last or a run_id")
@@ -1439,7 +1497,9 @@ def main(argv: list[str] | None = None) -> int:
     utc = now.strftime("%Y-%m-%d %H:%M UTC")
     argv = safe_argv(argv)
     shown = shlex.join(argv)
-    out = Block(f"{MARK_START} | enclave {shown[:120]}{'...' if len(shown) > 120 else ''} | {utc} | "
+    params = params_label()
+    out = Block(f"{MARK_START} | enclave {shown[:120]}{'...' if len(shown) > 120 else ''} | "
+                + (f"{params} | " if params else "") + f"{utc} | "
                 f"ingest v{ingest_version()} | commit {commit_label()} | python {platform.python_version()} | "
                 f"{run.run_id if run else 'no audit'} "
                 f"{MARK}")

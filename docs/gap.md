@@ -21,7 +21,7 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | K13 | `kpi.build` NB1 değerlerini kullanmıyor (`nb1` parametresi gövdede yok) | Yapıldı (2026-11-19, 3a96324) | Faz 1 KPI satırları NB1'in `kpi_values.json`'undan doluyor; VM KPI run'ında (2026-11-19 12:45 UTC) ortak tamlık satırları doldu (eski A6) |
 | K14 | NB1'e etnisiteye göre skor dağılımı (Emirati / Gulf Arab / Güney Asya / diğer) | [İYİ OLUR] | Ana hipotezin (Emirati'de düşük tahmin) Faz 1'deki ilk betimleyici sinyali; D6'ya bağlı (eski A8) |
 | K15 | ICD kodları kısaltılmış gelirse ("F17.2") sigara tanı eşlemesi | [İYİ OLUR] | Kod listesi tam kod bekliyor (F17210 …); etki küçük (~15 hasta) (eski A9). 2026-11-20: Diagnosis_Code tam ICD-10-CM (E11.3393 gibi 7 karakter) geliyor; F17 ilk 40'ta yok (Z72.0 C1 13, C2 11 hasta) |
-| K16 | `SANDBOX_PARAMS` / `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın | [İYİ OLUR] | NB0 / NB1 `SANDBOX_PARAMS`'ı okuyor; `audit.py` ortam değişkenlerini manifest'e yazmıyor (eski A10) |
+| K16 | `SANDBOX_PARAMS` / `SANDBOX_BOOTSTRAP_REPS` manifest'e yazılsın | Yapıldı (2026-11-20) | Manifest'te `params_override` (`config.PARAMS`'tan farklı parametreler) + `env_overrides` (iki ortam değişkeni olduğu gibi); `run_start` audit olayında da `params_override`. KPI raporu override'lı run'ı almaz (`kpi.find_run`; yalnız override'lı run varsa satır Pending, not "Only runs with parameter overrides found"; keşif tablosu `kpi_report.py --allow-overrides`); COPY başlığında `SANDBOX_PARAMS {…}`, `Run:` satırında `params override {…}` (eski A10) |
 
 ## 2. Medikal ekipten kararlar (config parametresiyle)
 | # | Karar | Parametre | Varsayılan | Bağlam |

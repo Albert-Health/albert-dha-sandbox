@@ -290,6 +290,17 @@ class TestEnclaveCli(_Db, unittest.TestCase):
         self.assertIn("no such schema", text)
         self.assertEqual(text.strip().splitlines()[-2], enclave.MARK_END)
 
+    def test_header_shows_sandbox_params(self):
+        """SANDBOX_PARAMS (parameter values only) in the header: an exploration run is told apart in the block."""
+        with temp_outputs(), mock.patch.dict(os.environ, {"SANDBOX_PARAMS": '{"lrs_variant":  "assessment_2010"}'}):
+            rc, text = run_main(["req", "R9"])
+        header = screen_block(text).splitlines()[0]
+        self.assertRegex(header, r'^----8<---- COPY START \| enclave req R9 \| SANDBOX_PARAMS \{"lrs_variant": '
+                                 r'"assessment_2010"\} \| \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC \| ingest v')
+        with temp_outputs(), mock.patch.dict(os.environ, {"SANDBOX_PARAMS": " "}):
+            rc, text = run_main(["req", "R9"])
+        self.assertNotIn("SANDBOX_PARAMS", screen_block(text).splitlines()[0])
+
     def test_req_stdlib_checks(self):
         with temp_outputs():
             rc, text = run_main(["req", "r9", "R1"])

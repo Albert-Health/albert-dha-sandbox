@@ -5,7 +5,9 @@ Every execution is a Run. A Run records:
 - code fingerprint: SHA-256 of every .py file under src/ + git commit (if any); a one-file bundle
   (tools/build_bundle.py) records the files it carries instead, with the commit it was built from
 - path, size and SHA-256 of the input files
-- a snapshot of PARAMS (config)
+- a snapshot of PARAMS (config) and `params_override`: the parameters that differ from config.PARAMS (a
+  SANDBOX_PARAMS sensitivity / exploratory run; None = the configured parameters); `env_overrides`: SANDBOX_PARAMS /
+  SANDBOX_BOOTSTRAP_REPS as set in the environment. The KPI report does not use runs with an override (kpi.find_run)
 - path and SHA-256 of every output file written
 - free-form event records (what was done, step by step)
 
@@ -19,6 +21,7 @@ import datetime as _dt
 import getpass
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -79,6 +82,33 @@ def _env_file() -> dict | None:
             "keys": list(LOADED["keys"])}
 
 
+# Environment variables that change what a run computes (AGENTS rule 5): recorded as set
+OVERRIDE_ENV = ("SANDBOX_PARAMS", "SANDBOX_BOOTSTRAP_REPS")
+
+
+def _norm(x):
+    return json.loads(json.dumps(x, default=str))      # as the manifest stores it (3 == 3.0, tuple == list)
+
+
+def params_override(params: dict, base: dict = PARAMS) -> dict | None:
+    """Parameters that differ from config.PARAMS (unknown keys included); None = the configured parameters."""
+    diff = {k: v for k, v in params.items() if k not in base or _norm(base[k]) != _norm(v)}
+    return _norm(diff) if diff else None
+
+
+def recorded_override(record: dict, base: dict = PARAMS) -> dict | None:
+    """A run manifest's parameter override. Manifests written before `params_override` existed: their PARAMS snapshot
+    compared with the current config (a run whose parameters no longer match the config counts as overridden)."""
+    if "params_override" in record:
+        return record["params_override"] or None
+    return params_override(record.get("params") or {}, base)
+
+
+def _env_overrides() -> dict | None:
+    env = {k: os.environ[k] for k in OVERRIDE_ENV if os.environ.get(k, "").strip()}
+    return env or None
+
+
 def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
@@ -91,14 +121,17 @@ class Run:
         self.dir = OUTPUT_DIR / self.run_id
         self.dir.mkdir(parents=True, exist_ok=True)
         AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+        params = dict(params or PARAMS)
         self.record = {
             "run_id": self.run_id, "name": name, "source": source, "status": "running", "started_utc": _now(),
             "user": getpass.getuser(), "host": platform.node(), "platform": platform.platform(),
             "versions": _versions(), "code": code_fingerprint(),
-            "params": dict(params or PARAMS), "env_file": _env_file(), "inputs": [], "outputs": [], "events": [],
+            "params": params, "params_override": params_override(params), "env_overrides": _env_overrides(),
+            "env_file": _env_file(), "inputs": [], "outputs": [], "events": [],
         }
         self._append({"event": "run_start", "run_id": self.run_id, "name": name,
-                      "code_sha256": self.record["code"]["combined_sha256"], "ts": _now()})
+                      "code_sha256": self.record["code"]["combined_sha256"],
+                      "params_override": self.record["params_override"], "ts": _now()})
         self._finished = False
         # Write run_end even if the script fails (no gap in the audit trail)
         atexit.register(self._close_if_open)

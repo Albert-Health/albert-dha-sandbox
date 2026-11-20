@@ -5,6 +5,8 @@ latest evidence package checklist. Phase 1 (C1 / C2, NB1): joint completeness an
 the C1 detection rate in known positives (sensitivity only — C1 / C2 have no negatives) and the C1–C2 selection
 effect. Phase 2 (C3, NB2) adds its own joint completeness and the threshold / discrimination / calibration KPIs. Graduation rule: any Critical KPI
 Not Met → Do Not Graduate; otherwise a non-critical Met rate ≥80% Graduate, 50–79% Graduate with Mitigation.
+Runs with a parameter override (SANDBOX_PARAMS, e.g. an example threshold) are exploration, not a decision: the
+KPI table uses only runs with the configured PARAMS unless asked otherwise (kpi_report.py --allow-overrides).
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import sdc
+from .audit import recorded_override
 from .config import AUDIT_DIR, OUTPUT_DIR, PARAMS
 
 KPI_ROWS = [
@@ -36,18 +39,48 @@ KPI_ROWS = [
 ]
 
 
-def latest_run(prefix: str, source: str | None = None, base: Path = OUTPUT_DIR) -> Path | None:
-    """Latest successfully finished run folder whose name contains prefix (by manifest started_utc).
-    If source is given, only runs on that data source (synthetic / nabidh / synthetic_pc)."""
-    best, best_ts = None, ""
-    for m in base.glob(f"*{prefix}*/run_manifest.json"):
+def run_override(rec: dict) -> dict | None:
+    """What makes a run exploratory: its parameter override (audit.recorded_override) or, for a KPI report made with
+    --allow-overrides, the inputs it took from such runs (`override_inputs`)."""
+    ov = recorded_override(rec)
+    if rec.get("override_inputs"):
+        ov = {**(ov or {}), "override_inputs": rec["override_inputs"]}
+    return ov
+
+
+def find_run(prefix: str, source: str | None = None, base: Path | None = None,
+             allow_overrides: bool = False) -> tuple[Path | None, list[Path]]:
+    """(run, skipped). run: the latest successfully finished run folder whose name contains prefix (by manifest
+    started_utc) that ran with the configured PARAMS (any run if allow_overrides). skipped: the newer successful runs
+    left out because they had a parameter override (newest first; all of them when run is None). If source is
+    given, only runs on that data source (synthetic / nabidh / synthetic_pc). base: default OUTPUT_DIR."""
+    found = []
+    for m in (OUTPUT_DIR if base is None else base).glob(f"*{prefix}*/run_manifest.json"):
         rec = json.loads(m.read_text(encoding="utf-8"))
         rec_source = rec.get("source") or "synthetic"     # runs from before the source field were synthetic
         if source is not None and rec_source != source:
             continue
-        if rec.get("status") == "success" and rec.get("started_utc", "") > best_ts:
-            best, best_ts = m.parent, rec["started_utc"]
-    return best
+        if rec.get("status") == "success" and rec.get("started_utc"):
+            found.append((rec["started_utc"], m.parent.name, m.parent, rec))
+    skipped = []
+    for _, _, d, rec in sorted(found, key=lambda x: x[:2], reverse=True):
+        if allow_overrides or not run_override(rec):
+            return d, skipped
+        skipped.append(d)
+    return None, skipped
+
+
+def latest_run(prefix: str, source: str | None = None, base: Path | None = None,
+               allow_overrides: bool = False) -> Path | None:
+    """Latest successful run with the configured PARAMS (find_run)."""
+    return find_run(prefix, source, base, allow_overrides)[0]
+
+
+def manifest_override(run_dir: Path | None) -> dict | None:
+    """run_override of a run folder's manifest (None: no folder / no override)."""
+    if run_dir is None or not (run_dir / "run_manifest.json").is_file():
+        return None
+    return run_override(json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8")))
 
 
 def _load(run_dir: Path | None, rel: str) -> dict:
@@ -118,9 +151,31 @@ def _selection_effect(nb1: dict) -> str:
 
 NB2_ONLY = ["Specificity", "NPV & PPV", "AUROC", "C-Index", "Precision / Recall / F1", "Recalibration Slope / O:E",
             "Alert Rate per 1,000 Patients"]
+# The notebook runs (kpi_report.py keys) each KPI row is filled from: for the "only runs with parameter overrides
+# found" note on rows left Pending
+ROW_INPUTS = {"Applicant Data Requirement Framework Match": ("nb00",),
+              "Data Completeness for Required Variables": ("nb00",),
+              "Joint Completeness - LRS": ("nb01", "nb02"), "Joint Completeness - QDiabetes": ("nb01", "nb02"),
+              "Sensitivity (Recall, positive class)": ("nb01", "nb02"), **{k: ("nb02",) for k in NB2_ONLY}}
+INPUT_LABELS = {"nb00": "NB0", "nb01": "NB1", "nb02": "NB2"}
 
 
-def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict = PARAMS) -> pd.DataFrame:
+def _override_only_notes(rows: dict, override_only: dict) -> None:
+    """Rows still Pending whose notebook had only runs with a parameter override: say so (those runs are not used)."""
+    for k, inputs in ROW_INPUTS.items():
+        r = rows[k]
+        hit = [i for i in inputs if override_only.get(i)]
+        if not hit or r["met"] != "Pending" or r["actual"] is not None:
+            continue
+        note = ("Only runs with parameter overrides found for "
+                + ", ".join(f"{INPUT_LABELS.get(i, i)} ({override_only[i]})" for i in hit)
+                + ": not used for KPIs — rerun without SANDBOX_PARAMS")
+        r["notes"] = " · ".join(x for x in [r["notes"], note] if x)
+
+
+def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict = PARAMS,
+          override_only: dict | None = None) -> pd.DataFrame:
+    """override_only: {"nb01": run_id, …} — notebooks with only runs that had a parameter override (not used)."""
     rows = {k: {"kpi": k, "category": c, "owner": o, "target": t, "critical": cr,
                 "actual": None, "met": "Pending", "source": "", "notes": ""} for k, c, o, t, cr in KPI_ROWS}
 
@@ -221,6 +276,7 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
                 set_("Sensitivity (Recall, positive class)", None, "Pending", "NB2",
                      "QDiabetes threshold not pre-specified (qd_risk_threshold_pct) [decision pending]. " + lrs_note
                      + (f" · {sel}" if sel else ""))
+    _override_only_notes(rows, override_only or {})
     return pd.DataFrame(rows.values())
 
 
@@ -241,13 +297,29 @@ def graduation(table: pd.DataFrame) -> dict:
             "non_critical_evaluable": int(non["met"].isin(["Met", "Not Met"]).sum())}
 
 
+def override_lines(meta: dict, prefix: str = "") -> list[str]:
+    """Report / COPY block lines on parameter overrides: runs left out, or (--allow-overrides) used."""
+    out = []
+    skipped = meta.get("skipped_override_runs") or {}
+    if skipped:
+        out.append(prefix + "Not used (parameter overrides, SANDBOX_PARAMS): " + "; ".join(
+            f"{k}={v[0]}" + (f" (+{len(v) - 1} more)" if len(v) > 1 else "") for k, v in skipped.items()))
+    used = meta.get("override_inputs") or {}
+    if used:
+        out.append(prefix + "EXPLORATORY (--allow-overrides), not for the DFF report — inputs with parameter "
+                   "overrides: " + "; ".join(f"{k}={v['run']} {json.dumps(v['params_override'], ensure_ascii=False)}"
+                                             for k, v in used.items()))
+    return out
+
+
 def to_markdown(table: pd.DataFrame, grad: dict, meta: dict) -> str:
     lines = ["# KPI report — Albert Health × DHA Health Data Sandbox", "",
              f"- Generated: {meta.get('generated_utc')}  ·  Source: {meta.get('source')}",
-             f"- Input runs: {', '.join(f'{k}={v}' for k, v in meta.get('runs', {}).items())}",
-             f"- **Graduation pre-assessment:** {grad['outcome']} (Critical {grad['critical_met']}/{grad['critical_total']}; "
-             f"non-critical Met {grad['non_critical_met']}/{grad['non_critical_evaluable']} evaluable)", "",
-             "| KPI | Target | Critical | Owner | Actual | Status | Note |", "|---|---|---|---|---|---|---|"]
+             f"- Input runs: {', '.join(f'{k}={v}' for k, v in meta.get('runs', {}).items())}"]
+    lines += override_lines(meta, "- ")
+    lines += [f"- **Graduation pre-assessment:** {grad['outcome']} (Critical {grad['critical_met']}/{grad['critical_total']}; "
+              f"non-critical Met {grad['non_critical_met']}/{grad['non_critical_evaluable']} evaluable)", "",
+              "| KPI | Target | Critical | Owner | Actual | Status | Note |", "|---|---|---|---|---|---|---|"]
     for _, r in table.iterrows():
         lines.append(f"| {r['kpi']} | {r['target']} | {'Yes' if r['critical'] else 'No'} | {r['owner']} | "
                      f"{'—' if pd.isna(r['actual']) else r['actual']} | {r['met']} | {r['notes']} |")   # NaN on pandas 3
