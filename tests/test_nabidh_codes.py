@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pandas as pd  # noqa: E402
 
 import enclave  # noqa: E402
+from sandbox import codelists  # noqa: E402
 from sandbox.io.adapters import ddc, nabidh  # noqa: E402
 
 PARACETAMOL = "0006-106607-1161"        # DDC product, not a study class
@@ -132,7 +133,90 @@ class TestMedicationHandler(unittest.TestCase):
         self.assertFalse(vc["field"].str.startswith("DDC").any())
 
 
+class TestDiagnosisCodes(unittest.TestCase):
+    """VM checks (2026-11-20): Diagnosis_Code is ICD-10-CM with dots; C1 has a few trailing dots, C2 a few cells with
+    2–3 comma-separated codes."""
+
+    def test_split(self):
+        parts, trailing, n = nabidh.split_dx_codes(pd.Series(["E11.9", "E11.9.", "I10, E11.9", "E11.9,I10, Z68.30",
+                                                              "R73.03.,", None, " ", "E11.3393"]))
+        self.assertEqual(parts.iloc[0], ["E11.9"])
+        self.assertEqual(parts.iloc[1], ["E11.9"])
+        self.assertEqual(parts.iloc[2], ["I10", "E11.9"])
+        self.assertEqual(parts.iloc[3], ["E11.9", "I10", "Z68.30"])
+        self.assertEqual(parts.iloc[4], ["R73.03"])
+        self.assertTrue(pd.isna(parts.iloc[5]))
+        self.assertTrue(pd.isna(parts.iloc[6][0]))
+        self.assertEqual(parts.iloc[7], ["E11.3393"])
+        self.assertEqual(list(trailing), [False, True, False, False, True, False, False, False])
+        self.assertEqual(list(n), [1, 1, 2, 3, 1, 1, 1, 1])
+
+    def test_handler_keeps_the_second_code(self):
+        df = pd.DataFrame({"patient_id": ["A", "B", "C"], "code": ["I10, E11.9", "R73.03.", "E66.9"],
+                           "date": pd.Timestamp("2021-01-01"), "description": ["x", "y", "z"],
+                           "code_system": "ICD-10"})
+        vc: list[dict] = []
+        out = nabidh._h_conditions(df, "diagnoses", vc)["conditions"]
+        self.assertEqual(list(zip(out["patient_id"], out["code"])),
+                         [("A", "I10"), ("A", "E11.9"), ("B", "R73.03"), ("C", "E66.9")])
+        self.assertEqual(sorted(out.loc[codelists.match_dx(out, "t2d"), "patient_id"]), ["A"])     # lost before
+        self.assertEqual(sorted(out.loc[codelists.match_dx(out, "hypertension"), "patient_id"]), ["A"])
+        vc = pd.DataFrame(vc)
+        self.assertEqual(_field(vc, "code cell with several codes → one row each"), {"2 codes in the cell": 1})
+        self.assertEqual(_field(vc, "code: trailing dot removed"), {"<n rows>": 1})
+        self.assertEqual(set(out["description"]), {"x", "y", "z"})
+
+
+def _fh(rows):
+    df = pd.DataFrame(rows, columns=["condition", "condition_text", "relation"])
+    df.insert(0, "patient_id", [f"P{i}" for i in range(len(df))])
+    df["date"] = pd.NaT
+    vc: list[dict] = []
+    out = nabidh._h_family_history(df, "family_history", vc)["observations"]
+    return out, pd.DataFrame(vc)
+
+
+class TestFamilyHistoryCodes(unittest.TestCase):
+    def test_relation_seen_on_vm_all_first_degree(self):
+        """FamilyMember_Description values in ≥ 10 patients (C1 / C2, 2026-11-20) are all in the dictionary."""
+        for rel in ("Father", "Mother", "Brother", "Sister", "Child", "Parent"):
+            self.assertEqual(nabidh.FH_RELATION_DEGREE[rel.lower()], "first", rel)
+
+    def test_relation_by_word(self):
+        out, vc = _fh([("73211009", "Diabetes mellitus (disorder)", r) for r in
+                       ("Paternal Grandmother", "Maternal aunt", "Grandmother and mother", "Spouse", "Father")])
+        self.assertEqual(list(out["value"]), ["positive_non_first_degree", "positive_non_first_degree", "positive",
+                                              "positive", "positive"])
+        self.assertEqual(_field(vc, "relation → degree"), {
+            "paternal grandmother → other (by word)": 1, "maternal aunt → other (by word)": 1,
+            "grandmother and mother → first (by word)": 1, "spouse → unmapped (treated as first)": 1,
+            "father → first": 1})
+
+    def test_local_codes_recognised_by_text(self):
+        """C1 / C2 FamilyHistory.Diagnosis_Code: SNOMED / ICD-10, the word "Diabetes" or local numbers (60376773, 2, 5,
+        82680 …); a local code counts only through the description text, and the report lists those codes."""
+        rows = [("60376773", "Diabetes mellitus", "Father")] * 11 + [
+            ("2", "Type 2 diabetes", "Mother"), ("Diabetes", "Diabetes", "Mother"), ("44054006", None, "Brother"),
+            ("Z83.3", None, "Sister"), ("5", "Hypertension", "Father"), ("2", None, "Father")]
+        out, vc = _fh(rows)
+        self.assertEqual(len(out), 15)                                      # 5 Hypertension and bare "2" dropped
+        self.assertEqual(_field(vc, "diabetes recognised by"),
+                         {"text only": 13, "SNOMED code": 1, "ICD-10 code": 1})
+        self.assertEqual(_field(vc, "text only: Diagnosis_Code"), {"60376773": 11, "2": 1, "Diabetes": 1})
+
+
 class TestIngestBlock(unittest.TestCase):
+    def test_diagnosis_and_family_history_sections(self):
+        v = pd.DataFrame({"source": ["diagnoses", "diagnoses", "family_history", "family_history"],
+                          "field": ["code cell with several codes → one row each", "code: trailing dot removed",
+                                    "text only: Diagnosis_Code", "text only: Diagnosis_Code"],
+                          "value": ["2 codes in the cell", "<n rows>", "60376773", "RARE-LOCAL"],
+                          "n_rows": ["<10", "12", "384", "<10"]})
+        self.assertEqual(enclave.field_summary(v, "diagnoses", enclave.DX_FIELDS)["value"].tolist(),
+                         ["2 codes in the cell", "<n rows>"])
+        self.assertEqual(enclave.field_summary(v, "family_history", enclave.FH_FIELDS, suffix=True)["value"].tolist(),
+                         ["60376773"])                                     # a code with < 10 rows is not printed
+
     def test_medication_summary_new_lists(self):
         """Block: format counts always; DDC ingredient / disagreement lists only for values with ≥ 10 rows."""
         f_nc = "DDC: not a study drug class (DDC ingredients | route)"

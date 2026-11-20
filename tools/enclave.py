@@ -864,10 +864,15 @@ MED_FIELDS = [
 # Family history summary (source "family_history"): the end of the field name matches (e.g. "condition | condition_text
 # (non-diabetes, dropped)"). Text values with < 10 rows are not printed.
 FH_FIELDS = [
-    ("diabetes recognised by", 5, False), ("relation → degree", 12, True), ("(prediabetes, dropped)", 10, True),
+    ("diabetes recognised by", 5, False), ("text only: Diagnosis_Code", 12, True), ("relation → degree", 12, True),
+    ("(prediabetes, dropped)", 10, True),
     ("(non-diabetes, dropped)", 10, True), ("condition_text negated → negative", 5, True),
     ("second-degree relative in text", 5, True),
 ]
+
+
+# Diagnosis clean-up (source "diagnoses"): Diagnosis_Code cells with several codes (split) and trailing dots (counts).
+DX_FIELDS = [("code cell with several codes → one row each", 5, False), ("code: trailing dot removed", 1, False)]
 
 
 # Lab summary (source "lab_results", LabResultItem): kept codes, value distribution per kind | unit (in groups with
@@ -942,6 +947,10 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             if len(m):
                 out("   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):")
                 out.table(m, a.max_rows)
+            dx = field_summary(v_all, "diagnoses", DX_FIELDS)
+            if len(dx):
+                out("   diagnoses (Diagnosis_Code clean-up):")
+                out.table(dx, a.max_rows)
             lab = field_summary(v_all, "lab_results", LAB_FIELDS)
             if len(lab):
                 out("   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values "

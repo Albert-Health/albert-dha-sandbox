@@ -128,7 +128,17 @@ hastada geçen değerleri ya da yüzdelikleri basar.
   ```
 
   Ne çıkar: Diagnosis_Code gerçekten ICD-10 mu, noktalı mı (`a99.9`); ObservationCode_Code LOINC mi
-  (`9999-9`); `FH_RELATION_DEGREE`.
+  (`9999-9`); `FH_RELATION_DEGREE`. Bu sorgular `checks` bloğunun 1d bölümünde de var.
+
+  Sonuç (VM `checks`, 2026-11-20):
+  - Diagnosis_Code ICD-10-CM, noktalı. C1'de birkaç kod noktayla bitiyor (`E11.9.`). C2'de birkaç hücrede
+    virgülle 2–3 kod var. Adapter bu hücreleri böler, sondaki noktayı siler ve ingest bloğunun `diagnoses`
+    bölümünde sayar.
+  - ObservationCode_Code LOINC; yalnız 3141-9, 8302-2 ve 39156-5 geliyor.
+  - FamilyMember: Father, Mother, Brother, Sister, Child, Parent. Hepsi birinci derece ve sözlükte var.
+  - FamilyHistory.Diagnosis_Code: SNOMED, Z83.3, "Diabetes" metni ve yerel numaralar (60376773, 2, 82680 …).
+    Yerel numaralar açıklama metninden tanınıyor. Ingest bloğu bunları `text only: Diagnosis_Code` satırlarında
+    listeler.
 
   İlaç için ayrı komut gerekmez, ingest bloğunun **"drug → ATC"** bölümü yeterli (adım 3). C1 ve C2'de
   `DrugProduct_Code` var (VM ingest 2026-11-19: C2'de DDC ürün kodu 21.099, bilimsel kod 3.127 satır). Daha önce

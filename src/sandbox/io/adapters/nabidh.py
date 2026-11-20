@@ -64,7 +64,10 @@ from .synthetic import read_raw_csv
 #   unreleased (1d)  2026-11-20  Medication: a 6-digit code = DDC scientific code stem, looked up when every product
 #                      of the stem agrees; the all-zero placeholder "0000-000000-0000" = no code (→ name). Report:
 #                      "drug code format" counts; DDC codes without a study class listed by DDC ingredient | route
-#                      (i22) and code / name disagreement counted (code keeps the final say)
+#                      (i22) and code / name disagreement counted (code keeps the final say). Diagnosis: a cell with
+#                      several comma-separated codes → one row per code, trailing dot removed (counted). Family
+#                      history: a relationship not in FH_RELATION_DEGREE is decided by its words ("maternal aunt" →
+#                      other); report lists the codes recognised by text only
 #   1.2.1  2026-11-19  Progress lines on screen: IRIS connection, each view's query, rows so far, mapping time
 #                      (output only; canonical data unchanged)
 #   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
@@ -115,8 +118,8 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 # Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C3 (read as
 # "C2" before ingest 1.1.0) has SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in
 # Medication — the real C2 has drug codes (VM ingest 2026-11-19: DDC code 21,099 rows, scientific code 3,127); C1
-# has no SELECT permission on Encounter (optional, skipped). Code systems (ICD-10 / LOINC) and value dictionaries
-# are not verified yet — to be checked with enclave.sh values / columns (docs/gap.md K3).
+# has no SELECT permission on Encounter (optional, skipped). Code systems (VM checks 2026-11-20, C1 / C2):
+# Diagnosis_Code is ICD-10-CM with dots (split_dx_codes), ObservationCode_Code LOINC (only 3141-9, 8302-2, 39156-5).
 # In the C1 DDL (2026-11-19) but not mapped: Diagnosis.DiagnosisGroup (values unknown), Medication
 # ToTime / DoseQuantity / DoseUoM_Description, Observation.Encounter, LabResultItem ID / Encounter.
 SOURCES: dict[str, dict] = {
@@ -227,6 +230,9 @@ FH_STATUS_VALUES = {
 }
 # Relationship → degree. QDiabetes and LRS count first-degree relatives (mother, father, sibling, child).
 # Second degree → positive_non_first_degree (recorded, not counted positive). Empty / unknown relationship → positive.
+# NABIDH FamilyMember_Description (VM checks, 2026-11-20): Father, Mother, Brother, Sister, Child, Parent (C1 ≥ 10
+# patients; C2 the same without Parent) — all here; the rest (C1 5, C2 4 values in < 10 patients) unseen. A value not
+# in the dictionary is decided by its words (FH_TEXT_SECOND_DEGREE / FH_TEXT_FIRST_DEGREE, as for the text).
 FH_RELATION_DEGREE = {
     **{k: "first" for k in ["mother", "father", "parent", "parents", "brother", "sister", "sibling", "siblings",
                             "son", "daughter", "child", "children", "first degree", "first-degree",
@@ -429,9 +435,32 @@ def _h_patients(df, name, vc):
     return {"patients": df}
 
 
+def split_dx_codes(code: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Diagnosis_Code cell → (one code per element, as a list; cell had a trailing dot; number of codes in the cell).
+    NABIDH Diagnosis_Code (VM checks, 2026-11-20) is ICD-10-CM with dots ("E11.9", "R73.03", "E11.3393"); a few C1
+    cells end in a dot ("E11.9.") and a few C2 cells hold 2–3 codes ("E11.9, I10"). Matching (codelists.norm_icd)
+    ignores dots but reads only the start of the cell, so a second code was lost → split on comma, strip the dot."""
+    raw = code.astype("string").str.strip()
+    trailing = raw.str.contains(r"\.(?:\s*,|$)", regex=True).fillna(False).astype(bool)
+    parts = raw.str.split(r"\s*,\s*", regex=True)
+    parts = parts.map(lambda p: p if not isinstance(p, list) else
+                      ([c.rstrip(".").strip() for c in p if c.rstrip(".").strip()] or [pd.NA]))
+    n = parts.map(lambda p: len(p) if isinstance(p, list) else 1)
+    return parts, trailing, n
+
+
 def _h_conditions(df, name, vc):
     vc += _value_counts(name, "code_system", df["code_system"])
     df["code_system"] = norm_code_system(df["code_system"])
+    parts, trailing, n = split_dx_codes(df["code"])
+    if trailing.any():
+        vc.append({"source": name, "field": "code: trailing dot removed", "value": "<n rows>",
+                   "n_rows": int(trailing.sum())})
+    if (n > 1).any():
+        vc += _value_counts(name, "code cell with several codes → one row each",
+                            n[n > 1].astype(str) + " codes in the cell")
+    df = df.assign(code=parts).explode("code").reset_index(drop=True)
+    df["code"] = df["code"].astype("string")
     return {"conditions": df}
 
 
@@ -578,6 +607,9 @@ def _h_family_history(df, name, vc):
         is_dm = how.notna()
         shown = df[cond_cols].astype("string").fillna("").agg(" | ".join, axis=1)
         vc += _value_counts(name, "diabetes recognised by", how[is_dm])
+        if "condition" in df:                       # codes that only the text recognised (local numbers, "Diabetes")
+            vc += _value_counts(name, "text only: Diagnosis_Code", df.loc[how.eq("text only").fillna(False)
+                                                                          .astype(bool), "condition"], top=20)
         vc += _value_counts(name, f"{' | '.join(cond_cols)} (non-diabetes, dropped)", shown[~is_dm & ~pre], top=30)
         vc += _value_counts(name, f"{' | '.join(cond_cols)} (prediabetes, dropped)", shown[pre], top=20)
         df = df[is_dm]
@@ -602,7 +634,15 @@ def _h_family_history(df, name, vc):
     if "relation" in df:
         rel = _norm_text(df["relation"])
         deg = rel.map(FH_RELATION_DEGREE)
-        label = deg.astype(object).where(deg.notna(), "unmapped (treated as first)")
+        # Not in the dictionary: the words decide, as in the text ("paternal grandmother", "maternal aunt" → other;
+        # "grandmother and mother" → first); none of them → treated as first, as before
+        by_word = deg.isna() & rel.notna()
+        w2 = rel.str.contains(FH_TEXT_SECOND_DEGREE, na=False).astype(bool)
+        w1 = rel.str.contains(FH_TEXT_FIRST_DEGREE, na=False).astype(bool)
+        deg = deg.where(~(by_word & w1), "first").where(~(by_word & w2 & ~w1), "other")
+        by_word &= deg.notna()
+        label = deg.astype(object).where(~by_word, (deg.astype("string") + " (by word)").astype(object))
+        label = label.where(deg.notna(), "unmapped (treated as first)")
         label = label.where(rel.notna(), "not recorded (treated as first)")
         vc += _value_counts(name, "relation → degree", rel.fillna("<empty>").astype(str) + " → " + label.astype(str))
         second |= deg.eq("other").fillna(False).astype(bool)
