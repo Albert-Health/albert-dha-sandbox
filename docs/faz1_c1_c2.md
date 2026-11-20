@@ -227,7 +227,11 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   bash tools/enclave.sh run nb0
   ```
 
-  Bakılacaklar: şema ERROR = 0, hacim, Framework Match (değişken bazında Match / Partial / Absent: `nb00/framework_variables.csv`; kod-grubu tablosu `framework_match.csv` yanında), eşlenemeyen kodlar. Ayrıntı için:
+  Bakılacaklar: şema ERROR = 0, hacim, Framework Match (değişken bazında Match / Partial / Absent: `nb00/framework_variables.csv`; kod-grubu tablosu `framework_match.csv` yanında), eşlenemeyen kodlar.
+  Blokta ayrıca: `nb00/demographics.csv` (yaş medyan / IQR, `age_outside_25_84_n` / `_pct` = QDiabetes yaş
+  aralığı 25 ≤ yaş < 85 dışında kalanlar — QDiabetes bunlarda hesaplanmaz; `age_missing_n`, `male_pct`) ve
+  `nb00/facility_representation.csv` (adapter tesis eşlemiyor → tablo yerine tek satır not; DHA sorusu).
+  Ayrıntı için:
 
   ```bash
   bash tools/enclave.sh show nb0 nb00/core_variable_completeness.csv
@@ -245,13 +249,10 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   bash tools/enclave.sh run nb1
   ```
 
-  Blokta: skor hesaplanabilirliği, eksiklik nedenleri, C1 yakalama oranı, skor özeti, birlikte tamlık.
-  Yakalama oranı eşik seçilene kadar "Pending" kalır: QDiabetes için D5, LPRS için D23. Medikal ekip eşiği
-  dağılıma bakarak seçer; dağılım `score_summary` içinde. Ayrıntı için:
-
-  ```bash
-  bash tools/enclave.sh show nb1 nb01/selection_effect_smd.csv
-  ```
+  Blokta: C1–C2 seçilim etkisi (`nb01/selection_effect_smd.csv` kısa biçim: variable, c1, c2, smd, `|smd|>0.1`;
+  c1 / c2 = ortalama, ikili değişkende pay 0–1), skor hesaplanabilirliği, eksiklik nedenleri, C1 yakalama oranı,
+  skor özeti, birlikte tamlık. Yakalama oranı eşik seçilene kadar "Pending" kalır: QDiabetes için D5, LPRS için
+  D23. Medikal ekip eşiği dağılıma bakarak seçer; dağılım `score_summary` içinde. Ayrıntı için:
 
   ```bash
   bash tools/enclave.sh show nb1 nb01/ethnicity_mapping.csv
@@ -273,7 +274,9 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   - `meets_90`: `recorded` değişken için tamlık ≥ %90.
   - Birlikte tamlık: `joint_core7` = etnisite hariç 7 değişken, `joint_core8` = core-7 + etnisite. core-7 etnisite
     kaynağına bağlı değildir; `ethnicity_source_compare` core-8'i iki kaynakla (uyruk / EthnicGroup) yan yana verir.
-  - Sayı < 10 → "<10"; sayısı ya da eksik sayısı < 10 olan oran "suppressed (<10)".
+  - Sayı < 10 → "<10"; sayısı ya da eksik sayısı < 10 olan oran "suppressed (<10)". Bloktaki her oran için aynı
+    kural (sigara kaynağı, eksiklik nedenleri, hesaplanabilirlik, demografi, KPI değerleri); SMD tablosunda gizli
+    payın SMD'si de gizlenir, `|smd|>0.1` bayrağı kalır. < 10 değer üzerinden medyan / çeyrek de gizlenir.
 
 ### 6 · KPI (Faz 1'de kısmi)
 

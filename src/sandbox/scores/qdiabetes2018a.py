@@ -22,6 +22,7 @@ from .. import codelists
 from ..config import PARAMS
 
 SURVIVOR_10Y = {"Female": 0.986227273941040, "Male": 0.978732228279114}
+AGE_RANGE = (25, 85)        # valid: 25 <= age < 85 (outside → NaN; NB0 demographics reports the share outside)
 
 COEF = {
     "Female": {
@@ -107,7 +108,7 @@ def linear_predictor(df: pd.DataFrame) -> pd.Series:
             s = s + cf[f"age1_{k}"] * a1 * f[k] + cf[f"age2_{k}"] * a2 * f[k]
         s = s + cf["age1_bmi1"] * a1 * b1 + cf["age1_bmi2"] * a1 * b2
         s = s + cf["age2_bmi1"] * a2 * b1 + cf["age2_bmi2"] * a2 * b2
-        valid = (age >= 25) & (age < 85) & ~np.isnan(bmi)
+        valid = (age >= AGE_RANGE[0]) & (age < AGE_RANGE[1]) & ~np.isnan(bmi)
         out.loc[m] = np.where(valid, s, np.nan)
     return out
 

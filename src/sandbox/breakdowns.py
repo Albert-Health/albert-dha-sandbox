@@ -1,12 +1,16 @@
 """Breakdowns from the medical team's C1 / C2 checklist (2026-11-20) that no other table gives: how treated
-hypertension is derived, the QDiabetes smoking level per patient, and vital values left out as implausible.
+hypertension is derived, the QDiabetes smoking level per patient, and vital values left out as implausible; and the
+NB0 / NB1 tables printed in the enclave COPY block (demographics with the share outside the QDiabetes age range,
+facility representation, the C1–C2 selection effect, category shares).
 
-Counts are unsuppressed here; the notebooks apply `sdc` before saving.
+Counts are unsuppressed here; the notebooks apply `sdc` (or the `suppressed_*` function of the table) before saving.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
+from . import sdc
 from .config import PARAMS
 from .io.schema import Dataset
 from .phenotype import VITAL_PLAUSIBLE_RANGE
@@ -127,3 +131,153 @@ def vital_plausibility(ds: Dataset) -> pd.DataFrame:
                      "patients_out_of_range": pid[below | above].nunique(),
                      "patients_without_plausible_value": n_pts - pid[v.between(lo, hi)].nunique()})
     return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------
+# Category shares (NB1 smoking source, score missing reasons)
+# --------------------------------------------------------------------------
+def category_shares(values: pd.Series, column: str, n_cohort: int | None = None) -> pd.DataFrame:
+    """Patients per value (most common first). Columns: `column`, n, n_cohort (default len(values)), pct (% of
+    n_cohort). Before saving: suppressed_shares — the rate goes with a count < 10 and with n_cohort − n < 10."""
+    n_cohort = len(values) if n_cohort is None else n_cohort
+    vc = values.value_counts()
+    return pd.DataFrame({column: list(vc.index), "n": [int(v) for v in vc], "n_cohort": n_cohort,
+                         "pct": [round(100 * v / n_cohort, 1) if n_cohort else None for v in vc]},
+                        columns=[column, "n", "n_cohort", "pct"])
+
+
+def suppressed_shares(df: pd.DataFrame, threshold: int | None = None) -> pd.DataFrame:
+    """category_shares() rows as they leave the enclave: pct hidden where n or (n_cohort − n) is < 10, n < 10 → "<10";
+    n_cohort dropped (the cohort N is printed elsewhere)."""
+    return sdc.suppress_count_rate_pairs(df, "n_cohort", [("n", "pct")], threshold).drop(columns="n_cohort")
+
+
+def smoking_source(snap: pd.DataFrame) -> pd.DataFrame:
+    """Where each patient's smoking status came from (phenotype.core_snapshot `smoking_source`: structured record /
+    diagnosis code / undated records, D28); conflicting undated records → "missing (undated conflict)"."""
+    src = snap["smoking_source"].astype(object).where(snap["smoking_source"].notna(), "missing")
+    src = src.where(~snap["smoking_undated_conflict"].fillna(False).astype(bool), "missing (undated conflict)")
+    return category_shares(src, "smoking_source")
+
+
+# --------------------------------------------------------------------------
+# Demographics and facility (NB0 §2–3)
+# --------------------------------------------------------------------------
+def demographics(patients: pd.DataFrame, end) -> dict:
+    """Age at `end` (the data end) and sex of one cohort. The age range is QDiabetes's (qd.AGE_RANGE: 25 ≤ age < 85;
+    outside → not computable): age_outside_25_84 = a known age outside it; a missing age counts in age_missing_n only.
+
+    Keys: n, age_missing_n, age_known_n, age_median, age_iqr, age_25_84_n / _pct, age_outside_25_84_n / _pct,
+    male_n / male_pct (% of n). Before saving: suppressed_demographics."""
+    n = len(patients)
+    age = ((end - patients["date_of_birth"]).dt.days / 365.25).dropna()
+    lo, hi = qd.AGE_RANGE
+    inside = int(((age >= lo) & (age < hi)).sum())
+    male = int(patients["sex"].eq("Male").fillna(False).astype(bool).sum())
+
+    def pct(k):
+        return round(100 * k / n, 1) if n else None
+
+    return {"n": n, "age_missing_n": n - len(age), "age_known_n": len(age),
+            "age_median": round(float(age.median()), 1) if len(age) else None,
+            "age_iqr": f"{age.quantile(.25):.0f}–{age.quantile(.75):.0f}" if len(age) else None,
+            "age_outside_25_84_n": len(age) - inside, "age_outside_25_84_pct": pct(len(age) - inside),
+            "age_25_84_n": inside, "age_25_84_pct": pct(inside), "male_n": male, "male_pct": pct(male)}
+
+
+def suppressed_demographics(demo: pd.DataFrame, threshold: int | None = None) -> pd.DataFrame:
+    """demographics() rows as they leave the enclave: each % hidden where its count or (n − count) is < 10, counts
+    < 10 → "<10", median / IQR hidden over < 10 known ages; the helper counts (known ages, in range, male) dropped."""
+    out = sdc.suppress_small_group_stats(demo, "age_known_n", ["age_median", "age_iqr"], threshold)
+    out = sdc.suppress_count_rate_pairs(out, "n", [("age_outside_25_84_n", "age_outside_25_84_pct"),
+                                                   ("age_25_84_n", "age_25_84_pct"), ("male_n", "male_pct")], threshold)
+    out = sdc.suppress_small_counts(out, ["age_missing_n"], threshold)
+    return out.drop(columns=["age_known_n", "age_25_84_n", "male_n"])
+
+
+UNKNOWN_FACILITY = {"", "unknown"}       # facility_id values counted as missing (case-insensitive)
+
+
+def facility_representation(patients: pd.DataFrame) -> dict:
+    """facility_id of one cohort (the NABIDH adapter does not map a facility yet → all missing; DHA question).
+
+    Keys: n_facilities (distinct known ids), top_facility_share_pct (% of patients with a facility),
+    facility_missing_pct (% of all patients), and the counts behind them for suppressed_facility: n,
+    facility_known_n, top_facility_n."""
+    f = patients["facility_id"].astype("string").str.strip()
+    f = f.mask(f.str.lower().isin(UNKNOWN_FACILITY).fillna(False).astype(bool))
+    known = f.dropna()
+    vc = known.value_counts()
+    n, k = len(f), len(known)
+    top = int(vc.iloc[0]) if len(vc) else 0
+    return {"n_facilities": int(known.nunique()),
+            "top_facility_share_pct": round(100 * top / k, 1) if k else None,
+            "facility_missing_pct": round(100 * (n - k) / n, 1) if n else None,
+            "n": n, "facility_known_n": k, "top_facility_n": top}
+
+
+def suppressed_facility(fac: pd.DataFrame, threshold: int | None = None) -> pd.DataFrame:
+    """facility_representation() rows as they leave the enclave: the top-facility share hidden where the top facility
+    has < 10 patients or the others together < 10; the missing share where missing or known is < 10. No counts kept."""
+    out = sdc.suppress_rates(fac, "top_facility_n", ["facility_known_n"], ["top_facility_share_pct"], threshold)
+    out = sdc.suppress_rates(out.assign(_missing=out["n"] - out["facility_known_n"]), "_missing", ["n"],
+                             ["facility_missing_pct"], threshold)
+    return out.drop(columns=["n", "facility_known_n", "top_facility_n", "_missing"])
+
+
+# --------------------------------------------------------------------------
+# C1–C2 selection effect (NB1 §2)
+# --------------------------------------------------------------------------
+SMD_IMBALANCE = 0.1      # |SMD| above this is flagged as meaningful imbalance
+
+
+def smd(a: pd.Series, b: pd.Series, binary: bool) -> float:
+    """Standardised mean difference a − b over the non-missing values (binary: pooled p(1 − p))."""
+    a, b = a.dropna().astype(float), b.dropna().astype(float)
+    if binary:
+        p1, p2 = a.mean(), b.mean()
+        den = np.sqrt((p1 * (1 - p1) + p2 * (1 - p2)) / 2)
+        return float((p1 - p2) / den) if den else 0.0
+    den = np.sqrt((a.var() + b.var()) / 2)
+    return float((a.mean() - b.mean()) / den) if den else 0.0
+
+
+def selection_effect(f1: pd.DataFrame, f2: pd.DataFrame) -> pd.DataFrame:
+    """C1 vs C2 per feature (same columns in f1 / f2). c1 / c2 = mean over patients with a value (binary: the share,
+    0–1), smd, imbalance (|smd| > SMD_IMBALANCE). c1_n / c2_n = patients with a value; c1_k / c2_k (binary) =
+    patients with the feature. Before saving: suppressed_selection_effect."""
+    rows = []
+    for col in f1.columns:
+        a, b = f1[col], f2[col]
+        binary = pd.api.types.is_bool_dtype(a) and pd.api.types.is_bool_dtype(b)
+        row = {"variable": col, "type": "binary" if binary else "continuous",
+               "c1": round(a.astype(float).mean(), 3), "c2": round(b.astype(float).mean(), 3),
+               "smd": round(smd(a, b, binary), 3), "c1_n": int(a.notna().sum()), "c2_n": int(b.notna().sum())}
+        row["c1_k"] = int(a.dropna().astype(bool).sum()) if binary else None
+        row["c2_k"] = int(b.dropna().astype(bool).sum()) if binary else None
+        rows.append(row)
+    out = pd.DataFrame(rows, columns=["variable", "type", "c1", "c2", "smd", "c1_n", "c2_n", "c1_k", "c2_k"])
+    out.insert(5, "imbalance", out["smd"].abs() > SMD_IMBALANCE)
+    return out
+
+
+def suppressed_selection_effect(sel: pd.DataFrame, threshold: int | None = None) -> pd.DataFrame:
+    """selection_effect() as it leaves the enclave. A binary share is hidden where its count or (n − count) is < 10,
+    a continuous mean where fewer than 10 patients have a value; the SMD of such a row too (with the other cohort's
+    share it gives the hidden one back). The imbalance flag stays (|SMD| > 0.1 only). c1_n / c2_n < 10 → "<10"."""
+    t = threshold or PARAMS["small_cell_threshold"]
+    out = sel.copy()
+
+    def small(s: pd.Series) -> pd.Series:
+        return s.notna() & (s > 0) & (s < t)
+
+    hidden = pd.Series(False, index=out.index)
+    for c in ("c1", "c2"):
+        k, n = pd.to_numeric(out[f"{c}_k"], errors="coerce"), pd.to_numeric(out[f"{c}_n"], errors="coerce")
+        h = small(k) | small(n - k) | small(n)
+        out[c] = out[c].astype(object)
+        out.loc[h, c] = f"suppressed (<{t})"
+        hidden |= h
+    out["smd"] = out["smd"].astype(object)
+    out.loc[hidden, "smd"] = f"suppressed (<{t})"
+    return sdc.suppress_small_counts(out, ["c1_n", "c2_n"], t).drop(columns=["c1_k", "c2_k"])

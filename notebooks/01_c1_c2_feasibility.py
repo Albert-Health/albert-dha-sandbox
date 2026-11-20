@@ -40,7 +40,6 @@ import matplotlib
 if "ipykernel" not in sys.modules:
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from sandbox import breakdowns, codelists, cohorts, metrics, phenotype, sdc
@@ -148,19 +147,10 @@ print(eth_cmp.to_string(index=False))
 
 # %% [markdown]
 # ## 2. Selection effect: C1 (complete records) vs C2 (random)
-# SMD |d| > 0.1 is flagged as meaningful imbalance.
+# SMD |d| > 0.1 is flagged as meaningful imbalance (`breakdowns.selection_effect`). c1 / c2: mean (binary: share
+# 0–1) over patients with a value. Saved table: a share with < 10 patients (or < 10 without) is hidden, and its SMD.
 
 # %%
-def smd(a: pd.Series, b: pd.Series, binary: bool) -> float:
-    a, b = a.dropna().astype(float), b.dropna().astype(float)
-    if binary:
-        p1, p2 = a.mean(), b.mean()
-        den = np.sqrt((p1 * (1 - p1) + p2 * (1 - p2)) / 2)
-        return float((p1 - p2) / den) if den else 0.0
-    den = np.sqrt((a.var() + b.var()) / 2)
-    return float((a.mean() - b.mean()) / den) if den else 0.0
-
-
 def features(s: pd.DataFrame) -> pd.DataFrame:
     f = pd.DataFrame(index=s.index)
     f["age"] = s["age"]
@@ -179,15 +169,10 @@ def features(s: pd.DataFrame) -> pd.DataFrame:
 
 
 f1, f2 = features(snaps["c1"]), features(snaps["c2"])
-sel = []
-for col in f1.columns:
-    binary = f1[col].dtype == bool
-    sel.append({"variable": col, "c1": round(f1[col].astype(float).mean(), 3), "c2": round(f2[col].astype(float).mean(), 3),
-                "smd": round(smd(f1[col], f2[col], binary), 3)})
-sel = pd.DataFrame(sel)
-sel["imbalance"] = sel["smd"].abs() > 0.1
-run.save_table(sel, "nb01/selection_effect_smd.csv", "C1 vs C2 standardised mean differences")
-print(sel.to_string(index=False))
+sel = breakdowns.selection_effect(f1, f2)
+run.save_table(breakdowns.suppressed_selection_effect(sel), "nb01/selection_effect_smd.csv",
+               "C1 vs C2 standardised mean differences (|SMD| > 0.1 = imbalance)")
+print(sel.drop(columns=["c1_k", "c2_k"]).to_string(index=False))
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
 for ax, col, bins in [(axes[0], "age", 30), (axes[1], "bmi", 30)]:
@@ -209,34 +194,36 @@ run.save_figure(fig, "nb01/selection_age_bmi.png", "C1 vs C2 age/BMI distributio
 comp_rows, reasons = [], []
 for c, s in snaps.items():
     for grp, g in [("all", s), *s.groupby("status")]:
+        outside = ~g["age"].between(*lprs.DEV_AGE_RANGE)
+        lprs_on = P["lrs_variant"] == "practice_2012"
         comp_rows.append({"cohort": c, "group": grp, "n": len(g),
+                          "qd_computable_n": int(g["qd_computable"].sum()),
                           "qd_computable_pct": round(100 * g["qd_computable"].mean(), 1),
+                          "lrs_computable_n": int(g["lrs_computable"].sum()),
                           "lrs_computable_pct": round(100 * g["lrs_computable"].mean(), 1),
-                          "lrs_outside_dev_age_pct": (round(100 * (~g["age"].between(*lprs.DEV_AGE_RANGE)).mean(), 1)
-                                                      if P["lrs_variant"] == "practice_2012" else None),
+                          "lrs_outside_dev_age_n": int(outside.sum()) if lprs_on else None,
+                          "lrs_outside_dev_age_pct": round(100 * outside.mean(), 1) if lprs_on else None,
                           "qd_variant": g["qd_variant"].iloc[0] if len(g) else None,
                           "lrs_variant": LRS_LABEL})
     for score_name, col in [("qdiabetes", "qd_missing"), ("lrs", "lrs_missing")]:
         r = s[col].str.split(";").explode()
-        r = r[r != ""].value_counts()
-        for k, v in r.items():
-            reasons.append({"cohort": c, "score": score_name, "reason": k, "n": int(v),
-                            "pct": round(100 * v / len(s), 1)})
+        reasons.append(breakdowns.category_shares(r[r != ""], "reason", len(s)).assign(cohort=c, score=score_name))
 computability = pd.DataFrame(comp_rows)
-reasons = pd.DataFrame(reasons, columns=["cohort", "score", "reason", "n", "pct"])
-run.save_table(computability, "nb01/score_computability.csv", f"QDiabetes / {LRS_LABEL} computability")
-run.save_table(sdc.suppress_small_counts(reasons, ["n"]), "nb01/score_missing_reasons.csv", "Reasons a score could not be computed")
+reasons = pd.concat(reasons, ignore_index=True)[["cohort", "score", "reason", "n", "n_cohort", "pct"]]
+# A rate is hidden where its count or (N − count) is < 10 (sdc.suppress_count_rate_pairs); the helper counts dropped
+comp_counts = ["qd_computable", "lrs_computable", "lrs_outside_dev_age"]
+run.save_table(sdc.suppress_count_rate_pairs(computability, "n", [(f"{k}_n", f"{k}_pct") for k in comp_counts])
+               .drop(columns=[f"{k}_n" for k in comp_counts]),
+               "nb01/score_computability.csv", f"QDiabetes / {LRS_LABEL} computability")
+run.save_table(breakdowns.suppressed_shares(reasons), "nb01/score_missing_reasons.csv",
+               "Reasons a score could not be computed")
 print(computability.to_string(index=False))
 print(reasons.to_string(index=False))
 
 # Where smoking came from (D28: undated records used only if consistent; conflicting → missing)
-sm_src = []
-for c, s in snaps.items():
-    src = s["smoking_source"].fillna("missing").where(~s["smoking_undated_conflict"], "missing (undated conflict)")
-    for k, v in src.value_counts().items():
-        sm_src.append({"cohort": c, "smoking_source": k, "n": int(v), "pct": round(100 * v / len(s), 1)})
-sm_src = pd.DataFrame(sm_src, columns=["cohort", "smoking_source", "n", "pct"])
-run.save_table(sdc.suppress_small_counts(sm_src, ["n"]), "nb01/smoking_source.csv", "Smoking status source (D28)")
+sm_src = pd.concat([breakdowns.smoking_source(s).assign(cohort=c) for c, s in snaps.items()], ignore_index=True)
+sm_src = sm_src[["cohort", "smoking_source", "n", "n_cohort", "pct"]]
+run.save_table(breakdowns.suppressed_shares(sm_src), "nb01/smoking_source.csv", "Smoking status source (D28)")
 print(sm_src.to_string(index=False))
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
@@ -255,15 +242,23 @@ for ax in axes:
 fig.tight_layout()
 run.save_figure(fig, "nb01/score_distributions.png", "Score distributions (descriptive only)")
 
-dist = pd.concat([
-    s.groupby("status").agg(qd_median_pct=("qd_risk_10y", lambda x: round(100 * x.median(), 2)),
-                            lrs_median=("lrs_score", "median"),
-                            lrs_p25=("lrs_score", lambda x: x.quantile(.25)),
-                            lrs_p75=("lrs_score", lambda x: x.quantile(.75)),
-                            lrs_high_risk_pct=("lrs_score", lambda x: None if LRS_THR is None else
-                                               round(100 * (x >= LRS_THR).sum() / max(x.notna().sum(), 1), 1)))
-     .assign(cohort=c, lrs_variant=LRS_LABEL).reset_index() for c, s in snaps.items()])
-run.save_table(dist, "nb01/score_summary.csv", "Score summaries (descriptive)")
+dist = []
+for c, s in snaps.items():
+    for grp, g in s.groupby("status"):
+        q, x = g["qd_risk_10y"].dropna(), g["lrs_score"].dropna()
+        high = None if LRS_THR is None else int((x >= LRS_THR).sum())
+        dist.append({"status": grp, "qd_n": len(q), "qd_median_pct": round(100 * q.median(), 2) if len(q) else None,
+                     "lrs_n": len(x), "lrs_median": x.median(), "lrs_p25": x.quantile(.25), "lrs_p75": x.quantile(.75),
+                     "lrs_high_risk_n": high,
+                     "lrs_high_risk_pct": None if high is None else round(100 * high / max(len(x), 1), 1),
+                     "cohort": c, "lrs_variant": LRS_LABEL})
+dist = pd.DataFrame(dist)
+# Medians / quartiles over < 10 scores hidden; the high-risk % where flagged or (scored − flagged) is < 10
+dist_out = sdc.suppress_small_group_stats(dist, "qd_n", ["qd_median_pct"])
+dist_out = sdc.suppress_small_group_stats(dist_out, "lrs_n", ["lrs_median", "lrs_p25", "lrs_p75"])
+dist_out = sdc.suppress_rates(dist_out, "lrs_high_risk_n", ["lrs_n"], ["lrs_high_risk_pct"])
+run.save_table(dist_out.drop(columns=["qd_n", "lrs_n", "lrs_high_risk_n"]), "nb01/score_summary.csv",
+               "Score summaries (descriptive)")
 print(dist.to_string(index=False))
 
 # %% [markdown]
@@ -382,6 +377,11 @@ kpi_values = {
     "c1_detection_pct": {f"{r['reference']}|{r['score']}": None if pd.isna(r["sens_computable"])
                          else float(r["sens_computable"])
                          for _, r in detection[(detection["cohort"] == "c1") & (detection["group"] == "all")].iterrows()},
+    # counts behind c1_detection_pct: kpi.py hides a rate whose flagged or (computable − flagged) is < 10
+    "c1_detection_counts": {f"{r['reference']}|{r['score']}": {"n_flagged": int(r["n_flagged"]),
+                                                               "n_computable": int(r["n_computable"])}
+                            for _, r in detection[(detection["cohort"] == "c1") & (detection["group"] == "all")
+                                                  & detection["n_flagged"].notna()].iterrows()},
 }
 run.save_json(kpi_values, "nb01/kpi_values.json", "NB1 KPI inputs")
 manifest = run.finish()

@@ -56,11 +56,12 @@ class TestKpiNb1(unittest.TestCase):
     def test_joint_completeness_from_nb1(self):
         t = kpi.build({}, nb1(), {}, {}, AUDIT)
         r = row(t, "Joint Completeness - QDiabetes")
-        self.assertEqual(r["actual"], "C1 62.5% (N=125/200); C2 40.0% (N=<10/20)")   # 8 → "<10"
+        # 8 → "<10", and the rate with it (40% × 20 would give the 8 back)
+        self.assertEqual(r["actual"], "C1 62.5% (N=125/200); C2 suppressed (<10) (N=<10/20)")
         self.assertEqual((r["met"], r["source"]), ("Reported", "NB1 (C1/C2)"))
         self.assertIn("Score computable: C1 100.0%; C2 55.0%", r["notes"])
         r = row(t, "Joint Completeness - LRS")
-        self.assertEqual(r["actual"], "C1 90.0% (N=180/200); C2 85.0% (N=17/20)")
+        self.assertEqual(r["actual"], "C1 90.0% (N=180/200); C2 suppressed (<10) (N=17/20)")   # 20 − 17 < 10
         self.assertIn("Variant: LPRS [K-LRS] — no waist circumference needed", r["notes"])
         self.assertIn("Score computable: C1 96.5%; C2 90.0%", r["notes"])
 
@@ -83,10 +84,39 @@ class TestKpiNb1(unittest.TestCase):
         self.assertEqual((r["met"], r["source"]), ("Reported", "NB1 (C1 known positives)"))  # not judged vs ≥ 70%
         self.assertEqual(kpi.graduation(t)["non_critical_evaluable"], 0)
 
+    def test_detection_rate_with_small_counts_suppressed(self):
+        """c1_detection_counts (NB1 from 2026-11-20): a rate whose flagged or (computable − flagged) is < 10 is not
+        printed; without the counts (older NB1 runs) the rate is shown as before."""
+        det = {"data_end|qdiabetes": 72.1, "first_evidence|qdiabetes": 3.5, "data_end|lrs": 97.0,
+               "first_evidence|lrs": None}
+        counts = {"data_end|qdiabetes": {"n_flagged": 101, "n_computable": 140},
+                  "first_evidence|qdiabetes": {"n_flagged": 5, "n_computable": 140},
+                  "data_end|lrs": {"n_flagged": 194, "n_computable": 200}}
+        t = kpi.build({}, {**nb1(det), "c1_detection_counts": counts}, {}, {}, AUDIT)
+        self.assertEqual(row(t, "Sensitivity (Recall, positive class)")["actual"],
+                         "C1 QDiabetes: data_end 72.1%, first_evidence suppressed (<10); LPRS: data_end suppressed (<10)")
+
+    def test_data_completeness_value_suppressed(self):
+        """The Data Completeness actual (minimum over the 8) and the weakest-variable note: 99.5% of 1000 = 5 missing."""
+        nb0 = {"data_completeness_min_core8_pct": {"c1": 99.5, "c2": 71.0},
+               "data_completeness_min_core8": {"c1": {"variable": "bmi", "pct": 99.5, "complete_n": 995, "n": 1000},
+                                               "c2": {"variable": "bmi", "pct": 71.0, "complete_n": 710, "n": 1000}},
+               "data_completeness_weakest": {"c1": "bmi", "c2": "bmi"},
+               "framework_match": True, "framework_missing_groups": []}
+        r = row(kpi.build(nb0, {}, {}, {}, AUDIT), "Data Completeness for Required Variables")
+        self.assertEqual(r["actual"], "C1 suppressed (<10); C2 71.0%")
+        self.assertEqual(r["met"], "Not Met")                                    # judged on the value itself
+        self.assertIn("Weakest variable: C1 bmi suppressed (<10); C2 bmi 71.0%", r["notes"])
+        self.assertNotIn("99.5", r["actual"] + r["notes"])
+        old = {k: v for k, v in nb0.items() if k != "data_completeness_min_core8"}   # NB0 run before the counts
+        self.assertEqual(row(kpi.build(old, {}, {}, {}, AUDIT), "Data Completeness for Required Variables")["actual"],
+                         "C1 99.5%; C2 71.0%")
+
     def test_nb1_and_nb2_together(self):
         t = kpi.build({}, nb1(), nb2(), {}, AUDIT)
         r = row(t, "Joint Completeness - QDiabetes")
-        self.assertEqual(r["actual"], "C1 62.5% (N=125/200); C2 40.0% (N=<10/20); C3 48.0% (N=480/1000)")
+        self.assertEqual(r["actual"],
+                         "C1 62.5% (N=125/200); C2 suppressed (<10) (N=<10/20); C3 48.0% (N=480/1000)")
         self.assertEqual(r["source"], "NB1 (C1/C2) + NB2 (C3 base)")
         self.assertIn("Definition: 8 core variables (reduced)", r["notes"])
         self.assertEqual(row(t, "Specificity")["source"], "NB2")                # NB2 row, not the Phase 2 note
@@ -195,7 +225,7 @@ class TestKpiReportSkipsOverrides(unittest.TestCase):
                                values={**nb1(), "joint_core8_pct": {"c1": 99.0, "c2": 99.0}})
             t, grad, manifest, text = self.report(out)
         self.assertEqual(row(t, "Joint Completeness - QDiabetes")["actual"],
-                         "C1 62.5% (N=125/200); C2 40.0% (N=<10/20)")             # not the 99.0% exploration run
+                         "C1 62.5% (N=125/200); C2 suppressed (<10) (N=<10/20)")   # not the 99.0% exploration run
         self.assertEqual(grad["runs"]["nb01"], plain.name)
         self.assertEqual(grad["skipped_override_runs"], {"nb01": [explore.name]})
         self.assertIsNone(manifest["params_override"])

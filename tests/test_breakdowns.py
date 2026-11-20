@@ -1,5 +1,7 @@
 """C1 / C2 checklist breakdowns (sandbox.breakdowns): treated hypertension derivation, QDiabetes smoking level,
-vital plausibility; placeholder dates in the schema check; the new tables in the COPY block."""
+vital plausibility; placeholder dates in the schema check; the new tables in the COPY block. The block tables of NB0 /
+NB1 (smoking source, demographics, facility, C1–C2 SMD): as saved, no rate gives back a count < 10 (rate × N) and
+no count < 10 is shown."""
 import contextlib
 import io
 import sys
@@ -179,6 +181,120 @@ class TestBlockTables(unittest.TestCase):
         self.assertNotIn("T2DM", text)
         for small in (" 3 ", " 4 ", " 7 ", " 6 ", " 2 "):
             self.assertNotIn(small, text.replace("\n", " ") + " ")
+
+
+
+SUPPRESSED = "suppressed (<10)"
+
+
+class TestSmokingSource(unittest.TestCase):
+    """nb01/smoking_source.csv (D28): the share of a source is hidden where its count or (cohort N − count) is < 10."""
+    def snap(self, sources, conflict=()):
+        s = pd.DataFrame({"smoking_source": pd.Series(sources, dtype=object)})
+        s["smoking_undated_conflict"] = [i in set(conflict) for i in range(len(s))]
+        return s
+
+    def test_small_categories_and_their_rates_suppressed(self):
+        # 60 patients: 48 structured, 3 diagnosis code, 4 missing, 5 conflicting undated records
+        sources = ["structured"] * 48 + ["diagnosis_code"] * 3 + [None] * 9
+        raw = breakdowns.smoking_source(self.snap(sources, conflict=range(55, 60)))
+        self.assertEqual(dict(zip(raw["smoking_source"], raw["n"])),
+                         {"structured": 48, "missing (undated conflict)": 5, "missing": 4, "diagnosis_code": 3})
+        self.assertEqual(set(raw["n_cohort"]), {60})
+        out = breakdowns.suppressed_shares(raw.assign(cohort="c1")).set_index("smoking_source")
+        self.assertNotIn("n_cohort", out.columns)
+        self.assertEqual(out.loc["structured", ["n", "pct"]].tolist(), [48, 80.0])     # 12 others: shown
+        for k in ("diagnosis_code", "missing", "missing (undated conflict)"):
+            self.assertEqual(out.loc[k, ["n", "pct"]].tolist(), ["<10", SUPPRESSED])
+        self.assertFalse({"5.0", "6.7", "8.3"} & set(out["pct"].astype(str)))           # 3 / 4 / 5 of 60
+
+    def test_rate_of_a_large_category_hidden_when_the_rest_is_small(self):
+        out = breakdowns.suppressed_shares(breakdowns.smoking_source(self.snap(["structured"] * 55 + [None] * 5)))
+        self.assertEqual(out.set_index("smoking_source").loc["structured", ["n", "pct"]].tolist(), [55, SUPPRESSED])
+
+    def test_category_shares_with_another_denominator(self):
+        r = breakdowns.category_shares(pd.Series(["age_out_of_range"] * 12), "reason", n_cohort=200)
+        self.assertEqual(r.iloc[0][["n", "n_cohort", "pct"]].tolist(), [12, 200, 6.0])
+
+
+class TestDemographics(unittest.TestCase):
+    END = pd.Timestamp("2025-12-31")
+
+    def patients(self, ages, males):
+        dob = [self.END - pd.Timedelta(days=round(a * 365.25)) if a is not None else pd.NaT for a in ages]
+        return pd.DataFrame({"patient_id": [f"P{i}" for i in range(len(ages))],
+                             "sex": ["Male"] * males + ["Female"] * (len(ages) - males),
+                             "date_of_birth": pd.to_datetime(pd.Series(dob))})
+
+    def test_share_outside_the_qdiabetes_age_range(self):
+        # 100 patients; whole days, so the bounds are a day inside / outside (25 <= age < 85)
+        ages = [20.0] * 12 + [24.99] * 3 + [25.01] * 40 + [84.99] * 30 + [85.01] * 10 + [None] * 5
+        d = breakdowns.demographics(self.patients(ages, males=50), self.END)
+        self.assertEqual((d["n"], d["age_missing_n"], d["age_outside_25_84_n"], d["age_25_84_n"]), (100, 5, 25, 70))
+        self.assertEqual((d["age_outside_25_84_pct"], d["age_25_84_pct"], d["male_pct"]), (25.0, 70.0, 50.0))
+        out = breakdowns.suppressed_demographics(pd.DataFrame([d]))
+        self.assertEqual(out.iloc[0]["age_missing_n"], "<10")
+        self.assertEqual(out.iloc[0]["age_outside_25_84_pct"], 25.0)
+        self.assertFalse({"age_known_n", "age_25_84_n", "male_n"} & set(out.columns))
+
+    def test_small_cells_suppressed(self):
+        # 30 patients: 4 outside 25–84, 26 inside (4 not inside → that rate hidden too), 27 men (3 women)
+        d = breakdowns.demographics(self.patients([50.0] * 26 + [90.0] * 4, males=27), self.END)
+        out = breakdowns.suppressed_demographics(pd.DataFrame([d])).iloc[0]
+        self.assertEqual(out["age_outside_25_84_n"], "<10")
+        for col in ("age_outside_25_84_pct", "age_25_84_pct", "male_pct"):
+            self.assertEqual(out[col], SUPPRESSED, col)
+        self.assertEqual(out["age_median"], 50.0)                     # 30 known ages: shown
+
+    def test_median_over_few_patients_hidden(self):
+        out = breakdowns.suppressed_demographics(
+            pd.DataFrame([breakdowns.demographics(self.patients([40.0] * 6 + [None] * 20, males=13), self.END)]))
+        self.assertEqual(out.iloc[0][["age_median", "age_iqr"]].tolist(), [SUPPRESSED, SUPPRESSED])
+
+
+class TestFacility(unittest.TestCase):
+    def test_not_mapped(self):
+        f = breakdowns.facility_representation(pd.DataFrame({"facility_id": [None] * 40 + ["unknown"] * 10}))
+        self.assertEqual((f["n_facilities"], f["facility_missing_pct"], f["top_facility_share_pct"]), (0, 100.0, None))
+        out = breakdowns.suppressed_facility(pd.DataFrame([f]))
+        self.assertEqual(out.columns.tolist(), ["n_facilities", "top_facility_share_pct", "facility_missing_pct"])
+
+    def test_shares_suppressed(self):
+        ids = ["F1"] * 95 + ["F2"] * 3 + [" "] * 2           # 98 known, top 95 (3 elsewhere), 2 missing
+        out = breakdowns.suppressed_facility(pd.DataFrame([breakdowns.facility_representation(
+            pd.DataFrame({"facility_id": ids}))])).iloc[0]
+        self.assertEqual(out["n_facilities"], 2)
+        self.assertEqual(out[["top_facility_share_pct", "facility_missing_pct"]].tolist(), [SUPPRESSED, SUPPRESSED])
+        ok = breakdowns.facility_representation(pd.DataFrame({"facility_id": ["F1"] * 60 + ["F2"] * 25 + [None] * 15}))
+        self.assertEqual((ok["top_facility_share_pct"], ok["facility_missing_pct"]), (70.6, 15.0))   # 60 / 85
+
+
+class TestSelectionEffect(unittest.TestCase):
+    def test_smd_and_small_shares(self):
+        f1 = pd.DataFrame({"age": [40.0, 60.0] * 25, "rare": [True] * 3 + [False] * 47,
+                           "common": [True] * 25 + [False] * 25})
+        f2 = pd.DataFrame({"age": [45.0, 65.0] * 25, "rare": [True] * 12 + [False] * 38,
+                           "common": [True] * 20 + [False] * 30})
+        sel = breakdowns.selection_effect(f1, f2).set_index("variable")
+        self.assertEqual(sel.loc["age", "type"], "continuous")
+        self.assertEqual(sel.loc["rare", "type"], "binary")
+        self.assertAlmostEqual(sel.loc["age", "smd"], round(-5 / pd.Series([40.0, 60.0] * 25).std(), 3))
+        p1, p2 = 0.5, 0.4
+        self.assertAlmostEqual(sel.loc["common", "smd"], round((p1 - p2) / ((p1 * .5 + p2 * .6) / 2) ** .5, 3))
+        self.assertTrue(sel.loc["rare", "imbalance"])                  # |SMD| > 0.1
+        out = breakdowns.suppressed_selection_effect(sel.reset_index()).set_index("variable")
+        self.assertEqual(out.loc["rare", ["c1", "smd"]].tolist(), [SUPPRESSED, SUPPRESSED])   # 3 of 50 in C1
+        self.assertEqual(out.loc["rare", "c2"], 0.24)                  # 12 of 50: shown
+        self.assertTrue(out.loc["rare", "imbalance"])                  # the flag stays
+        self.assertEqual(out.loc["common", ["c1", "c2"]].tolist(), [0.5, 0.4])
+        self.assertFalse({"c1_k", "c2_k"} & set(out.columns))
+        self.assertNotIn(0.06, out["c1"].tolist())
+
+    def test_feature_with_missing_values(self):
+        """A nullable boolean (ethnicity unknown → NA) is binary over the patients with a value."""
+        f = pd.DataFrame({"eth": pd.array([True] * 20 + [False] * 20 + [None] * 10, dtype="boolean")})
+        sel = breakdowns.selection_effect(f, f).iloc[0]
+        self.assertEqual((sel["type"], sel["c1"], sel["c1_n"], sel["c1_k"], sel["smd"]), ("binary", 0.5, 40, 20, 0.0))
 
 
 if __name__ == "__main__":

@@ -145,11 +145,11 @@ def match_table(data: dict, delivery: dict | None = None, p: dict = PARAMS) -> p
 
 
 def suppressed(table: pd.DataFrame, threshold: int | None = None) -> pd.DataFrame:
-    """The table as it leaves the enclave: counts under the small-cell threshold → "<10", and the percentage with them."""
+    """The table as it leaves the enclave: counts under the small-cell threshold → "<10", and the percentage with them
+    ("<10 patients"); the percentage also where n_patients − count is under it ("suppressed (<10)", sdc.suppress_rates)."""
     threshold = threshold or PARAMS["small_cell_threshold"]
     n = pd.to_numeric(table["patients_with_value"], errors="coerce")
-    out = table.copy()
-    out["pct_patients"] = out["pct_patients"].astype(object)
+    out = sdc.suppress_rates(table, "patients_with_value", ["n_patients"], ["pct_patients"], threshold)
     out.loc[n.notna() & (n > 0) & (n < threshold), "pct_patients"] = f"<{threshold} patients"
     return sdc.suppress_small_counts(out, ["n_patients", "patients_with_value"], threshold)
 
