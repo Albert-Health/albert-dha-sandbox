@@ -72,6 +72,7 @@ src/sandbox/
   metrics.py           C-index, zaman-bağımlı AUROC (IPCW), KM, kalibrasyon, eşik metrikleri, C1 yakalama oranı (Wilson), bootstrap
   recalibration.py     Kol 2: baseline survival yeniden tahmini (cinsiyete göre)
   kpi.py               KPI Framework satırları + actual/met + markdown rapor
+  framework.py         Framework Match değişken bazında Match / Partial / Absent (NB0 §5b; adapter `delivery_facts` → ingest.json)
   audit.py, sdc.py
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,

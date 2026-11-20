@@ -44,6 +44,10 @@ class TestIngestVersion(unittest.TestCase):
             log = (d / "out" / "audit" / "audit_log.jsonl").read_text(encoding="utf-8")
         self.assertTrue(out.getvalue().startswith(f"Ingest v{V} · run "))
         self.assertEqual((meta["ingest_version"], meta["cohort"], meta["input"]), (V, "c1", "file"))
+        # delivery facts for NB0's Framework Match: view / column and the drug rows already in the requested system (ATC)
+        self.assertEqual(meta["delivery"]["fields"]["sex"], "Patient.Gender_Code")
+        self.assertEqual(meta["delivery"]["medications"]["requested_system"], "ATC")
+        self.assertEqual(meta["delivery"]["medications"]["as_requested_rows"], 1)        # A2: the ATC-shaped code
         self.assertEqual(summary["ingest_version"], V)
         self.assertIn(f'"ingest_version": "{V}"', log)
 

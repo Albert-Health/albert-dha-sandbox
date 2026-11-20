@@ -147,6 +147,28 @@ def _completeness_note(nb0: dict) -> str:
     return " · ".join(parts)
 
 
+FRAMEWORK_MET = {"Match": "Met", "Partial": "Partial", "No match": "Not Met"}
+
+
+def _framework_match(nb0: dict) -> tuple[str, str, str, str]:
+    """NB0 kpi_values → (actual, met, source, notes) of the Framework Match row. Match = every requested variable
+    arrived as requested; Partial = something arrived, not all as requested (framework.py); No match = nothing
+    arrived. "Partial" is neither Met nor Not Met: graduation() leaves it out of the evaluated KPIs [decision pending]."""
+    source = "NB0 nb00/kpi_values.json"
+    status = nb0.get("framework_status")
+    if status is None:               # NB0 run from before the Match / Partial split: code groups only
+        return ("Match" if nb0["framework_match"] else "Missing: " + ", ".join(nb0["framework_missing_groups"][:6]),
+                "Met" if nb0["framework_match"] else "Not Met", source, "")
+    bad = nb0.get("framework_variables") or {}
+    notes = [f"{v}: " + ", ".join(f"{c.upper()} {s}" for c, s in by_cohort.items()) for v, by_cohort in bad.items()]
+    if nb0.get("framework_missing_groups"):
+        notes.append("requested code groups not received: " + ", ".join(nb0["framework_missing_groups"][:6]))
+    if status == "Partial":
+        notes.append("Partial is not counted as Met or Not Met in the graduation rate [decision pending]")
+    return (status + (": " + ", ".join(bad) if bad and status != "Match" else ""),
+            FRAMEWORK_MET.get(status, "Pending"), source, " · ".join(notes))
+
+
 NB2_ONLY = ["Specificity", "NPV & PPV", "AUROC", "C-Index", "Precision / Recall / F1", "Recalibration Slope / O:E",
             "Alert Rate per 1,000 Patients"]
 
@@ -170,9 +192,8 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
          "config.security_incidents (manual)", "Manually confirmed from the enclave incident log")
 
     if nb0:
-        set_("Applicant Data Requirement Framework Match", "Match" if nb0["framework_match"] else
-             "Missing: " + ", ".join(nb0["framework_missing_groups"][:6]),
-             "Met" if nb0["framework_match"] else "Not Met", "NB0 nb00/kpi_values.json")
+        fw = _framework_match(nb0)
+        set_("Applicant Data Requirement Framework Match", *fw)
         dc = nb0["data_completeness_min_core8_pct"]
         set_("Data Completeness for Required Variables", "; ".join(f"{c.upper()} {v:.1f}%" for c, v in dc.items()),
              "Met" if all(v >= 90 for v in dc.values()) else "Not Met", "NB0",

@@ -227,7 +227,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   bash tools/enclave.sh run nb0
   ```
 
-  Bakılacaklar: şema ERROR = 0, hacim, Framework Match, eşlenemeyen kodlar. Ayrıntı için:
+  Bakılacaklar: şema ERROR = 0, hacim, Framework Match (değişken bazında Match / Partial / Absent: `nb00/framework_variables.csv`; kod-grubu tablosu `framework_match.csv` yanında), eşlenemeyen kodlar. Ayrıntı için:
 
   ```bash
   bash tools/enclave.sh show nb0 nb00/core_variable_completeness.csv
