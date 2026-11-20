@@ -26,7 +26,7 @@ def _csv(d: Path, name: str, header: str, rows: list[str], encoding="utf-8"):
 def write_raw(d: Path, social_rows=None, diag_date="2021-01-01", social_item="SocialHabitCategory_Code",
               drug_code=True):
     """Shape of the HSAA views (enclave, 2026-11-18): Patient.ID = Patient in the other views; age present, no date
-    of birth. social_item / drug_code: the C2 differences (category description, no drug code)."""
+    of birth. social_item / drug_code: the C3 differences (category description, no drug code; C1 and C2 have both)."""
     # File with a BOM (Excel export) + mixed sex spellings
     _csv(d, "patients.csv", "ID,Age,Gender_Code,EthnicGroup_Description,Nationality", [
         "A1,56,M,,United Arab Emirates",
@@ -223,8 +223,8 @@ class TestAdapterOptions(unittest.TestCase):
         self.assertEqual(p["A1"], pd.Timestamp("1970-01-01"))
         self.assertTrue(pd.notna(p["A2"]))                         # BirthDate empty → from age
 
-    def test_c2_shape(self):
-        """C2: smoking category in the description column, no drug code. The mapping must still work."""
+    def test_c3_shape(self):
+        """C3: smoking category in the description column, no drug code. The mapping must still work."""
         rows = ["A1,Tobacco,Never smoker,2018-01-01", "A1,Alcohol,Yes,2018-01-01"]
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)

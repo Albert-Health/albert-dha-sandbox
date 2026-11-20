@@ -9,7 +9,8 @@ Follows the views seen in the enclave (2026-11-18):
   are in metres),
   LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19; as on the VM, units in several spellings
   (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit and some empty ResultValue rows), SocialHistory (smoking),
-  FamilyHistory (diabetes), Medication; Encounter only in C3
+  FamilyHistory (diabetes), Medication; Encounter only in C3 here (on the VM the real C2 has Encounter too, C1's
+  is not readable: SELECT privilege)
 - C3 differences: SocialHabitCategory_Description (not _Code; C1 and C2 have _Code, VM checks 2026-11-20)
 - Medication: in C1 / C2 DrugProduct_Code = DDC product code (the real C2 has drug codes, VM ingest 2026-11-19); in
   C3 no DrugProduct_Code, DrugProduct_Description = DDC trade name (a single-ingredient, systemic DDC product
