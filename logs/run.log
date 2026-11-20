@@ -1,131 +1,3 @@
-P2IN_DHASBXNBPRDAA01@DHASBXNBPRDAA01:~/Desktop/albert-dha/albert-dha-sandbox/dist$ python3 ingest_bundle.py run ingest --cohorts c1 c2
-Running: SANDBOX_SOURCE=nabidh python /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/dist/ingest_bundle.py --bundle-exec tools/ingest_nabidh.py --source nabidh --input iris --cohorts c1 c2
-(the screen output below stays inside the enclave; the summary to copy comes at the end)
-Ingest v1.2.1 · run 20261119T120545Z_ingest_nabidh_5e2b7b
-[12:05:45 +0s] connecting to IRIS 10.28.29.29:51772/HSSBX as dha-sbx-000010 ...
-[12:05:45 +0s] connected
-[12:05:45 +0s] c1: reading 8 sources from IRIS
-[12:05:45 +0s] c1 patient_profile: querying Patient
-[12:05:45 +0s] c1 patient_profile: 2,596 rows read (0 s)
-[12:05:45 +0s] c1 patient_profile: mapped → 2,596 canonical rows (0 s)
-[12:05:45 +0s] c1 diagnoses: querying Diagnosis
-[12:05:49 +5s] c1 diagnoses: 99,397 rows read (4 s)
-[12:05:50 +5s] c1 diagnoses: mapped → 99,397 canonical rows (0 s)
-[12:05:50 +5s] c1 observations: querying Observation
-[12:05:54 +9s] c1 observations: 239,815 rows read (4 s)
-[12:05:55 +10s] c1 observations: mapped → 232,452 canonical rows (1 s)
-[12:05:55 +10s] c1 lab_results: querying LabResultItem
-[12:05:59 +14s] c1 lab_results: 3,147 rows read (4 s)
-[12:05:59 +14s] c1 lab_results: mapped → 3,144 canonical rows (0 s)
-[12:05:59 +14s] c1 social_history: querying SocialHistory
-[12:05:59 +14s] c1 social_history: 3,892 rows read (0 s)
-[12:05:59 +14s] c1 social_history: mapped → 3,824 canonical rows (0 s)
-[12:05:59 +14s] c1 family_history: querying FamilyHistory
-[12:05:59 +14s] c1 family_history: 4,094 rows read (0 s)
-[12:06:00 +15s] c1 family_history: mapped → 4,081 canonical rows (0 s)
-[12:06:00 +15s] c1 medications: querying Medication
-[12:06:56 +71s] c1 medications: 24,002 rows so far (57 s)
-[12:06:56 +72s] c1 medications: 24,002 rows read (57 s)
-[12:06:59 +74s] c1 medications: mapped → 30,503 canonical rows (3 s)
-[12:06:59 +74s] c1 encounters: querying Encounter
-[12:06:59 +74s] c1 encounters: absent (optional source)
-/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
-  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
-/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
-  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
-[12:07:00 +75s] c1: writing canonical tables and checking the schema
-
-== C1: 2596 patients → /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/data/canonical/nabidh/c1
-   rows: patients=2596, conditions=99397, medications=30503, labs=3144, observations=240357, encounters=0
-   patient_profile  read  rows_read=2596
-   diagnoses        read  rows_read=99397
-   observations     read  rows_read=239815  dropped_empty_value=7363 (8302-2 (3572), 3141-9 (2867), 39156-5 (924))
-   lab_results      read  rows_read=3147
-   social_history   read  rows_read=3892
-   family_history   read  rows_read=4094
-   medications      read  rows_read=24002
-   encounters       absent (optional)  rows_read=—  (OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
-[Location: <Prepare>]
-[%msg: <User dha-)
-       table                    check severity  n_affected                 detail
-    patients      sex not Male/Female     WARN           1                      U
-  conditions    missing required date    ERROR          17                       
- medications    missing required date    ERROR          34                       
-        labs   missing required value    ERROR           2                       
-observations    missing required date    ERROR        3607                       
-        labs multiple units per LOINC     WARN           3 1521-4, 1558-6, 4548-4
-   unmapped values (to add to the adapter dictionaries):
-        source             field                                  value  n_rows
-social_history value → canonical       Smoking | other → unmapped:other     428
-social_history value → canonical   Cigarettes | <empty> → unmapped:<NA>       2
-social_history value → canonical            Cigarettes | 1 → unmapped:1       1
-social_history value → canonical        Cigarettes | 1.5 → unmapped:1.5       1
-social_history value → canonical Cigarettes,Cigars | .25 → unmapped:.25       1
-social_history value → canonical                Cigars | 1 → unmapped:1       1
-[12:07:02 +77s] c2: reading 8 sources from IRIS
-[12:07:02 +77s] c2 patient_profile: querying Patient
-[12:07:03 +78s] c2 patient_profile: 2,600 rows read (1 s)
-[12:07:03 +79s] c2 patient_profile: mapped → 2,600 canonical rows (0 s)
-[12:07:03 +79s] c2 diagnoses: querying Diagnosis
-[12:07:26 +101s] c2 diagnoses: 50,000 rows so far (22 s)
-[12:08:11 +146s] c2 diagnoses: 90,326 rows so far (68 s)
-[12:08:11 +146s] c2 diagnoses: 90,326 rows read (68 s)
-[12:08:11 +147s] c2 diagnoses: mapped → 90,326 canonical rows (0 s)
-[12:08:11 +147s] c2 observations: querying Observation
-[12:08:36 +171s] c2 observations: 50,000 rows so far (24 s)
-[12:09:08 +203s] c2 observations: 100,000 rows so far (56 s)
-[12:09:08 +203s] c2 observations: 118,792 rows read (57 s)
-[12:09:09 +204s] c2 observations: mapped → 117,742 canonical rows (0 s)
-[12:09:09 +204s] c2 lab_results: querying LabResultItem
-[12:11:21 +336s] c2 lab_results: 2,315 rows so far (132 s)
-[12:11:21 +336s] c2 lab_results: 2,315 rows read (132 s)
-[12:11:21 +336s] c2 lab_results: mapped → 2,313 canonical rows (0 s)
-[12:11:21 +336s] c2 social_history: querying SocialHistory
-[12:11:23 +339s] c2 social_history: 1,618 rows read (2 s)
-[12:11:23 +339s] c2 social_history: mapped → 1,467 canonical rows (0 s)
-[12:11:23 +339s] c2 family_history: querying FamilyHistory
-[12:11:25 +340s] c2 family_history: 682 rows read (1 s)
-[12:11:25 +340s] c2 family_history: mapped → 681 canonical rows (0 s)
-[12:11:25 +340s] c2 medications: querying Medication
-[12:11:58 +373s] c2 medications: 24,751 rows so far (33 s)
-[12:11:58 +374s] c2 medications: 24,751 rows read (34 s)
-[12:12:00 +375s] c2 medications: mapped → 33,008 canonical rows (2 s)
-[12:12:00 +375s] c2 encounters: querying Encounter
-[12:12:40 +415s] c2 encounters: 50,000 rows so far (40 s)
-[12:13:08 +443s] c2 encounters: 100,000 rows so far (68 s)
-[12:14:00 +495s] c2 encounters: 150,000 rows so far (120 s)
-[12:14:01 +496s] c2 encounters: 165,551 rows read (121 s)
-[12:14:01 +496s] c2 encounters: mapped → 165,551 canonical rows (0 s)
-/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
-  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
-/home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/src/sandbox/io/adapters/nabidh.py:799: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
-  df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
-[12:14:01 +497s] c2: writing canonical tables and checking the schema
-
-== C2: 2600 patients → /home/P2IN_DHASBXNBPRDAA01/Desktop/albert-dha/albert-dha-sandbox/data/canonical/nabidh/c2
-   rows: patients=2600, conditions=90326, medications=33008, labs=2313, observations=119890, encounters=165551
-   patient_profile  read  rows_read=2600
-   diagnoses        read  rows_read=90326
-   observations     read  rows_read=118792  dropped_empty_value=1050 (8302-2 (566), 3141-9 (329), 39156-5 (155))
-   lab_results      read  rows_read=2315
-   social_history   read  rows_read=1618
-   family_history   read  rows_read=682
-   medications      read  rows_read=24751
-   encounters       read  rows_read=165551
-       table                    check severity  n_affected                 detail
-    patients      sex not Male/Female     WARN           2                      U
-  conditions    missing required date    ERROR          37                       
- medications    missing required date    ERROR          15                       
-        labs   missing required value    ERROR          11                       
-observations    missing required date    ERROR        1329                       
-        labs multiple units per LOINC     WARN           3 1521-4, 1558-6, 4548-4
-   unmapped values (to add to the adapter dictionaries):
-        source             field                                value  n_rows
-social_history value → canonical     Smoking | other → unmapped:other     306
-social_history value → canonical Cigarettes | <empty> → unmapped:<NA>       1
-social_history value → canonical        Cigarettes | 15 → unmapped:15       1
-
-Run: 20261119T120545Z_ingest_nabidh_5e2b7b  status: schema_errors
 ----8<---- COPY START | enclave run ingest --cohorts c1 c2 | 2026-11-19 12:05 UTC | ingest v1.2.1 | commit 7eb1c44 bundle 42ceda37ec57 | python 3.10.12 | 20261119T120544Z_enclave_run_ba713c ----8<----
 Step: run ingest · source nabidh · exit code 1 · 500 s
 Run: 20261119T120545Z_ingest_nabidh_5e2b7b · status: schema_errors · 35 outputs
@@ -136,12 +8,12 @@ Error: Run: 20261119T120545Z_ingest_nabidh_5e2b7b  status: schema_errors
 == C1 (ingest v1.2.1): 2596 patients · schema ERROR 4 / WARN 2 · unmapped value rows 434
    rows: patients=2596, conditions=99397, medications=30503, labs=3144, observations=240357, encounters=0
    patient_profile  read               read=2596 absent_optional_columns=['nationality', 'date_of_birth']
-   diagnoses        read               read=99397 
+   diagnoses        read               read=99397
    observations     read               read=239815 dropped_empty_value=7363 dropped_empty_value_by_code: 8302-2 (3572), 3141-9 (2867), 39156-5 (924)
-   lab_results      read               read=3147 
+   lab_results      read               read=3147
    social_history   read               read=3892 filtered_out_by_item=66 filtered_out_values_item: <empty> (41), Unknown (17), +3 labels < 10 rows
-   family_history   read               read=4094 
-   medications      read               read=24002 
+   family_history   read               read=4094
+   medications      read               read=24002
    encounters       absent (optional)  read=- OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
 [Location: <Prepare>]
 [%msg: <User dha-
@@ -245,13 +117,13 @@ Error: Run: 20261119T120545Z_ingest_nabidh_5e2b7b  status: schema_errors
 == C2 (ingest v1.2.1): 2600 patients · schema ERROR 4 / WARN 2 · unmapped value rows 308
    rows: patients=2600, conditions=90326, medications=33008, labs=2313, observations=119890, encounters=165551
    patient_profile  read               read=2600 absent_optional_columns=['nationality', 'date_of_birth']
-   diagnoses        read               read=90326 
+   diagnoses        read               read=90326
    observations     read               read=118792 dropped_empty_value=1050 dropped_empty_value_by_code: 8302-2 (566), 3141-9 (329), 39156-5 (155)
-   lab_results      read               read=2315 
+   lab_results      read               read=2315
    social_history   read               read=1618 filtered_out_by_item=150 filtered_out_values_item: <empty> (138), +5 labels < 10 rows
-   family_history   read               read=682 
-   medications      read               read=24751 
-   encounters       read               read=165551 
+   family_history   read               read=682
+   medications      read               read=24751
+   encounters       read               read=165551
    schema check (non-INFO):
          table                    check severity n_affected                 detail
       patients      sex not Male/Female     WARN        <10                      U
