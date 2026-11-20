@@ -76,7 +76,7 @@ src/sandbox/
 notebooks/*.py         percent format (# %%). .ipynb türetilir (tools/py2ipynb.py), commit'lenmez
 tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, build_synthetic_cohorts, kpi_report,
                        build_evidence_package, build_ddc_reference, positive_control, py2ipynb, enclave.sh + enclave.py
-                       (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, checks, mapping, run;
+                       (terminal-only enclave: req R1–R9, iris-setup, schemas/tables/columns/values, checks, mapping, run (all = Faz 1 zinciri);
                        çıktı COPY bloğu), build_bundle (git pull'suz VM için enclave + Faz 1 adımları tek dosyada,
                        dist/sandbox_bundle.py)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),

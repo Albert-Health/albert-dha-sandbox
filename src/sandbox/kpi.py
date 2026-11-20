@@ -56,7 +56,9 @@ def _load(run_dir: Path | None, rel: str) -> dict:
     return json.loads((run_dir / rel).read_text(encoding="utf-8"))
 
 
-def audit_completeness(log: Path = AUDIT_DIR / "audit_log.jsonl") -> dict:
+def audit_completeness(log: Path = AUDIT_DIR / "audit_log.jsonl", running=()) -> dict:
+    """Share of audit runs that were closed. `running`: run ids still in progress (the enclave run that started the
+    KPI step, SANDBOX_PARENT_RUN) — not counted, as they close after this step."""
     starts, ends = set(), set()
     if log.exists():
         for line in log.read_text(encoding="utf-8").splitlines():
@@ -65,6 +67,7 @@ def audit_completeness(log: Path = AUDIT_DIR / "audit_log.jsonl") -> dict:
                 starts.add(ev["run_id"])
             elif ev.get("event") == "run_end":
                 ends.add(ev["run_id"])
+    starts -= set(running)
     pct = 100.0 * len(starts & ends) / len(starts) if starts else float("nan")
     return {"runs": len(starts), "closed": len(starts & ends), "pct": pct, "open": sorted(starts - ends)}
 

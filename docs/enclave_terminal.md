@@ -90,6 +90,13 @@ python3 sandbox_bundle.py run nb0
 python3 sandbox_bundle.py run nb1
 ```
 
+Faz 1 zincirinin hepsi (ingest c1 c2 → nb0 → nb1 → kpi) tek komutta ve tek COPY bloğunda. Adımların ekran
+çıktısı önce akar, blok en sonda basılır; KPI satırının altında açık kalan audit run'ları yazar:
+
+```bash
+python3 sandbox_bundle.py run all
+```
+
 Faz 1 adım 1'in değer kontrolleri (1a sigara kalemi, 1c lab / vital birimleri, 1d kodlar; c1 ve c2) tek blokta:
 
 ```bash

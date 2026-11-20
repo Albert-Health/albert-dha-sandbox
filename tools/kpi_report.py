@@ -20,7 +20,8 @@ from sandbox.config import OUTPUT_DIR  # noqa: E402
 
 
 def main() -> None:
-    audit = kpi.audit_completeness()          # before this run
+    parent = [r for r in os.environ.get("SANDBOX_PARENT_RUN", "").split(",") if r]   # enclave run, still open
+    audit = kpi.audit_completeness(running=parent)          # before this run
     source = os.environ.get("SANDBOX_SOURCE", "synthetic")
     run = Run("kpi_report", source=source)
     runs = {"nb00": kpi.latest_run("nb00_data_profile", source), "nb01": kpi.latest_run("nb01_c1_c2_feasibility", source),

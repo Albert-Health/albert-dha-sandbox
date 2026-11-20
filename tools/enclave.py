@@ -63,6 +63,8 @@ STEPS = {
     "nb2": ("notebooks/02_c3_benchmark.py", "nb02_c3_benchmark"),
     "kpi": ("tools/kpi_report.py", "kpi_report"),
 }
+# `run all`: the Phase 1 (C1 / C2) chain, one block (docs/faz1_c1_c2.md)
+RUN_ALL = ("ingest", "nb0", "nb1", "kpi")
 # summary tables printed into the block after a run: (file, row filter, columns)
 SUMMARY_TABLES = {
     "nb0": [("nb00/schema_validation.csv", "issues", None), ("nb00/volume.csv", None, None),
@@ -74,7 +76,8 @@ SUMMARY_TABLES = {
               "ci_low", "ci_high", "threshold"]),
             ("nb01/score_summary.csv", None, None), ("nb01/joint_completeness.csv", None, None)],
     "nb2": [("nb02/coverage.csv", None, None), ("nb02/performance.csv", None, None)],
-    "kpi": [("kpi/kpi_table.csv", None, ["kpi", "target", "actual", "met"])],
+    "kpi": [("kpi/kpi_table.csv", None, ["kpi", "target", "actual", "met"]),
+            ("kpi/kpi_table.csv", "audit_notes", ["kpi", "notes"])],          # open run ids (no patient data)
 }
 _COUNTISH = re.compile(r"(^n$|^np$|^n_|_n$|count|patients|^rows|_rows$|events)", re.IGNORECASE)
 _NOT_COUNT = re.compile(r"(pct|percent|rate|ratio|share|sens|median|mean)", re.IGNORECASE)
@@ -582,7 +585,7 @@ def needs_password(a) -> bool:
     if a.cmd == "req":
         return "R8" in a.ids
     if a.cmd == "run":
-        return a.step == "ingest" and not a.snapshot
+        return a.step in ("ingest", "all") and not a.snapshot
     return False
 
 
@@ -1037,6 +1040,12 @@ def summary_tables(step: str):
                 df = df[df["severity"] != "INFO"]
             elif filt == "framework_pivot":
                 df = framework_pivot(df)
+            elif filt == "audit_notes":
+                if "notes" not in df.columns:
+                    continue
+                df = df[df["kpi"].eq("Audit Trail Completeness") & df["notes"].fillna("").astype(str).ne("")]
+                if df.empty:
+                    continue
             if cols:
                 df = df[[c for c in cols if c in df.columns]]
             out(f"-- {rel} ({len(df)} rows)")
@@ -1053,9 +1062,42 @@ def step_command(step: str) -> list[str]:
     return [sys.executable, STEPS[step][0]]
 
 
+class DeferredBlock(Block):
+    """Collects block lines without printing. `run all` prints them into the real block only after the last step,
+    so no step's screen output (which stays inside the enclave) falls between the COPY markers."""
+
+    def __init__(self):
+        super().__init__("")
+        self.started = True                                # no header of its own
+
+    def _emit(self, ln: str) -> None:
+        self.lines.append(ln)
+
+
+def cmd_run_all(a, out: Block, run) -> int:
+    """`run all`: ingest → nb0 → nb1 → kpi in one block. Every step runs even if one before it fails (each NB / KPI
+    block says which ingest its data came from); the last line lists the exit codes. Exit code 1 if any step's
+    run ended other than success (an ingest with schema_errors counts as reported, not failed)."""
+    cohorts = a.cohorts or ["c1", "c2"]
+    codes, buf = [], DeferredBlock()
+    for i, step in enumerate(RUN_ALL, 1):
+        print(f"\n===== run all · {i}/{len(RUN_ALL)} · {step} =====", flush=True)
+        buf(f"### {i}/{len(RUN_ALL)} · run {step}")
+        q = argparse.Namespace(**{**vars(a), "step": step, "cohorts": cohorts if step == "ingest" else None})
+        codes.append((step, cmd_run(q, buf, run), getattr(q, "statuses", set())))
+        buf()
+    for ln in buf.lines:
+        out(ln)
+    out("run all · exit codes: " + " · ".join(f"{s} {rc}" for s, rc, _ in codes))
+    bad = [s for s, rc, st in codes if rc != 0 and not (s == "ingest" and st <= {"schema_errors"} and st)]
+    return 1 if bad else 0
+
+
 def cmd_run(a, out: Block, run) -> int:
     from sandbox.config import DATA_DIR, OUTPUT_DIR
 
+    if a.step == "all":
+        return cmd_run_all(a, out, run)
     cmd = step_command(a.step)
     if a.step == "ingest":
         cmd += ["--source", a.source]
@@ -1066,7 +1108,8 @@ def cmd_run(a, out: Block, run) -> int:
             cmd += ["--input", "iris"] + (["--iris-sqlite", str(a.iris_sqlite)] if a.iris_sqlite else [])
         if a.cohorts:
             cmd += ["--cohorts", *a.cohorts]
-    env = {**os.environ, "PYTHONUNBUFFERED": "1", "SANDBOX_SOURCE": a.source}
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "SANDBOX_SOURCE": a.source,
+           "SANDBOX_PARENT_RUN": run.run_id if run else ""}      # still open while the step runs (kpi skips it)
     if a.bootstrap_reps:
         env["SANDBOX_BOOTSTRAP_REPS"] = str(a.bootstrap_reps)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1098,6 +1141,7 @@ def cmd_run(a, out: Block, run) -> int:
             found.append(OUTPUT_DIR / n)
             statuses.add(d.get("status"))
             out(f"Run: {n} · status: {d.get('status')} · {len(d.get('outputs', []))} outputs")
+    a.statuses = statuses                                  # read by `run all`
     if not found:
         out("No run record found (the script stopped before opening its audit)")
     if rc != 0 and not statuses & REPORTED_STATUSES:
@@ -1228,8 +1272,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("mapping", parents=[common], help="do the adapter SOURCES / IRIS_COHORTS hold in IRIS")
     p.add_argument("cohorts", nargs="*", choices=["c1", "c2", "c3"], metavar="COHORT")
 
-    p = sub.add_parser("run", parents=[common], help="run a step: ingest, nb0, nb1, nb2, kpi")
-    p.add_argument("step", choices=list(STEPS))
+    p = sub.add_parser("run", parents=[common], help="run a step: ingest, nb0, nb1, nb2, kpi; all = ingest → nb0 → nb1 → kpi")
+    p.add_argument("step", choices=[*STEPS, "all"])
     p.add_argument("--cohorts", nargs="+", choices=["c1", "c2", "c3"], help="ingest: cohorts")
     p.add_argument("--source", default="nabidh", help="SANDBOX_SOURCE / ingest --source (default nabidh)")
     p.add_argument("--snapshot", action="store_true", help="ingest: from the last snapshot, without going to IRIS")
