@@ -69,6 +69,7 @@ def _snap(**kw):
     d = dict(sex="Male", age=62, ethnicity="Emirati", family_history=True, waist_cm=104,
              bmi=31, htn_lrs=True, htn_med=True)
     d.update(kw)
+    d.setdefault("htn_treated_lprs", d["htn_med"])         # the LPRS input (phenotype, D36); tests set it directly
     return pd.DataFrame([d])
 
 
@@ -106,9 +107,10 @@ class TestLPRS(unittest.TestCase):
         self.assertTrue(r["lrs_computable"])
         self.assertAlmostEqual(r["lrs_score"], 7.0435310, places=6)
 
-    def test_htn_diagnosis_alone_not_an_input(self):
-        # LPRS uses only antihypertensive medication; an HTN diagnosis (htn_lrs) alone contributes nothing
-        r = lrs.score(_snap(htn_lrs=True, htn_med=False), p=P2012).iloc[0]
+    def test_htn_input_is_htn_treated_lprs(self):
+        # The scorer reads phenotype's htn_treated_lprs (D36: diagnosis OR drug; Gray 2012: drug only); which
+        # patients get it is tested in test_breakdowns (both rules). Without it, no antihypertensive contribution.
+        r = lrs.score(_snap(htn_lrs=True, htn_med=True, htn_treated_lprs=False), p=P2012).iloc[0]
         self.assertAlmostEqual(r["lrs_score"], 7.0435310 - 0.5498978, places=6)
 
     def test_missing_inputs(self):

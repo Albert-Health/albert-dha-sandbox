@@ -265,7 +265,8 @@ print(dist.to_string(index=False))
 # ## 3b. Treated hypertension and smoking level (how two score inputs are derived)
 # - Hypertension: patients with a diagnosis only / medication only / both / neither. QDiabetes counts diagnosis OR
 #   medication (`qd_treated_htn`, D36; the QDiabetes-2018 definition, diagnosis AND medication, as a sensitivity run),
-#   LPRS medication only, LRA 2010 diagnosis OR medication (`counted_as_treated_by`).
+#   LPRS also diagnosis OR medication (`lprs_treated_htn`, D36; Gray 2012: medication only), LRA 2010 diagnosis OR
+#   medication (`counted_as_treated_by`).
 # - Smoking: the QDiabetes level each patient gets (non / ex / light / moderate / heavy / missing) by what it was
 #   recorded as. NABIDH SocialHistory has no structured ex-smoker value (`nabidh.SMOKING_VALUES`): "ex" comes only
 #   from a diagnosis code (`n_from_diagnosis_code`). Occasional / rare → light and "current" without intensity →

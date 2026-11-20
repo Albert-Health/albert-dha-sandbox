@@ -26,8 +26,9 @@ Coding:
   Ethnicity not recorded → `lrs_unknown_ethnicity_as_missing` (D12).
 - BMI: kg/m², continuous.
 - family history: diabetes in a first-degree relative (`phenotype` → `family_history`).
-- antihypertensive: an antihypertensive prescription within the window (`phenotype` → `htn_med`); a hypertension
-  DIAGNOSIS is not in this model (the difference from LRA 2010).
+- antihypertensive: Gray 2012 uses an antihypertensive prescription only. Here `phenotype` → `htn_treated_lprs`:
+  a hypertension diagnosis OR an antihypertensive drug by default (D36, `lprs_treated_htn = "dx_or_med"`); the
+  published definition, drug only, is `lprs_treated_htn = "med"` (sensitivity run).
 
 Note: LPRS is a cross-sectional score developed to detect existing (undiagnosed) IGR/T2D; the incident benchmark
 in C3 is reported as off-label use.
@@ -77,7 +78,7 @@ def score(snap: pd.DataFrame, p: dict = PARAMS) -> pd.DataFrame:
         "lrs_ethnicity": bme_flag(snap["ethnicity"], p) * COEF["bme"],
         "lrs_bmi": bmi * COEF["bmi"],
         "lrs_fh": snap["family_history"].astype(bool).astype(float) * COEF["family_history"],
-        "lrs_htn": snap["htn_med"].astype(bool).astype(float) * COEF["antihypertensive"],
+        "lrs_htn": snap["htn_treated_lprs"].astype(bool).astype(float) * COEF["antihypertensive"],
     }
     x = pd.DataFrame(parts)
     reasons = pd.Series("", index=x.index, dtype=object)

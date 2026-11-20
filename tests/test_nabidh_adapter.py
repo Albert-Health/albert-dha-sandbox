@@ -712,7 +712,8 @@ class TestNationality(unittest.TestCase):
         self.assertEqual(list(codelists.map_ethnicity_qdiabetes(g)),
                          ["Other", "Indian", "Other", "WhiteNA", "WhiteNA"])
         snap = pd.DataFrame({"sex": "Male", "age": 45, "ethnicity": g, "family_history": False,
-                             "waist_cm": 95, "bmi": 27, "htn_lrs": False, "htn_med": False})
+                             "waist_cm": 95, "bmi": 27, "htn_lrs": False, "htn_med": False,
+                             "htn_treated_lprs": False})
         pts = lrs.score_assessment_2010(snap)["lrs_ethnicity"]
         self.assertEqual(list(pts.fillna(-1)), [6, 6, 6, 0, -1])     # not recorded → LRS not computed
         bme = lrs.score(snap)["lrs_ethnicity"]                         # default LPRS: BME coefficient

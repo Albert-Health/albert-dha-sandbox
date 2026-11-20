@@ -25,17 +25,18 @@ HTN_CATEGORIES = {"diagnosis only": (True, False), "medication only": (False, Tr
                   "diagnosis and medication": (True, True), "neither": (False, False)}
 # Snapshot column each score reads as hypertension, and the categories that column is True for.
 # QDiabetes: htn_treated_qd = diagnosis OR medication, or diagnosis AND medication (PARAMS["qd_treated_htn"], D36);
-# LPRS (scores/lprs.py): htn_med = medication; LRA 2010 (scores/lrs.py): htn_lrs = diagnosis OR medication.
-# tests/test_breakdowns.py checks both against the code.
-HTN_SCORE_COLUMN = {"QDiabetes": "htn_treated_qd", "LPRS": "htn_med", "LRA 2010": "htn_lrs"}
+# LPRS (scores/lprs.py): htn_treated_lprs = diagnosis OR medication, or medication only (PARAMS["lprs_treated_htn"]);
+# LRA 2010 (scores/lrs.py): htn_lrs = diagnosis OR medication. tests/test_breakdowns.py checks both against the code.
+HTN_SCORE_COLUMN = {"QDiabetes": "htn_treated_qd", "LPRS": "htn_treated_lprs", "LRA 2010": "htn_lrs"}
 _ANY = {"diagnosis only", "medication only", "diagnosis and medication"}
 QD_HTN_COUNTED = {"dx_or_med": _ANY, "dx_and_med": {"diagnosis and medication"}}
+LPRS_HTN_COUNTED = {"dx_or_med": _ANY, "med": {"medication only", "diagnosis and medication"}}
 
 
 def htn_counted_by(p: dict = PARAMS) -> dict[str, set[str]]:
     """{score: the hypertension categories it counts as treated} under these parameters."""
     return {"QDiabetes": QD_HTN_COUNTED[p.get("qd_treated_htn", PARAMS["qd_treated_htn"])],
-            "LPRS": {"medication only", "diagnosis and medication"}, "LRA 2010": _ANY}
+            "LPRS": LPRS_HTN_COUNTED[p.get("lprs_treated_htn", PARAMS["lprs_treated_htn"])], "LRA 2010": _ANY}
 
 
 def htn_derivation(snap: pd.DataFrame, group_col: str | None = "status", p: dict = PARAMS) -> pd.DataFrame:

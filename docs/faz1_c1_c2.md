@@ -365,7 +365,7 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
 | Sigara | ✓ | — | SocialHistory (kalem + Qty) + F17.2 / Z72.0 / Z87.891 | Kalem filtresi (1a) |
 | Aile öyküsü (diyabet) | ✓ | ✓ | FamilyHistory (Diagnosis_Code / _Description, FamilyMember) + Z83.3 | Yalnız birinci derece pozitif |
 | KVH | ✓ | — | Diagnosis I20–I25, I50, I6x, G45 | — |
-| Hipertansiyon | tanı veya ilaç (D36; QDiabetes tanımı "tanı ve ilaç" duyarlılık) | yalnız ilaç | Diagnosis I10–I16 + Medication (DDC → ATC) | C1 / C2 DDC kodundan; kod tanınmazsa ve C3'te addan (1d, K12) |
+| Hipertansiyon | tanı veya ilaç (D36; QDiabetes tanımı "tanı ve ilaç" duyarlılık) | tanı veya ilaç (D36; Gray 2012 "yalnız ilaç" duyarlılık) | Diagnosis I10–I16 + Medication (DDC → ATC) | C1 / C2 DDC kodundan; kod tanınmazsa ve C3'te addan (1d, K12) |
 | Statin, kortikosteroid, atipik antipsikotik | ✓ | — | Medication (DDC → ATC: C10AA, H02AB, N05AH / AX / AL) | Yalnız sistemik yol; D26 |
 | Glisemik lab (yalnız statü, model girdisi değil) | — | — | LabResultItem 4548-4, 1558-6, 1521-4 (TestItemCode_Code) | Birim `ResultValueUnits`; LOINC teyit (1c) |
 

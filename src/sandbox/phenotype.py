@@ -95,6 +95,8 @@ _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none"
 FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
 # PARAMS["qd_treated_htn"] (D36): diagnosis OR drug, or the QDiabetes-2018 definition diagnosis AND drug
 QD_TREATED_HTN_RULES = ("dx_or_med", "dx_and_med")
+# PARAMS["lprs_treated_htn"] (D36): diagnosis OR drug, or the LPRS (Gray 2012) definition drug only
+LPRS_TREATED_HTN_RULES = ("dx_or_med", "med")
 # Plausible range of each vital (inclusive). core_snapshot leaves out values outside it (BMI from height / weight
 # too); breakdowns.vital_plausibility counts them (NB0 nb00/vital_plausibility.csv). Data-quality bounds, not a
 # study parameter.
@@ -268,7 +270,10 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
         raise ValueError(f"qd_treated_htn = {htn_rule!r}; expected one of {', '.join(QD_TREATED_HTN_RULES)}")
     out["htn_treated_qd"] = (out["htn_dx"] | out["htn_med"]) if htn_rule == "dx_or_med" else (out["htn_dx"] & out["htn_med"])
     out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRA 2010: diagnosis OR medication
-    # LPRS (Gray 2012) uses medication only: htn_med
+    lprs_rule = p.get("lprs_treated_htn", PARAMS["lprs_treated_htn"])   # LPRS (D36): dx_or_med | med (Gray 2012)
+    if lprs_rule not in LPRS_TREATED_HTN_RULES:
+        raise ValueError(f"lprs_treated_htn = {lprs_rule!r}; expected one of {', '.join(LPRS_TREATED_HTN_RULES)}")
+    out["htn_treated_lprs"] = (out["htn_dx"] | out["htn_med"]) if lprs_rule == "dx_or_med" else out["htn_med"]
 
     # Completeness flags (C1 definition + KPIs)
     out["ok_sex"] = out["sex"].isin(["Male", "Female"])

@@ -54,8 +54,8 @@ class TestHtnDerivation(unittest.TestCase):
     def test_counted_by_matches_phenotype_and_scorers(self):
         """htn_counted_by is a label: it must say what the code does (snapshot columns and the score inputs), under
         both QDiabetes rules (D36: diagnosis OR drug by default; diagnosis AND drug = QDiabetes-2018, sensitivity)."""
-        for rule in phenotype.QD_TREATED_HTN_RULES:
-            p = {**PARAMS, "qd_treated_htn": rule}
+        for rule, lprs_rule in zip(phenotype.QD_TREATED_HTN_RULES, phenotype.LPRS_TREATED_HTN_RULES):
+            p = {**PARAMS, "qd_treated_htn": rule, "lprs_treated_htn": lprs_rule}
             s = snapshot(self.ds, p)
             used = {"QDiabetes": qd.prepare_inputs(s)["htn"].astype(bool),
                     "LPRS": lprs.score(s)["lrs_htn"].gt(0),
@@ -76,6 +76,15 @@ class TestHtnDerivation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "qd_treated_htn"):
             snapshot(self.ds, {**PARAMS, "qd_treated_htn": "dx"})
 
+    def test_lprs_rule(self):
+        """D36: LPRS counts a diagnosis or a drug by default; only the drug under "med" (Gray 2012)."""
+        self.assertEqual(PARAMS["lprs_treated_htn"], "dx_or_med")
+        self.assertEqual(self.snap["htn_treated_lprs"].to_dict(), {"A": True, "B": True, "C": True, "D": False})
+        strict = snapshot(self.ds, {**PARAMS, "lprs_treated_htn": "med"})
+        self.assertEqual(strict["htn_treated_lprs"].to_dict(), {"A": False, "B": True, "C": True, "D": False})
+        with self.assertRaisesRegex(ValueError, "lprs_treated_htn"):
+            snapshot(self.ds, {**PARAMS, "lprs_treated_htn": "dx"})
+
     def test_table(self):
         t = breakdowns.htn_derivation(self.snap.assign(status=["T2DM", "T2DM", "Prediabetes", "Prediabetes"]))
         a = t[t["group"] == "all"].set_index("htn_category")
@@ -83,8 +92,9 @@ class TestHtnDerivation(unittest.TestCase):
         self.assertEqual(a["n"].tolist(), [1, 1, 1, 1])
         self.assertEqual(a["pct"].tolist(), [25.0] * 4)
         self.assertEqual(a["counted_as_treated_by"].tolist(),
-                         ["QDiabetes, LRA 2010", "QDiabetes, LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "none"])
-        strict = breakdowns.htn_derivation(self.snap, group_col=None, p={**PARAMS, "qd_treated_htn": "dx_and_med"})
+                         ["QDiabetes, LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "none"])
+        strict = breakdowns.htn_derivation(self.snap, group_col=None,
+                                           p={**PARAMS, "qd_treated_htn": "dx_and_med", "lprs_treated_htn": "med"})
         self.assertEqual(strict["counted_as_treated_by"].tolist(),
                          ["LRA 2010", "LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "none"])
         t2 = t[t["group"] == "T2DM"].set_index("htn_category")

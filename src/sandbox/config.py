@@ -126,6 +126,10 @@ PARAMS = {
     # the authors used ranking (top 10% per practice / target sensitivity). Until a threshold value
     # (score ≥ x → high risk) is chosen, None → C1 capture rate and threshold metrics "Pending".
     "lprs_high_risk_threshold": None,        # [DECISION PENDING] D23
+    # Hypertension as LPRS reads it. Gray 2012 uses antihypertensive medication only ("med"); here a hypertension
+    # diagnosis OR a drug counts ("dx_or_med"), the same rule as QDiabetes (qd_treated_htn).
+    # [DECIDED: 2026-11-20, ensargunesdogdu] D36. "med" = the published definition, for a sensitivity run.
+    "lprs_treated_htn": "dx_or_med",
     "lrs_high_risk_threshold": 16,           # assessment_2010 only: ≥16 high risk (NHS Health Check)
     "lrs_unknown_ethnicity_as_missing": True,  # both variants: "Not recorded" → score not computed [DECISION PENDING] D12
 
