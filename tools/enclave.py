@@ -70,7 +70,10 @@ SUMMARY_TABLES = {
     "nb0": [("nb00/schema_validation.csv", "issues", None), ("nb00/volume.csv", None, None),
             ("nb00/framework_match.csv", "framework_pivot", None), ("nb00/unmapped_codes.csv", None, None),
             ("nb00/kpi_preview.csv", None, None)],
-    "nb1": [("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None), ("nb01/smoking_source.csv", None, None),
+    "nb1": [("nb01/completeness_by_variable.csv", "group_all", None),
+            ("nb01/ethnicity_source_compare.csv", "group_all", None),
+            ("nb01/ethnicity_mapping_by_source.csv", None, None),
+            ("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None), ("nb01/smoking_source.csv", None, None),
             ("nb01/c1_detection_rate.csv", None,
              ["cohort", "reference", "group", "score", "n", "n_computable", "n_flagged", "sens_computable",
               "ci_low", "ci_high", "threshold"]),
@@ -1117,6 +1120,8 @@ def summary_tables(step: str):
                 df = df[df["severity"] != "INFO"]
             elif filt == "framework_pivot":
                 df = framework_pivot(df)
+            elif filt == "group_all" and "group" in df.columns:
+                df = df[df["group"].astype(str) == "all"]
             elif filt == "audit_notes":
                 if "notes" not in df.columns:
                     continue

@@ -98,6 +98,52 @@ print(comp.pivot_table(index="variable", columns=["cohort", "group"], values="co
 print(joint.to_string(index=False))
 
 # %% [markdown]
+# ## 1b. Ethnicity source (D6 pending): the default source next to the NABIDH ethnicity field
+# Reporting only: sections 2–5 use PARAMS["ethnicity_source"]. QDiabetes needs no recorded ethnicity (missing →
+# White / not stated, its reference group); the Leicester score does.
+
+# %%
+ETH_SOURCES = list(dict.fromkeys([P["ethnicity_source"], "nationality", "ethnicity"]))
+eth_rows, eth_maps = [], []
+for src in ETH_SOURCES:
+    p_src = {**P, "ethnicity_source": src}
+    per_cohort = {}
+    for c, d in data.items():
+        if src == P["ethnicity_source"]:
+            s = snaps[c]
+        else:
+            pool = cohorts.positive_pool(d)
+            ref = pd.Series(cohorts.data_end_date(d), index=pool.index)
+            s = phenotype.core_snapshot(d, ref, lookback_days=None, p=p_src).join(pool[["status"]])
+            s = s.join(qd.score(s, years=10, p=p_src)[["qd_computable", "ethn_qd"]])
+            s = s.join(lrs.score(s, p=p_src)[["lrs_computable"]])
+        for grp, g in [("all", s), *s.groupby("status")]:
+            row = {"cohort": c, "group": grp, "ethnicity_source": src, "default": src == P["ethnicity_source"], "n": len(g)}
+            for name, col in [("ethnicity_known", "ok_ethnicity"), ("qd_computable", "qd_computable"),
+                              ("lrs_computable", "lrs_computable"), ("joint_core8", "ok_core8")]:
+                row[f"{name}_n"] = int(g[col].astype(bool).sum())
+                row[f"{name}_pct"] = round(100 * g[col].astype(bool).mean(), 1)
+            eth_rows.append(row)
+        per_cohort[c] = s.groupby([s["ethnicity_source_value"].fillna("<missing>"), s["ethnicity"].fillna("<missing>"),
+                                   "ethn_qd"]).size()
+    m = pd.concat(per_cohort, axis=1).fillna(0).astype(int).reset_index()
+    m.columns = ["source_value", "ethnic_group", "qdiabetes_category", *per_cohort]
+    eth_maps.append(m.assign(ethnicity_source=src))
+eth_cmp = pd.DataFrame(eth_rows)
+for name in ("ethnicity_known", "qd_computable", "lrs_computable", "joint_core8"):     # a rate must not reveal a count < 10
+    eth_cmp = sdc.suppress_rates(eth_cmp, f"{name}_n", ["n"], [f"{name}_pct"])
+eth_cmp = sdc.suppress_small_counts(eth_cmp, [c for c in eth_cmp.columns if c.endswith("_n")])
+run.save_table(eth_cmp, "nb01/ethnicity_source_compare.csv",
+               "Ethnicity known, QDiabetes / Leicester computable and joint completeness by ethnicity source [D6 pending]")
+eth_map_all = pd.concat(eth_maps, ignore_index=True)[["ethnicity_source", "source_value", "ethnic_group",
+                                                      "qdiabetes_category", *snaps]]
+eth_map_all = sdc.collapse_rare_rows(eth_map_all, list(snaps), ["source_value", "ethnic_group", "qdiabetes_category"],
+                                     by=["ethnicity_source"])
+run.save_table(sdc.suppress_small_counts(eth_map_all, list(snaps)), "nb01/ethnicity_mapping_by_source.csv",
+               "Ethnicity source value → ethnic group → QDiabetes category, per source (labels seen in < 10 patients merged)")
+print(eth_cmp.to_string(index=False))
+
+# %% [markdown]
 # ## 2. Selection effect: C1 (complete records) vs C2 (random)
 # SMD |d| > 0.1 is flagged as meaningful imbalance.
 
