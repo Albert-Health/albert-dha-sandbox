@@ -1,0 +1,470 @@
+----8<---- COPY START | enclave checks | 2026-11-20 05:53 UTC | ingest v1.2.1 | commit f63158e bundle a8e1bad99332 | python 3.10.12 | 20261120T055321Z_enclave_checks_169e69 ----8<----
+### 1a · smoking item · cohorts c1 c2
+
+== 1a · c1.SocialHistory.SocialHabitCategory_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory.SocialHabitCategory_Code (varchar) — 3892 rows, filled 3851 (98.9%)
+Sample (first 3892 rows): kind code · distinct 8
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+  Smoking  3820      2584
+  <empty>    41        41
+  Unknown    17        17
+  + 6 values < 10 patients (14 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+    a,a   0.0
+
+== 1a · c1.SocialHistory.SocialHabitCategory_Description
+  not available: LookupError: No such column: SocialHabitCategory_Description — close names: SocialHabitQty_Description, SocialHabitCategory_Code
+
+== 1a · c1.SocialHistory.SocialHabitQty_Description
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.SocialHistory.SocialHabitQty_Description (varchar) — 3892 rows, filled 3849 (98.9%)
+Sample (first 3892 rows): kind category · distinct 11
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+       value  rows  patients
+       Never  2494      2241
+     Unknown   486       486
+       Other   428       428
+         Low   153       153
+        High   136       136
+  Occasional    90        90
+      Medium    56        56
+     <empty>    43        43
+  + 4 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape    %
+      a 99.9
+      9  0.1
+    9.9  0.0
+    .99  0.0
+
+== 1a · c2.SocialHistory.SocialHabitCategory_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory.SocialHabitCategory_Code (varchar) — 1617 rows, filled 1479 (91.5%)
+Sample (first 1617 rows): kind code · distinct 7
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+  Smoking  1465      1313
+  <empty>   138       138
+  + 6 values < 10 patients (14 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1a · c2.SocialHistory.SocialHabitCategory_Description
+  not available: LookupError: No such column: SocialHabitCategory_Description — close names: SocialHabitQty_Description, SocialHabitCategory_Code
+
+== 1a · c2.SocialHistory.SocialHabitQty_Description
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.SocialHistory.SocialHabitQty_Description (varchar) — 1617 rows, filled 1477 (91.3%)
+Sample (first 1617 rows): kind category · distinct 10
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+       value  rows  patients
+     Unknown   752       738
+       Never   355       333
+       Other   306       304
+     <empty>   140       140
+  Occasional    18        18
+         Low    16        16
+        High    14        14
+      Medium    13        12
+  + 3 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape    %
+      a 99.8
+     99  0.1
+      9  0.1
+
+### 1c · lab and vital units · cohorts c1 c2
+
+== 1c · c1.LabResultItem.TestItemCode_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.LabResultItem.TestItemCode_Code (varchar) — 3147 rows, filled 3147 (100.0%)
+Sample (first 3147 rows): kind code · distinct 3
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+   value  rows  patients
+  1558-6  2321       920
+  4548-4   805       462
+  1521-4    21        18
+Shapes (sample, %):
+   shape     %
+  9999-9 100.0
+
+== 1c · c1.LabResultItem.ResultValueUnits
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.LabResultItem.ResultValueUnits (varchar) — 3147 rows, filled 3147 (100.0%)
+Sample (first 3147 rows): kind category · distinct 6
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+  value  rows  patients
+  mg/dL  1717       618
+      %   785       449
+  MG/DL   619       355
+      %    17        13
+  + 2 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape    %
+    a/a 74.5
+      % 24.9
+      %  0.5
+      9  0.1
+
+== 1c · c1.Observation.ObservationValue · WHERE ObservationCode_Code = '39156-5'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.Observation.ObservationValue (varchar) — 19839 rows, filled 18915 (95.3%) · WHERE ObservationCode_Code = '39156-5'
+Sample (first 5000 rows): kind number · distinct 60
+Distribution (sample): p5 0 · p25 0 · p50 24 · p75 29 · p95 36
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+  shape    %
+     99 61.1
+      9 38.2
+  99999  0.2
+    999  0.2
+  99.99  0.1
+   9999  0.0
+
+== 1c · c1.Observation.ObservationValue · WHERE ObservationCode_Code = '8302-2'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.Observation.ObservationValue (varchar) — 99253 rows, filled 95681 (96.4%) · WHERE ObservationCode_Code = '8302-2'
+Sample (first 5000 rows): kind number · distinct 144
+Distribution (sample): p5 147 · p25 160 · p50 163.5 · p75 170 · p95 180
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+    shape    %
+      999 92.0
+   999.99  2.1
+        9  2.0
+       99  1.7
+    999.9  1.4
+  999.999  0.4
+     9.99  0.3
+    9.999  0.1
+     99.9  0.0
+        a  0.0
+
+== 1c · c1.Observation.ObservationValue · WHERE ObservationCode_Code = '3141-9'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.Observation.ObservationValue (varchar) — 120723 rows, filled 117856 (97.6%) · WHERE ObservationCode_Code = '3141-9'
+Sample (first 5000 rows): kind number · distinct 616
+Distribution (sample): p5 50 · p25 62.9 · p50 71 · p75 82 · p95 98.16
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+   shape    %
+      99 68.7
+    99.9 19.6
+   99.99  4.9
+     999  3.2
+       9  2.0
+   999.9  0.6
+  999.99  0.5
+  99.999  0.4
+     9.9  0.1
+   9.999  0.0
+
+== 1c · c2.LabResultItem.TestItemCode_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.LabResultItem.TestItemCode_Code (varchar) — 2309 rows, filled 2309 (100.0%)
+Sample (first 2309 rows): kind code · distinct 3
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+   value  rows  patients
+  1558-6  1894       730
+  4548-4   380       211
+  1521-4    35        29
+Shapes (sample, %):
+   shape     %
+  9999-9 100.0
+
+== 1c · c2.LabResultItem.ResultValueUnits
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.LabResultItem.ResultValueUnits (varchar) — 2309 rows, filled 2309 (100.0%)
+Sample (first 2309 rows): kind category · distinct 7
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+  value  rows  patients
+  mg/dL  1705       627
+      %   363       200
+  MG/DL   209       118
+  mg/dl    15        13
+  + 3 values < 10 patients (17 rows in total) — not shown
+Shapes (sample, %):
+  shape    %
+    a/a 83.5
+      % 15.7
+      %  0.4
+      a  0.3
+      9  0.0
+
+== 1c · c2.Observation.ObservationValue · WHERE ObservationCode_Code = '39156-5'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.Observation.ObservationValue (varchar) — 2529 rows, filled 2374 (93.9%) · WHERE ObservationCode_Code = '39156-5'
+Sample (first 2529 rows): kind number · distinct 44
+Distribution (sample): p5 0 · p25 0 · p50 25 · p75 30 · p95 37
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+  shape    %
+     99 72.0
+      9 27.4
+  99999  0.4
+    999  0.2
+
+== 1c · c2.Observation.ObservationValue · WHERE ObservationCode_Code = '8302-2'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.Observation.ObservationValue (varchar) — 54324 rows, filled 53758 (99.0%) · WHERE ObservationCode_Code = '8302-2'
+Sample (first 5000 rows): kind number · distinct 198
+Distribution (sample): p5 148.5 · p25 160 · p50 167 · p75 175 · p95 183
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+   shape    %
+     999 88.8
+  999.99  4.7
+   999.9  3.1
+      99  1.5
+       9  1.3
+    99.9  0.2
+       -  0.1
+   99.99  0.1
+       a  0.0
+   9.999  0.0
+
+== 1c · c2.Observation.ObservationValue · WHERE ObservationCode_Code = '3141-9'
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.Observation.ObservationValue (varchar) — 61750 rows, filled 61421 (99.5%) · WHERE ObservationCode_Code = '3141-9'
+Sample (first 5000 rows): kind number · distinct 742
+Distribution (sample): p5 54 · p25 66.95 · p50 78 · p75 91 · p95 125
+  (date / continuous number: percentiles instead of a value list; --list for the list)
+Shapes (sample, %):
+   shape    %
+      99 55.1
+    99.9 20.8
+     999 12.5
+   99.99  6.2
+   999.9  2.8
+       9  1.2
+  999.99  1.0
+       -  0.1
+  99.999  0.1
+       a  0.0
+
+### 1d · codes: diagnosis, observation, family history · cohorts c1 c2
+
+== 1d · c1.Diagnosis.Diagnosis_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.Diagnosis.Diagnosis_Code (varchar) — 99397 rows, filled 99397 (100.0%)
+Sample (first 5000 rows): kind text / code · distinct 94
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+     value  rows  patients
+       I10 21534       992
+     E11.9 17839      1009
+     E66.9  6097       298
+     E11.8  5914       311
+    R73.03  5303      1075
+    E66.01  3228       132
+    E66.09  2462        93
+    R73.01  2397       919
+    E11.65  2292       471
+     E66.3  1979       143
+     I25.9  1978       137
+     R73.9  1929       651
+    E11.42  1859       166
+    I25.10  1580       147
+    E11.69  1476       137
+    R73.02  1085       417
+     I20.0  1034        64
+    E11.40  1023       145
+    R73.09   939       428
+     I63.9   923        40
+    E11.29   792        16
+    Z68.30   780        33
+     Z83.3   685       311
+     I50.9   658        27
+     I21.4   637        33
+   E11.319   605        62
+  E11.3393   543        21
+  E11.3299   520        10
+     I24.9   452        28
+     I25.2   396        15
+     I67.9   381        43
+     G45.9   378        49
+   I25.119   373        27
+     Z72.0   364        13
+    I50.22   362        11
+     I15.9   349        31
+    E11.21   340        62
+   E11.311   314        19
+     I20.9   295       150
+    Z68.36   293        17
+  + 37 values beyond the top 40 (3978 rows) — raise with --top
+  + 176 values < 10 patients (3031 rows in total) — not shown
+Shapes (sample, %):
+     shape    %
+     a99.9 33.9
+    a99.99 32.8
+       a99 29.1
+  a99.9999  2.7
+   a99.999  1.3
+    a99.9.  0.1
+    a99.a9  0.0
+   a99.99.  0.0
+
+== 1d · c1.Observation.ObservationCode_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.Observation.ObservationCode_Code (varchar) — 239815 rows, filled 239815 (100.0%)
+Sample (first 5000 rows): kind code · distinct 3
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value   rows  patients
+   3141-9 120723      2596
+   8302-2  99253      2596
+  39156-5  19839      2595
+Shapes (sample, %):
+    shape    %
+   9999-9 90.8
+  99999-9  9.2
+
+== 1d · c1.FamilyHistory.FamilyMember_Description
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.FamilyHistory.FamilyMember_Description (varchar) — 4094 rows, filled 4094 (100.0%)
+Sample (first 4094 rows): kind category · distinct 11
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+   Father  1891      1586
+   Mother  1874      1579
+  Brother   145       140
+   Sister   117       111
+    Child    39        39
+   Parent    12        12
+  + 5 values < 10 patients (16 rows in total) — not shown
+Shapes (sample, %):
+   shape     %
+       a 100.0
+  9a a a   0.0
+
+== 1d · c1.FamilyHistory.Diagnosis_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL447CCD80_HSAA.FamilyHistory.Diagnosis_Code (varchar) — 4094 rows, filled 4094 (100.0%)
+Sample (first 4094 rows): kind code · distinct 73
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+                   value  rows  patients
+                73211009  1715      1313
+                Diabetes   800       532
+                44054006   622       491
+                60376773   384       282
+                   Z83.3   139       115
+                       2   100        76
+                   82680    65        48
+                       5    42        24
+  AZEGxwEmLzUcjUNUwKgAAg    35        28
+                22112772    31        22
+                46635009    17        13
+               121589010    16        13
+                   E11.9    13        10
+                       1    10        10
+  + 59 values < 10 patients (105 rows in total) — not shown
+Shapes (sample, %):
+      shape    %
+   99999999 67.7
+          a 20.7
+      a99.9  3.9
+          9  3.7
+      99999  2.0
+  999999999  1.0
+     a99.99  0.3
+     999999  0.3
+        999  0.2
+      a a a  0.1
+
+== 1d · c2.Diagnosis.Diagnosis_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.Diagnosis.Diagnosis_Code (varchar) — 90190 rows, filled 90190 (100.0%)
+Sample (first 5000 rows): kind text / code · distinct 74
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+      I10 21685      1177
+    E11.9 16713      1050
+    E11.8  5240       251
+    E66.9  4823       165
+   R73.03  3682       648
+   E66.01  3083        83
+   E11.65  2574       520
+   E66.09  2292        50
+    I25.9  2262       151
+   R73.01  2174       717
+   E11.40  1436       256
+    R73.9  1414       488
+   I25.10  1359       103
+    E66.3  1296        70
+   R73.09  1184       280
+   Z68.41  1099        25
+   E11.42   860       144
+   E11.69   722        93
+  E11.311   680        19
+    I21.4   637        49
+    I12.9   557        26
+    I20.0   510        41
+   E11.22   503        29
+   Z68.32   477        12
+  E11.319   445        48
+    I50.9   429        32
+   E11.21   421        78
+   E11.29   368        32
+    Z72.0   341        11
+    I67.9   340        29
+  I25.118   338        17
+    Z83.3   334       132
+   R73.02   330       158
+    I20.9   326       113
+    I24.9   317        28
+   Z68.42   309        15
+    I63.9   298        30
+   Z68.43   289        13
+   Z68.33   275        12
+    I25.5   225        23
+  + 30 values beyond the top 40 (2646 rows) — raise with --top
+  + 179 values < 10 patients (4897 rows in total) — not shown
+Shapes (sample, %):
+                shape    %
+                a99.9 38.5
+               a99.99 35.6
+                  a99 25.3
+              a99.999  0.4
+         a99.9, a99.9  0.1
+  a99.9, a99.9, a99.9  0.1
+               a99.a9  0.0
+
+== 1d · c2.Observation.ObservationCode_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.Observation.ObservationCode_Code (varchar) — 118603 rows, filled 118603 (100.0%)
+Sample (first 5000 rows): kind code · distinct 3
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+   3141-9 61750      2486
+   8302-2 54324      2441
+  39156-5  2529       333
+Shapes (sample, %):
+    shape    %
+   9999-9 96.4
+  99999-9  3.6
+
+== 1d · c2.FamilyHistory.FamilyMember_Description
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.FamilyHistory.FamilyMember_Description (varchar) — 681 rows, filled 681 (100.0%)
+Sample (first 681 rows): kind category · distinct 9
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+    value  rows  patients
+   Mother   297       266
+   Father   280       249
+  Brother    39        37
+   Sister    37        37
+    Child    21        21
+  + 4 values < 10 patients (<10 rows in total) — not shown
+Shapes (sample, %):
+  shape     %
+      a 100.0
+
+== 1d · c2.FamilyHistory.Diagnosis_Code
+IRIS 10.28.29.29:51772/HSSBX · SBXV_ENCL94F43B4B_HSAA.FamilyHistory.Diagnosis_Code (varchar) — 681 rows, filled 681 (100.0%)
+Sample (first 681 rows): kind code · distinct 37
+Shown: only values seen in ≥ 10 distinct patients (patient key: Patient)
+     value  rows  patients
+  Diabetes   317       190
+  73211009   153       118
+  44054006    70        57
+         2    36        21
+     Z83.3    32        21
+  60376773    13        12
+  + 31 values < 10 patients (60 rows in total) — not shown
+Shapes (sample, %):
+      shape    %
+          a 47.4
+   99999999 36.4
+          9  5.9
+      a99.9  4.8
+      99999  1.8
+       9999  1.0
+  999999999  0.7
+     999999  0.7
+        999  0.6
+     999.99  0.3
+
+checks 1a 1c 1d: 22 queries done, 2 not available
+----8<---- COPY END ----8<----
