@@ -61,6 +61,10 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   unreleased (1c)  2026-11-20  LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
+#                      rows with an empty value dropped and counted per code (drop_empty; the text "NULL" = empty).
+#                      Observation (vitals): "0" / "-" = empty (empty_values, counted), height 1.2–2.3 m → cm,
+#                      value distribution per vital in the report
 #   1.2.1  2026-11-19  Progress lines on screen: IRIS connection, each view's query, rows so far, mapping time
 #                      (output only; canonical data unchanged)
 #   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
@@ -102,8 +106,11 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 #   optional_columns  {canonical_name: source_column (or list)} — taken if present
 #   constants         {canonical_name: value} — this value if the column is absent or empty
 #   filter            {source_column or canonical_name: [allowed values]} — case-insensitive selection
-#   drop_empty        [canonical_name, ...] — rows whose value there is empty (NULL / blank) are dropped and
-#                     counted (report: dropped_empty_<name>, with a per-code breakdown when the source has `code`)
+#   drop_empty        [canonical_name, ...] — rows whose value there is empty (NULL / blank / the text "NULL") are
+#                     dropped and counted (report: dropped_empty_<name>, with a per-code breakdown when the source
+#                     has `code`)
+#   empty_values      {canonical_name: [text, ...]} — with drop_empty: these values count as empty too (case-insensitive;
+#                     a number equal to one of them as well, "0.0" = "0"); of which: dropped_empty_<name>_placeholder
 #   optional          True → skipped if the file / table is absent (e.g. encounter only in C3)
 #   date_format       overrides DATE_FORMAT for this source
 #
@@ -136,6 +143,9 @@ SOURCES: dict[str, dict] = {
         # C1 (2026-11-19): Observation holds only vitals (3141-9 weight, 8302-2 height, 39156-5 BMI); rows with an
         # empty ObservationValue carry nothing and were the "missing required value" schema ERRORs → dropped.
         "drop_empty": ["value"],
+        # VM checks (2026-11-20; C1 and C2 hold only these three vitals): "0" is a placeholder (BMI p25 = 0; one-digit
+        # values 38% of C1 / 27% of C2 BMI rows, ~1–2% of height and weight), "-" too → dropped as empty and counted.
+        "empty_values": {"value": ["0", "-"]},
     },
     # LabResultItem (C1 DDL, 2026-11-19): ID, Encounter, Patient, ResultDate, ResultValue, ResultValueUnits,
     # TestItemCode_Code, TestItemCode_Description. The first ingest had labs = 0 (no lab codes in Observation) →
@@ -148,6 +158,9 @@ SOURCES: dict[str, dict] = {
         "columns": {"patient_id": "Patient", "code": "TestItemCode_Code", "value": "ResultValue",
                     "date": "ResultDate"},
         "optional_columns": {"test_name": "TestItemCode_Description", "unit": "ResultValueUnits"},
+        # VM ingest 1.2.1 (2026-11-19): labs "missing required value" ERROR (C1 < 10, C2 11 rows) = rows with an empty
+        # ResultValue; they carry nothing → dropped and counted per code, as for Observation.
+        "drop_empty": ["value"],
     },
     "social_history": {
         "file": "social_history.csv", "table": "{schema}.SocialHistory", "kind": "smoking",
@@ -331,8 +344,17 @@ def _select(df: pd.DataFrame, spec: dict, name: str, where: str | None = None) -
         out[k] = out[k].fillna(v) if k in out else v
     for col in spec.get("drop_empty", []):
         txt = out[col].astype("string").str.strip()
-        empty = (txt.isna() | txt.eq("")).fillna(True).astype(bool)
+        empty = (txt.isna() | txt.eq("") | txt.str.upper().eq("NULL")).fillna(True).astype(bool)   # "NULL" as text
+        tokens = [str(t) for t in spec.get("empty_values", {}).get(col, [])]
+        placeholder = pd.Series(False, index=out.index)
+        if tokens:
+            as_num = pd.to_numeric(pd.Series(tokens), errors="coerce").dropna()
+            placeholder = ((txt.str.lower().isin([t.lower() for t in tokens])
+                            | pd.to_numeric(txt, errors="coerce").isin(as_num)).fillna(False).astype(bool) & ~empty)
+            empty |= placeholder
         info[f"dropped_empty_{col}"] = int(empty.sum())
+        if tokens:
+            info[f"dropped_empty_{col}_placeholder"] = int(placeholder.sum())
         if empty.any() and "code" in out:
             info[f"dropped_empty_{col}_by_code"] = _labels(out.loc[empty, "code"].astype("string").str.strip())
         out = out[~empty]
@@ -441,6 +463,16 @@ def split_measurements(m: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return labs, obs
 
 
+# Vitals (Observation 8302-2 height, 3141-9 weight, 39156-5 BMI) have no unit column (i32): the value distribution per
+# vital (as for labs, only in groups of ≥ LAB_STATS_MIN_PATIENTS patients) shows the unit in the ingest block. Expected:
+# height ~150–180 cm (~1.5–1.8 would be metres), weight ~60–100 kg, BMI ~25–32 kg/m².
+VITAL_CONCEPTS = ["height_cm", "weight_kg", "bmi"]
+# VM checks (2026-11-20): height is in cm (median C1 163.5 / C2 167), but a few values are shaped 9.99 / 9.999 (~0.4%
+# of C1 rows) = metres. A height of 1.2–2.3 can only be metres → × 100 (counted); other values are left as they are
+# (phenotype keeps 120–230 cm).
+HEIGHT_METRES = (1.2, 2.3)
+
+
 def _h_measurements(df, name, vc):
     unit = df["unit"] if "unit" in df else pd.Series(pd.NA, index=df.index)
     vc += _value_counts(name, "code | unit", df["code"].astype("string") + " | " + unit.astype("string").fillna(""),
@@ -449,6 +481,16 @@ def _h_measurements(df, name, vc):
     vc += _value_counts(name, "lab value non-numeric (raw)",
                         labs.loc[pd.to_numeric(labs["value"], errors="coerce").isna() & labs["value"].notna(), "value"],
                         top=20)
+    v = pd.to_numeric(obs["value"], errors="coerce")
+    metres = (obs["concept"].eq("height_cm") & v.between(*HEIGHT_METRES)).fillna(False).astype(bool)
+    if metres.any():
+        obs.loc[metres, "value"] = (v[metres] * 100).round(1).map("{:g}".format)
+        vc.append({"source": name, "field": "height in metres → cm (1.2–2.3 × 100)", "value": "<n rows>",
+                   "n_rows": int(metres.sum())})
+    vit = obs[obs["concept"].isin(VITAL_CONCEPTS).fillna(False).astype(bool)]
+    vit_unit = vit["unit"] if "unit" in vit else pd.Series(pd.NA, index=vit.index, dtype="string")
+    vc += [{"source": name, "field": "vital value by concept | unit", "value": label, "n_rows": n}
+           for label, n in lab_value_stats(vit, vit["concept"], vit_unit)]
     return {"labs": labs, "observations": obs}
 
 
@@ -466,6 +508,21 @@ LAB_STATS_MIN_PATIENTS = 10                         # value distribution only in
 # (e.g. 48) or mmol/L glucose (e.g. 6.1) shows up here as out of range.
 LAB_PLAUSIBLE = {"hba1c %": (3, 20), "hba1c mmol/mol": (10, 200), "glucose mg/dL": (20, 1000),
                  "glucose mmol/L": (1, 55)}
+# Unit spelling (VM ingest 1.2.1, 2026-11-19): the same unit arrives in several spellings (mg/dL, MG/DL, mg/dl) and
+# HbA1c also has "0" and "NULL" as unit; that alone gave the schema WARN "multiple units per LOINC" (1521-4, 1558-6,
+# 4548-4). Key = lower case without spaces → one spelling; a placeholder → no unit (% / mg/dL assumed, as before).
+# A unit not listed here is kept as delivered (stripped), so a really different unit still gives the WARN.
+LAB_UNITS = {"%": "%", "mg/dl": "mg/dL", "mmol/l": "mmol/L", "mmol/mol": "mmol/mol"}
+LAB_UNIT_EMPTY = {"0", "null", "none", "na", "n/a", "-"}
+
+
+def norm_lab_unit(unit: pd.Series) -> pd.Series:
+    """Delivered lab unit → canonical spelling (LAB_UNITS): case, whitespace (incl. non-breaking space) and Unicode
+    look-alikes (NFKC) do not matter; empty or a placeholder (LAB_UNIT_EMPTY) → NA."""
+    raw = unit.astype("string").str.strip()
+    key = raw.str.normalize("NFKC").str.lower().str.replace(r"\s+", "", regex=True)   # NFKC: "％" → "%", NBSP → " "
+    out = key.map(LAB_UNITS).astype("string").fillna(raw)
+    return out.mask((key.isin(LAB_UNIT_EMPTY) | key.eq("")).fillna(False).astype(bool))
 
 
 def lab_range_class(kind: pd.Series, unit: pd.Series) -> pd.Series:
@@ -505,7 +562,8 @@ def _h_lab_results(df, name, vc):
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = df["code"].astype("string").str.strip()
     test = (df["test_name"] if "test_name" in df else empty).astype("string").str.strip()
-    unit = (df["unit"] if "unit" in df else empty).astype("string").str.strip().replace("", pd.NA)
+    raw_unit = (df["unit"] if "unit" in df else empty).astype("string").str.strip()
+    unit = norm_lab_unit(raw_unit)
     kind = code.map(codelists.LOINC_LAB)
     in_list = kind.notna().astype(bool)
     txt = test.fillna("")
@@ -514,6 +572,8 @@ def _h_lab_results(df, name, vc):
     keep = in_list & ~other_by_name
     shown = code.fillna("<empty>") + " | " + unit.fillna("") + " | " + test.fillna("")   # name last: cut at 80 chars
     vc += _value_counts(name, "study lab: code | unit | name", shown[keep], top=40)
+    vc += _value_counts(name, "study lab unit: delivered → canonical",
+                        raw_unit[keep].fillna("<empty>").replace("", "<empty>") + " → " + unit[keep].fillna("<no unit>"))
     if other_by_name.any():
         vc += _value_counts(name, "study code, other test by name (dropped): code | unit | name", shown[other_by_name])
         vc.append({"source": name, "field": "rows dropped: study code, other test by name", "value": "<n rows>",

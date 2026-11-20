@@ -176,9 +176,14 @@ class TestAdapter(unittest.TestCase):
                             "ObservationValue": [None] * 11 + [""] + [None, "170", "0"],
                             "ObservationDate": "2020-01-01"})
         out, info = nabidh._select(raw, spec, "observations")
-        self.assertEqual(info["dropped_empty_value"], 13)
-        self.assertEqual(info["dropped_empty_value_by_code"], "3141-9 (12), +1 labels < 10 rows")
-        self.assertEqual(list(out["value"]), ["170", "0"])                       # "0" is a value, not empty
+        self.assertEqual(info["dropped_empty_value"], 14)                        # "0" is a vital placeholder (VM checks)
+        self.assertEqual(info["dropped_empty_value_placeholder"], 1)
+        self.assertEqual(info["dropped_empty_value_by_code"], "3141-9 (12), +2 labels < 10 rows")
+        self.assertEqual(list(out["value"]), ["170"])
+        generic = {k: v for k, v in spec.items() if k != "empty_values"}
+        out, info = nabidh._select(raw, generic, "observations")
+        self.assertEqual(list(out["value"]), ["170", "0"])                       # without empty_values "0" is a value
+        self.assertNotIn("dropped_empty_value_placeholder", info)
 
     def test_snapshot_uses_family_and_social_history(self):
         ref = pd.Series(pd.Timestamp("2022-12-31"), index=["A1", "A2", "A3", "A4"])
@@ -478,6 +483,155 @@ class TestLabResults(unittest.TestCase):
         small = [k for k in stats if k.startswith(("hba1c_ifcc", "fpg"))]
         self.assertEqual(len(small), 3)                          # mmol/mol, mmol/L, <no unit>
         self.assertTrue(all("no distribution" in k for k in small))
+
+
+class TestLabUnitsAndEmptyValues(unittest.TestCase):
+    """VM ingest 1.2.1 (2026-11-19): one unit in several spellings (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit,
+    LabResultItem rows with an empty ResultValue ("missing required value" ERROR)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        d = Path(cls.tmp.name)
+        write_raw(d)
+        _csv(d, "observations.csv", "Patient,ObservationCode_Code,ObservationValue,ObservationDate",
+             ["A1,39156-5,31.2,2020-06-01"])                            # vitals only (labs come from LabResultItem)
+        spellings = ["mg/dL", "MG/DL", "mg/dl", " mg / dL "]
+        fpg = [f"P{i},E{i},2021-01-01,{90 + i},{spellings[i % 4]},1558-6,Glucose Fasting" for i in range(12)]
+        empty = [f"Q{i},F{i},2021-01-01,,mg/dL,1558-6,Glucose Fasting" for i in range(10)]   # ≥ 10 rows → code named
+        _csv(d, "lab_results.csv", "Patient,Encounter,ResultDate,ResultValue,ResultValueUnits,TestItemCode_Code,"
+                                   "TestItemCode_Description", fpg + empty + [
+            "A1,E20,2021-02-01,6.9,%,4548-4,HbA1c",
+            "A2,E21,2021-02-01,5.6,0,4548-4,HbA1c",                      # "0" as unit → no unit (% assumed)
+            "A3,E22,2021-02-01,7.1,NULL,4548-4,HbA1c",                   # the text "NULL" as unit → no unit
+            "A4,E23,2021-02-01,NULL,%,4548-4,HbA1c",                     # the text "NULL" as value → dropped
+            "A4,E24,2021-03-01,  ,%,4548-4,HbA1c",                       # blank value → dropped
+            "A1,E25,2021-03-01,190,MG/DL,1521-4,Blood Sugar Level - 2 Hrs",
+            "A2,E26,2021-03-01,150,mg/dL,1521-4,Blood Sugar Level - 2 Hrs",
+        ])
+        cls.ds, cls.rep = nabidh.load(d, "c1")
+        cls.vc = pd.DataFrame(cls.rep["value_counts"])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def field(self, name):
+        x = self.vc[(self.vc["source"] == "lab_results") & (self.vc["field"] == name)]
+        return x.set_index("value")["n_rows"].to_dict()
+
+    def check(self, name):
+        val = schema.validate(self.ds)
+        return val[(val["table"] == "labs") & (val["check"] == name)].iloc[0]
+
+    def test_norm_lab_unit(self):
+        got = nabidh.norm_lab_unit(pd.Series(["mg/dL", "MG/DL", "mg/dl", " mg / dl ", "mg/dL ", "%", " %",
+                                              "％", "0", "NULL", None, "", "MMOL/L", "mmol/mol", "g/dL"]))
+        self.assertEqual(list(got.fillna("<NA>")), ["mg/dL"] * 5 + ["%"] * 3 + ["<NA>"] * 4    # NBSP, fullwidth %
+                         + ["mmol/L", "mmol/mol", "g/dL"])         # an unlisted unit stays as delivered
+
+    def test_one_unit_per_code(self):
+        labs = self.ds["labs"]
+        units = labs.groupby("loinc")["unit"].agg(lambda u: sorted(u.dropna().unique()))
+        self.assertEqual(units.to_dict(), {"1521-4": ["mg/dL"], "1558-6": ["mg/dL"], "4548-4": ["%"]})
+        self.assertEqual(int(labs["unit"].isna().sum()), 2)        # "0" and "NULL"
+        mixed = self.check("multiple units per LOINC")
+        self.assertEqual((mixed["severity"], int(mixed["n_affected"])), ("INFO", 0))
+        stats = [k for k in self.field("value by kind | unit") if k.startswith("fpg")]
+        self.assertEqual(len(stats), 1)                             # one group, not one per spelling
+        self.assertTrue(stats[0].startswith("fpg | mg/dL : 12 patients, "), stats[0])
+
+    def test_unit_spellings_reported(self):
+        self.assertEqual(self.field("study lab unit: delivered → canonical"),
+                         {"mg/dL → mg/dL": 4, "MG/DL → mg/dL": 4, "mg/dl → mg/dL": 3, "mg / dL → mg/dL": 3,
+                          "% → %": 1, "0 → <no unit>": 1, "NULL → <no unit>": 1})
+
+    def test_empty_values_dropped_and_counted(self):
+        src = self.rep["sources"]["lab_results"]
+        self.assertEqual(src["rows_read"], 29)
+        self.assertEqual(src["dropped_empty_value"], 12)
+        self.assertEqual(src["dropped_empty_value_by_code"], "1558-6 (10), +1 labels < 10 rows")   # 4548-4: 2 rows
+        self.assertEqual(src["rows_out"], {"labs": 17})
+        self.assertFalse(self.ds["labs"]["value"].isna().any())
+        missing = self.check("missing required value")
+        self.assertEqual((missing["severity"], int(missing["n_affected"])), ("INFO", 0))
+
+    def test_unitless_hba1c_read_as_percent(self):
+        g = phenotype.glycaemic_events(self.ds).set_index(["patient_id", "kind"])
+        self.assertEqual(g.loc[("A3", "hba1c"), "status"], "dm")         # 7.1 with unit "NULL" → 7.1 %
+        self.assertEqual(g.loc[("A1", "ogtt_2h"), "status"], "pre")      # 190 MG/DL → mg/dL, no conversion
+
+    def test_really_different_unit_still_warns(self):
+        extra = pd.DataFrame({"patient_id": ["A1"], "loinc": ["1558-6"], "value": [5.5], "date": ["2021-04-01"],
+                              "unit": nabidh.norm_lab_unit(pd.Series(["MMOL/L"]))})
+        tables = {**self.ds.tables, "labs": schema.coerce(pd.concat([self.ds["labs"], extra]), "labs")}
+        val = schema.validate(schema.Dataset(source="nabidh", cohort="c1", tables=tables))
+        mixed = val[(val["table"] == "labs") & (val["check"] == "multiple units per LOINC")].iloc[0]
+        self.assertEqual((mixed["severity"], int(mixed["n_affected"]), mixed["detail"]), ("WARN", 1, "1558-6"))
+
+
+class TestVitals(unittest.TestCase):
+    """Observation vitals have no unit column (i32). VM checks (2026-11-20): height cm, weight kg, BMI kg/m²; "0" is a
+    placeholder; a few heights are in metres."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        d = Path(cls.tmp.name)
+        write_raw(d)
+        rows = [f"H{i},8302-2,{150 + i},2020-01-01" for i in range(12)]                 # cm
+        rows += [f"H{i},3141-9,{60 + i},2020-01-01" for i in range(12)]                 # kg
+        rows += [f"H{i},39156-5,{24 + i * 0.5},2020-01-01" for i in range(12)]          # kg/m²
+        rows += [f"Z{i},39156-5,0,2020-02-01" for i in range(10)]                       # placeholder → dropped
+        rows += ["A1,8302-2,1.65,2020-03-01",                                           # metres → 165 cm
+                 "A2,8302-2,2.3,2020-03-01",                                            # range edge → 230 cm
+                 "A3,8302-2,65,2020-03-01",                                             # implausible, left (not inches)
+                 "A4,3141-9,0.0,2020-03-01",                                            # placeholder as "0.0"
+                 "A4,8302-2,-,2020-03-01",                                              # "-" → dropped
+                 "A1,3141-9,1.65,2020-03-01",                                           # a weight is not converted
+                 "M1,8302-2,1.8,2020-03-01", "M1,3141-9,81,2020-03-01",                 # 180 cm → BMI 25.0
+                 "A3,3141-9,70,2020-03-01"]
+        _csv(d, "observations.csv", "Patient,ObservationCode_Code,ObservationValue,ObservationDate", rows)
+        cls.ds, cls.rep = nabidh.load(d, "c1")
+        cls.vc = pd.DataFrame(cls.rep["value_counts"])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def field(self, name):
+        x = self.vc[(self.vc["source"] == "observations") & (self.vc["field"] == name)]
+        return x.set_index("value")["n_rows"].to_dict()
+
+    def obs(self, pid, concept):
+        o = self.ds["observations"]
+        return o.loc[o["patient_id"].eq(pid) & o["concept"].eq(concept), "value"].tolist()
+
+    def test_placeholders_dropped_and_counted(self):
+        src = self.rep["sources"]["observations"]
+        self.assertEqual((src["dropped_empty_value"], src["dropped_empty_value_placeholder"]), (12, 12))
+        self.assertEqual(src["dropped_empty_value_by_code"], "39156-5 (10), +2 labels < 10 rows")
+        values = self.ds["observations"].loc[lambda o: o["concept"].isin(nabidh.VITAL_CONCEPTS), "value"]
+        self.assertFalse(pd.to_numeric(values, errors="coerce").eq(0).any())
+        self.assertEqual(self.obs("A4", "weight_kg"), [])
+
+    def test_height_in_metres_to_cm(self):
+        self.assertEqual(self.obs("A1", "height_cm"), ["165"])
+        self.assertEqual(self.obs("A2", "height_cm"), ["230"])
+        self.assertEqual(self.obs("A3", "height_cm"), ["65"])                  # left as is; phenotype drops it
+        self.assertEqual(self.obs("A1", "weight_kg"), ["1.65"])
+        self.assertEqual(self.field("height in metres → cm (1.2–2.3 × 100)"), {"<n rows>": 3})
+        s = phenotype.core_snapshot(self.ds, pd.Series(pd.Timestamp("2022-12-31"), index=["M1", "A3"]), None, PARAMS)
+        self.assertEqual(s.loc["M1", "bmi_source"], "height_weight")
+        self.assertAlmostEqual(s.loc["M1", "bmi"], 81 / 1.8 ** 2)
+        self.assertTrue(pd.isna(s.loc["A3", "bmi"]))                           # 65 "cm" is not used
+
+    def test_value_distribution_per_vital(self):
+        stats = self.field("vital value by concept | unit")
+        self.assertEqual(sorted(k.split(" : ")[0] for k in stats),
+                         ["bmi | <no unit>", "height_cm | <no unit>", "weight_kg | <no unit>"])
+        self.assertIn("bmi | <no unit> : 12 patients, p5 24.3 / median 26.8 / p95 29.2", stats)   # zeros gone
+        self.assertTrue(any(k.startswith("height_cm | <no unit> : 16 patients") for k in stats))
 
 
 class TestNationality(unittest.TestCase):

@@ -415,6 +415,16 @@ class TestOutputTables(unittest.TestCase):
                                                  "hba1c | % : 812 patients, p5 5.2 / median 6.9 / p95 10.1",
                                                  "LOC-1 | % | HbA1c"])
 
+    def test_lab_unit_spellings_in_summary(self):
+        """Unit spellings (unit text, not a patient value) are shown even below 10 rows; the count stays suppressed."""
+        f = "study lab unit: delivered → canonical"
+        v = pd.DataFrame({"source": ["lab_results"] * 3, "field": [f] * 3,
+                          "value": ["MG/DL → mg/dL", "0 → <no unit>", "NULL → <no unit>"],
+                          "n_rows": ["611", "<10", "<10"]})
+        got = enclave.field_summary(v, "lab_results", enclave.LAB_FIELDS)
+        self.assertEqual(got["value"].tolist(), ["MG/DL → mg/dL", "0 → <no unit>", "NULL → <no unit>"])
+        self.assertEqual(got["n_rows"].tolist(), ["611", "<10", "<10"])
+
     def test_ingest_summary_shows_dropped_empty_values(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "ingest").mkdir()
@@ -431,6 +441,25 @@ class TestOutputTables(unittest.TestCase):
         self.assertIn("dropped_empty_value_by_code: 3141-9 (4100), 8302-2 (3260), +1 labels < 10 rows", obs)
         lab = next(ln for ln in block.lines if ln.strip().startswith("lab_results"))
         self.assertIn("dropped_empty_value=<10", lab)                           # small count suppressed
+
+    def test_ingest_summary_shows_vital_distribution(self):
+        """Vitals have no unit column (i32): the per-vital distribution is in the block (only groups ≥ 10 patients
+        carry numbers; the adapter writes no numbers for smaller groups)."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "ingest").mkdir()
+            (Path(d) / "ingest" / "c1_summary.json").write_text(json.dumps({"ingest_version": "9.9.9",
+                                                                            "n_patients": 1000, "sources": {}}))
+            pd.DataFrame({"source": ["observations"] * 2, "field": ["vital value by concept | unit"] * 2,
+                          "value": ["height_cm | <no unit> : 2400 patients, p5 1.52 / median 1.65 / p95 1.8",
+                                    "bmi | <no unit> : < 10 patients with a numeric value, no distribution"],
+                          "n_rows": ["5000", "<10"]}).to_csv(Path(d) / "ingest" / "c1_value_counts.csv", index=False)
+            block = enclave.Block("HEADER")
+            with contextlib.redirect_stdout(io.StringIO()):
+                enclave.summary_ingest(Path(d), block, mock.Mock(max_rows=60))
+        text = "\n".join(block.lines)
+        self.assertIn("vitals (Observation; no unit column", text)
+        self.assertIn("height_cm | <no unit> : 2400 patients, p5 1.52 / median 1.65 / p95 1.8", text)
+        self.assertIn("bmi | <no unit> : < 10 patients with a numeric value, no distribution", text)
 
     def test_fmt_count(self):
         self.assertEqual([sdc.fmt_count(x) for x in (0, 3, 10, "-", None)], ["0", "<10", "10", "-", "None"])

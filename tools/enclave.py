@@ -915,7 +915,8 @@ FH_FIELDS = [
 # ≥ 10 patients; unit check), tests whose name looks glycaemic but whose code is not recognised, other dropped tests.
 # Code / name lists never print a value with < 10 rows.
 LAB_FIELDS = [
-    ("study lab: code | unit | name", 15, True), ("value by kind | unit", 15, False),
+    ("study lab: code | unit | name", 15, True), ("study lab unit: delivered → canonical", 15, False),
+    ("value by kind | unit", 15, False),
     ("value outside plausible range", 10, False),
     ("lab value non-numeric (raw)", 10, True), ("rows dropped: not a study lab", 1, False),
     ("rows dropped: study code, other test by name", 1, False),
@@ -923,6 +924,10 @@ LAB_FIELDS = [
     ("glycaemic-looking tests (dropped): code | unit | name", 20, True),
     ("other tests (dropped): code | unit | name", 15, True),
 ]
+
+
+# Vital summary (source "observations"): value distribution per vital (no unit column; groups with ≥ 10 patients only)
+VITAL_FIELDS = [("vital value by concept | unit", 10, False), ("height in metres → cm (1.2–2.3 × 100)", 1, False)]
 
 
 def field_summary(v, source: str, fields, suffix: bool = False):
@@ -988,6 +993,11 @@ def summary_ingest(d: Path, out: Block, a) -> None:
                 out("   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values "
                     "with < 10 rows):")
                 out.table(lab, a.max_rows)
+            vit = field_summary(v_all, "observations", VITAL_FIELDS)
+            if len(vit):
+                out("   vitals (Observation; no unit column; distribution in ≥ 10 patients — height ~150–180 cm, "
+                    "weight ~60–100 kg, BMI ~25–32):")
+                out.table(vit, a.max_rows)
             f = field_summary(v_all, "family_history", FH_FIELDS, suffix=True)
             if len(f):
                 out("   family history (how diabetes was recognised; text lists omit values with < 10 rows):")
