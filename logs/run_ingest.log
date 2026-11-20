@@ -1,0 +1,265 @@
+----8<---- COPY START | enclave run ingest --cohort c1 c2 | 2026-11-20 06:22 UTC | ingest v1.3.0 | commit 2566b34 bundle 23d091aebdfc | python 3.10.12 | 20261120T062235Z_enclave_run_7c41e7 ----8<----
+Step: run ingest · source nabidh · exit code 1 · 41 s
+Run: 20261120T062236Z_ingest_nabidh_830d24 · status: schema_errors · 35 outputs
+
+== C1 (ingest v1.3.0): 2596 patients · schema ERROR 4 / WARN 1 · unmapped value rows 434
+   rows: patients=2596, conditions=99484, medications=30503, labs=3144, observations=226200, encounters=0
+   patient_profile  read               read=2596 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=99397 
+   observations     read               read=239815 dropped_empty_value=21520 dropped_empty_value_placeholder=14079 dropped_empty_value_by_code: 8302-2 (7500), 39156-5 (7322), 3141-9 (6698)
+   lab_results      read               read=3147 
+   social_history   read               read=3892 filtered_out_by_item=66 filtered_out_values_item: <empty> (41), Unknown (17), +3 labels < 10 rows
+   family_history   read               read=4094 
+   medications      read               read=24002 
+   encounters       absent (optional)  read=- OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
+[Location: <Prepare>]
+[%msg: <User dha-
+   schema check (non-INFO):
+         table                  check severity n_affected detail
+      patients    sex not Male/Female     WARN        <10      U
+    conditions  missing required date    ERROR         17    NaN
+   medications  missing required date    ERROR         34    NaN
+          labs missing required value    ERROR        <10    NaN
+  observations  missing required date    ERROR       3607    NaN
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                  value n_rows
+  social_history value → canonical       Smoking | other → unmapped:other    428
+  social_history value → canonical   Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical            Cigarettes | 1 → unmapped:1    <10
+  social_history value → canonical        Cigarettes | 1.5 → unmapped:1.5    <10
+  social_history value → canonical Cigarettes,Cigars | .25 → unmapped:.25    <10
+  social_history value → canonical                Cigars | 1 → unmapped:1    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                                          field                                                                            value n_rows
+                                              drug → ATC method                                                                         DDC code  19243
+                                              drug → ATC method                                                              DDC scientific code   3803
+                                              drug → ATC method                                              code not ATC/DDC → name: ingredient    209
+                                              drug → ATC method                                                                 name: trade name    140
+                                              drug → ATC method                                                      DDC: not a study drug class    134
+                                              drug → ATC method                                                         DDC scientific code stem    125
+                                              drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient    114
+                                              drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient    101
+                                              drug → ATC method                                                          DDC: non-systemic route     53
+                                              drug → ATC method                                                           name: brand first word     32
+                                              drug → ATC method                                            code not ATC/DDC → name: non-systemic     21
+                                              drug → ATC method                                              code not ATC/DDC → name: trade name    <10
+                                              drug → ATC method                                                    name: trade name + ingredient    <10
+                                              drug → ATC method                                                                 name: ingredient    <10
+                                              drug → ATC method                                              name: brand first word + ingredient    <10
+                                              drug → ATC method                                                        name: no study drug class    <10
+                                              drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+                                               drug code format                                              DDC product code (9999-999999-9999)  19427
+                                               drug code format                                                 DDC scientific code (999999-999)   3806
+                                               drug code format                                             VMP<id>,<dose>,<form> (no reference)    382
+                                               drug code format                                                                          no code    173
+                                               drug code format                                              6 digits (DDC scientific code stem)    125
+                                               drug code format                                                                            other     71
+                                               drug code format                                                placeholder (all zeros) → no code     18
+                              rows dropped: no study drug class                                                                         <no ATC>    212
+                 combination products (rows → several ATC rows)                                                                         <n rows>   6364
+                                    ATC (3 chars) after mapping                                                                              A10  17452
+                                    ATC (3 chars) after mapping                                                                              C09   5402
+                                    ATC (3 chars) after mapping                                                                              C08   3322
+                                    ATC (3 chars) after mapping                                                                              C07   2643
+                                    ATC (3 chars) after mapping                                                                              C03   1573
+                                    ATC (3 chars) after mapping                                                                              C02    110
+                                    ATC (3 chars) after mapping                                                                              C10    <10
+                                          drug code not ATC/DDC                                                          VMP34433,5 MG-160 MG,TA     32
+                                          drug code not ATC/DDC                                                                VMP4763,750 MG,TI     30
+                                          drug code not ATC/DDC                                                              VMP4763,1,000 MG,TI     22
+                                          drug code not ATC/DDC                                                            VMP45876,5 MG-5 MG,TA     16
+                                          drug code not ATC/DDC                                                         VMP18963,300 MG-25 MG,TA     15
+                                          drug code not ATC/DDC                                                                    VMP182,2 %,OA     15
+                                          drug code not ATC/DDC                                                         VMP34664,5 MG-1.25 MG,TA     14
+                                          drug code not ATC/DDC                                                                 VMP3660,40 MG,TA     12
+                                          drug code not ATC/DDC                                                                VMP4763,500 MG,TI     12
+                                          drug code not ATC/DDC                                             VMP44675,1 MG/0.75 ML (4 MG/3 ML),IJ     11
+                                   ATC ← drug_name (name match)               C08CA01+C09CA03 ← AMLODIPINE BESILATE/VALSARTAN 5 mg-160 mg Tablet     32
+                                   ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 750 mg Tablet, Extended Release 24 hr (TI)     30
+                                   ATC ← drug_name (name match) A10BA02 ← GLUCOPHAGE 1000 MG XR ....(TAKE AFTER MEALS AS ALREADY TAKING BEFORE-/     24
+                                   ATC ← drug_name (name match)             A10BA02 ← METFORMIN HCL 1,000 mg Tablet, Extended Release 24 hr (TI)     20
+                                   ATC ← drug_name (name match)       C07AB07+C08CA01 ← bisoprolol fumarate/amlodipine besilate 5 mg-5 mg Tablet     16
+                                   ATC ← drug_name (name match)             C09CA04+C03AA03 ← IRBESARTAN/HYDROCHLOROTHIAZIDE 300 mg-25 mg Tablet     15
+                                   ATC ← drug_name (name match)            C09AA04+C03BA11 ← PERINDOPRIL ARGININE/INDAPAMIDE 5 mg-1.25 mg Tablet     14
+                                   ATC ← drug_name (name match)                                                         A10BK01+A10BA02 ← xigduo     14
+                                   ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 500 mg Tablet, Extended Release 24 hr (TI)     12
+                                   ATC ← drug_name (name match)                                                C03CA01 ← FUROSEMIDE 40 mg Tablet     12
+                                   ATC ← drug_name (name match)         A10BJ06 ← semaglutide (44675) 1 mg/0.75 mL (4 mg/3 mL) Pen Injector (mL)     11
+                                   ATC ← drug_name (name match)                                                        A10BH01+A10BA02 ← janumet     11
+                                   ATC ← drug_name (name match)                                                                C09CA08 ← OLMETEC     10
+                             drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     15
+          DDC: not a study drug class (DDC ingredients | route)                                                           CHOLECALCIFEROL | ORAL    134
+  DDC: non-systemic route (DDC ingredients | route | row route)                                   DILTIAZEM HYDROCHLORIDE | RECTAL | row: Rectal     17
+  DDC: non-systemic route (DDC ingredients | route | row route)                                   DILTIAZEM HYDROCHLORIDE | RECTAL | row: RECTAL     13
+  ... +5 more rows (raise with --max-rows)
+   diagnoses (Diagnosis_Code clean-up):
+                                        field               value n_rows
+  code cell with several codes → one row each 2 codes in the cell     87
+                   code: trailing dot removed            <n rows>     11
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                                   value n_rows
+                 study lab: code | unit | name                                       1558-6 | mg/dL | Glucose, Fasting   1436
+                 study lab: code | unit | name                                                      4548-4 | % | HBA1C    660
+                 study lab: code | unit | name                               1558-6 | mg/dL | GLUCOSE FASTING (F.B.S.)    372
+                 study lab: code | unit | name                                        1558-6 | mg/dL | Glucose Fasting    239
+                 study lab: code | unit | name                              1558-6 | mg/dL | Fasting Blood Sugar (FBS)    193
+                 study lab: code | unit | name                                                      4548-4 | % | HbA1c    121
+                 study lab: code | unit | name                                 1558-6 | mg/dL | Plasma Fasting Glucose     31
+                 study lab: code | unit | name                                    1558-6 | mg/dL | FASTING BLOOD SUGAR     10
+         study lab unit: delivered → canonical                                                           mg/dL → mg/dL   1714
+         study lab unit: delivered → canonical                                                                   % → %    802
+         study lab unit: delivered → canonical                                                           MG/DL → mg/dL    619
+         study lab unit: delivered → canonical                                                           mg/dl → mg/dL    <10
+         study lab unit: delivered → canonical                                                           0 → <no unit>    <10
+                          value by kind | unit                 fpg | mg/dL : 920 patients, p5 80 / median 97 / p95 165   2319
+                          value by kind | unit                 hba1c | % : 460 patients, p5 4.7 / median 5.5 / p95 7.9    802
+                          value by kind | unit hba1c | <no unit> : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit          ogtt_2h | mg/dL : 18 patients, p5 72.2 / median 98.1 / p95 186     21
+  rows dropped: study code, other test by name                                                                <n rows>    <10
+   vitals (Observation; no unit column; distribution in ≥ 10 patients — height ~150–180 cm, weight ~60–100 kg, BMI ~25–32):
+                                  field                                                                value n_rows
+          vital value by concept | unit          bmi | <no unit> : 2595 patients, p5 21 / median 28 / p95 39  12517
+          vital value by concept | unit height_cm | <no unit> : 2596 patients, p5 152 / median 165 / p95 183  91753
+          vital value by concept | unit   weight_kg | <no unit> : 2596 patients, p5 56 / median 79 / p95 116 114025
+  height in metres → cm (1.2–2.3 × 100)                                                             <n rows>    125
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                              field                                      value n_rows
+             diabetes recognised by                                SNOMED code   2354
+             diabetes recognised by                                  text only   1555
+             diabetes recognised by                                ICD-10 code    172
+          text only: Diagnosis_Code                                   Diabetes    800
+          text only: Diagnosis_Code                                   60376773    384
+          text only: Diagnosis_Code                                          2    100
+          text only: Diagnosis_Code                                      82680     65
+          text only: Diagnosis_Code                                          5     42
+          text only: Diagnosis_Code                     AZEGxwEmLzUcjUNUwKgAAg     35
+          text only: Diagnosis_Code                                   22112772     31
+          text only: Diagnosis_Code                                  121589010     16
+          text only: Diagnosis_Code                                  197763012     10
+                  relation → degree                             father → first   1887
+                  relation → degree                             mother → first   1865
+                  relation → degree                            brother → first    145
+                  relation → degree                             sister → first    117
+                  relation → degree                              child → first     39
+                  relation → degree                             parent → first     12
+  condition_text negated → negative No History Of Diabetes mellitus (disorder)     31
+== C2 (ingest v1.3.0): 2600 patients · schema ERROR 4 / WARN 1 · unmapped value rows 308
+   rows: patients=2600, conditions=90285, medications=32839, labs=2306, observations=117201, encounters=165479
+   patient_profile  read               read=2600 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=90190 
+   observations     read               read=118603 dropped_empty_value=3548 dropped_empty_value_placeholder=2441 dropped_empty_value_by_code: 8302-2 (1502), 3141-9 (1241), 39156-5 (805)
+   lab_results      read               read=2309 dropped_empty_value=<10 dropped_empty_value_by_code: +1 labels < 10 rows
+   social_history   read               read=1617 filtered_out_by_item=150 filtered_out_values_item: <empty> (138), +5 labels < 10 rows
+   family_history   read               read=681 
+   medications      read               read=24653 
+   encounters       read               read=165479 
+   schema check (non-INFO):
+         table                  check severity n_affected detail
+      patients    sex not Male/Female     WARN        <10      U
+    conditions  missing required date    ERROR         36    NaN
+   medications  missing required date    ERROR        <10    NaN
+          labs missing required value    ERROR         10    NaN
+  observations  missing required date    ERROR       1328    NaN
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                value n_rows
+  social_history value → canonical     Smoking | other → unmapped:other    306
+  social_history value → canonical Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical        Cigarettes | 15 → unmapped:15    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                                                   field                                                                            value n_rows
+                                                       drug → ATC method                                                                         DDC code  21027
+                                                       drug → ATC method                                                              DDC scientific code   3107
+                                                       drug → ATC method                                                      DDC: not a study drug class    141
+                                                       drug → ATC method                                                         DDC scientific code stem    138
+                                                       drug → ATC method                                              code not ATC/DDC → name: ingredient     86
+                                                       drug → ATC method                                                                 name: trade name     31
+                                                       drug → ATC method                                                          DDC: non-systemic route     30
+                                                       drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient     29
+                                                       drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient     23
+                                                       drug → ATC method                                            code not ATC/DDC → name: non-systemic     22
+                                                       drug → ATC method                                                                 name: ingredient    <10
+                                                       drug → ATC method                                                    name: trade name + ingredient    <10
+                                                       drug → ATC method                                                        name: no study drug class    <10
+                                                       drug → ATC method                                                           name: brand first word    <10
+                                                       drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+                                                       drug → ATC method                                              name: brand first word + ingredient    <10
+                                                        drug code format                                              DDC product code (9999-999999-9999)  21217
+                                                        drug code format                                                 DDC scientific code (999999-999)   3109
+                                                        drug code format                                              6 digits (DDC scientific code stem)    139
+                                                        drug code format                                             VMP<id>,<dose>,<form> (no reference)    122
+                                                        drug code format                                                                          no code     35
+                                                        drug code format                                                                            other     17
+                                                        drug code format                                                placeholder (all zeros) → no code     14
+                                       rows dropped: no study drug class                                                                         <no ATC>    197
+                          combination products (rows → several ATC rows)                                                                         <n rows>   7799
+                                             ATC (3 chars) after mapping                                                                              A10  17413
+                                             ATC (3 chars) after mapping                                                                              C09   6378
+                                             ATC (3 chars) after mapping                                                                              C08   4101
+                                             ATC (3 chars) after mapping                                                                              C07   2626
+                                             ATC (3 chars) after mapping                                                                              C03   2194
+                                             ATC (3 chars) after mapping                                                                              C02    125
+                                             ATC (3 chars) after mapping                                                                              C10    <10
+                                                   drug code not ATC/DDC                                                            VMP46490,5 MG-5 MG,TA     22
+                                                   drug code not ATC/DDC                                                                    VMP182,2 %,OA     16
+                                                   drug code not ATC/DDC                                                           VMP41724,25 MG-5 MG,TA     12
+                                                   drug code not ATC/DDC                                                  VMP42576,100 UNIT/ML (70-30),IO     10
+                                            ATC ← drug_name (name match)      C07AB07+C09AA04 ← bisoprolol fumarate/perindopril arginine 5 mg-5 mg Tablet     22
+                                            ATC ← drug_name (name match)                    A10BK03+A10BH05 ← empagliflozin/linagliptin 25 mg-5 mg Tablet     12
+                                            ATC ← drug_name (name match)      A10A ← insulin degludec/insulin aspart 100 unit/mL (70-30) Insulin Pen (mL)     10
+                                      drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     16
+                   DDC: not a study drug class (DDC ingredients | route)                                                           CHOLECALCIFEROL | ORAL    134
+           DDC: non-systemic route (DDC ingredients | route | row route)                                   DILTIAZEM HYDROCHLORIDE | RECTAL | row: Rectal     10
+                         DDC code without study class, drug name has one                                                                         <n rows>    140
+  DDC code without study class, drug name has one: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TAB     83
+  DDC code without study class, drug name has one: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDE     34
+  DDC code without study class, drug name has one: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,0     17
+   diagnoses (Diagnosis_Code clean-up):
+                                        field               value n_rows
+  code cell with several codes → one row each 2 codes in the cell     89
+  code cell with several codes → one row each 3 codes in the cell    <10
+                   code: trailing dot removed            <n rows>    <10
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                                   value n_rows
+                 study lab: code | unit | name                                       1558-6 | mg/dL | Glucose, Fasting   1277
+                 study lab: code | unit | name                              1558-6 | mg/dL | Fasting Blood Sugar (FBS)    300
+                 study lab: code | unit | name                                                      4548-4 | % | HBA1C    255
+                 study lab: code | unit | name                               1558-6 | mg/dL | GLUCOSE FASTING (F.B.S.)    132
+                 study lab: code | unit | name                                                      4548-4 | % | HbA1c     69
+                 study lab: code | unit | name                                        1558-6 | mg/dL | Glucose Fasting     66
+                 study lab: code | unit | name                                    1558-6 | mg/dL | Fasting Blood Sugar     64
+                 study lab: code | unit | name                          4548-4 | % | GLYCOSYLATED HEMOGLOBIN (HBA1C %)     35
+                 study lab: code | unit | name                                 1558-6 | mg/dL | Plasma Fasting Glucose     23
+                 study lab: code | unit | name                              1521-4 | mg/dL | Blood Sugar Level - 2 Hrs     14
+         study lab unit: delivered → canonical                                                           mg/dL → mg/dL   1703
+         study lab unit: delivered → canonical                                                                   % → %    373
+         study lab unit: delivered → canonical                                                           MG/DL → mg/dL    209
+         study lab unit: delivered → canonical                                                           mg/dl → mg/dL     15
+         study lab unit: delivered → canonical                                                        NULL → <no unit>    <10
+         study lab unit: delivered → canonical                                                           0 → <no unit>    <10
+                          value by kind | unit              fpg | mg/dL : 727 patients, p5 81.1 / median 101 / p95 181   1892
+                          value by kind | unit              hba1c | % : 208 patients, p5 4.99 / median 5.78 / p95 8.68    373
+                          value by kind | unit hba1c | <no unit> : < 10 patients with a numeric value, no distribution    <10
+                          value by kind | unit           ogtt_2h | mg/dL : 29 patients, p5 85.3 / median 124 / p95 246     35
+  rows dropped: study code, other test by name                                                                <n rows>    <10
+   vitals (Observation; no unit column; distribution in ≥ 10 patients — height ~150–180 cm, weight ~60–100 kg, BMI ~25–32):
+                                  field                                                                value n_rows
+          vital value by concept | unit           bmi | <no unit> : 301 patients, p5 21 / median 27 / p95 38   1724
+          vital value by concept | unit height_cm | <no unit> : 2435 patients, p5 151 / median 165 / p95 182  52822
+          vital value by concept | unit   weight_kg | <no unit> : 2484 patients, p5 55 / median 78 / p95 112  60509
+  height in metres → cm (1.2–2.3 × 100)                                                             <n rows>     42
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                      field           value n_rows
+     diabetes recognised by       text only    424
+     diabetes recognised by     SNOMED code    223
+     diabetes recognised by     ICD-10 code     33
+  text only: Diagnosis_Code        Diabetes    317
+  text only: Diagnosis_Code               2     36
+  text only: Diagnosis_Code        60376773     13
+  text only: Diagnosis_Code        22112772     12
+          relation → degree  mother → first    297
+          relation → degree  father → first    279
+          relation → degree brother → first     39
+          relation → degree  sister → first     37
+          relation → degree   child → first     21
+Full screen output (inside the enclave): outputs/20261120T062235Z_enclave_run_7c41e7/enclave/ingest.log
+----8<---- COPY END ----8<----
