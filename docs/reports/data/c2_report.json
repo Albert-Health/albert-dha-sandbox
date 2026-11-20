@@ -1,0 +1,1588 @@
+{
+ "meta": [
+  {
+   "label": "Source",
+   "value": "VM COPY block in the repo, logs/enclave/2026-11-20.log: COPY START | enclave run all | 2026-11-20 10:51 UTC | ingest v1.4.2 | commit ac4d803 bundle 72efc39be6ba | python 3.10.12 | 20261120T105136Z_enclave_run_553ca0; QDiabetes medians before D36 from the earlier block in the same file: COPY START | enclave run all | 2026-11-20 09:56 UTC | ingest v1.4.2 | commit d731593 bundle 9fbeb63bdda0 | python 3.10.12 | 20261120T095641Z_enclave_run_c3722b"
+  },
+  {
+   "label": "Reading",
+   "value": "Numbers come from the block. The status / note / handling columns are the Progress Tracker's reading of them, following the medical team's C1 / C2 checklist."
+  }
+ ],
+ "datasets": {
+  "funnel": [
+   {
+    "step": 1,
+    "label": "Patients delivered (Patient view)",
+    "n": 2600.0,
+    "pct": null,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "ingest block, C2 line",
+    "n_bar": 2600.0
+   },
+   {
+    "step": 2,
+    "label": "Known positives (T2DM or prediabetes evidence)",
+    "n": 2564.0,
+    "pct": 100.0,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "nb01/score_computability.csv n",
+    "n_bar": 2564.0
+   },
+   {
+    "step": 3,
+    "label": "QDiabetes computable",
+    "n": 372.0,
+    "pct": 14.5,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "nb01/c1_detection_rate.csv n_computable · score_computability qd_computable_pct",
+    "n_bar": 372.0
+   },
+   {
+    "step": 4,
+    "label": "7 core variables complete (all but ethnicity)",
+    "n": 372.0,
+    "pct": 14.5,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "nb01/joint_completeness.csv joint_core7",
+    "n_bar": 372.0
+   },
+   {
+    "step": 5,
+    "label": "LPRS computable · ethnicity from nationality (default)",
+    "n": 0.0,
+    "pct": 0.0,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "nb01/ethnicity_source_compare.csv",
+    "n_bar": 0.0
+   },
+   {
+    "step": 6,
+    "label": "LPRS computable · NABIDH EthnicGroup field",
+    "n": 237.0,
+    "pct": 9.2,
+    "run": "Same run · ethnicity from the NABIDH EthnicGroup field (NB1 comparison)",
+    "alt": true,
+    "source": "nb01/ethnicity_source_compare.csv",
+    "n_bar": 237.0
+   },
+   {
+    "step": 7,
+    "label": "All 8 core variables · nationality (default)",
+    "n": 0.0,
+    "pct": 0.0,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": false,
+    "source": "nb01/ethnicity_source_compare.csv",
+    "n_bar": 0.0
+   },
+   {
+    "step": 8,
+    "label": "All 8 core variables · NABIDH EthnicGroup field",
+    "n": 31.0,
+    "pct": 1.2,
+    "run": "Same run · ethnicity from the NABIDH EthnicGroup field (NB1 comparison)",
+    "alt": true,
+    "source": "nb01/ethnicity_source_compare.csv",
+    "n_bar": 31.0
+   },
+   {
+    "step": 5.5,
+    "label": "LPRS computable · unknown ethnicity scored as White or Other (scenario)",
+    "n": 2422.0,
+    "pct": 94.5,
+    "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2",
+    "alt": "scenario",
+    "source": "nb01/lprs_ethnicity_scenarios.csv",
+    "n_bar": 2422.0
+   }
+  ],
+  "kpi": [
+   {
+    "kpi": "Audit Trail Completeness",
+    "target": "100%",
+    "actual": "100.0% (96/96 runs)",
+    "met": "Met",
+    "role": "Process KPI (Critical), not data",
+    "note": "Closed after the fact as abandoned (run_end appended, D34): 20261119T054135Z_nb00_data_profile_b068d0",
+    "key": "kpi-01"
+   },
+   {
+    "kpi": "Evidence Package Completeness",
+    "target": "Complete",
+    "actual": null,
+    "met": "Pending",
+    "role": "Process KPI (Critical), not data",
+    "note": null,
+    "key": "kpi-02"
+   },
+   {
+    "kpi": "Data Security / No-Incident",
+    "target": "0 incidents",
+    "actual": "0 incidents",
+    "met": "Met",
+    "role": "Process KPI (Critical), not data",
+    "note": null,
+    "key": "kpi-03"
+   },
+   {
+    "kpi": "Applicant Data Requirement Framework Match",
+    "target": "Match",
+    "actual": "Partial: ethnicity, smoking, family_history, hypertension",
+    "met": "Partial",
+    "role": "Did the 8 variables arrive, and in the requested form",
+    "note": null,
+    "key": "kpi-04"
+   },
+   {
+    "kpi": "Data Completeness for Required Variables",
+    "target": ">= 90%",
+    "actual": "C1 0.0%; C2 0.0%",
+    "met": "Not Met",
+    "role": "C2 is a random sample: the realistic picture of how full NABIDH data is",
+    "note": "Weakest variable: C1 ethnicity 0.0%; C2 ethnicity 0.0% · Without ethnicity (weakest of the other 7): C1 smoking 97.1%; C2 smoking 14.9% · Joint core-7 (all but ethnicity): C1 97.1% (N=2519/2595); C2 14.5% (N=372/2564) · Present / absent, 100% by definition (not a fill rate): family_history, cvd, hypertension",
+    "key": "kpi-05"
+   }
+  ],
+  "not_measured": [
+   {
+    "kpi": "Sensitivity (Recall, positive class)",
+    "target": ">= 70%",
+    "met": "Pending",
+    "key": "not_measured-01"
+   },
+   {
+    "kpi": "Specificity",
+    "target": ">= 70%",
+    "met": "Pending",
+    "key": "not_measured-02"
+   },
+   {
+    "kpi": "NPV & PPV",
+    "target": "Documented",
+    "met": "Pending",
+    "key": "not_measured-03"
+   },
+   {
+    "kpi": "AUROC",
+    "target": ">= 0.75",
+    "met": "Pending",
+    "key": "not_measured-04"
+   },
+   {
+    "kpi": "C-Index",
+    "target": "0.55-0.90",
+    "met": "Pending",
+    "key": "not_measured-05"
+   },
+   {
+    "kpi": "Precision / Recall / F1",
+    "target": "Documented",
+    "met": "Pending",
+    "key": "not_measured-06"
+   },
+   {
+    "kpi": "Recalibration Slope / O:E",
+    "target": "Documented",
+    "met": "Pending",
+    "key": "not_measured-07"
+   },
+   {
+    "kpi": "Alert Rate per 1,000 Patients",
+    "target": "Pending NABIDH",
+    "met": "Pending",
+    "key": "not_measured-08"
+   }
+  ],
+  "completeness": [
+   {
+    "variable": "Sex",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": "suppressed (<10 missing)",
+    "complete_pct": "suppressed (<10)",
+    "meets_90": "Yes",
+    "note": "a value in the record",
+    "key": "completeness-01"
+   },
+   {
+    "variable": "Age",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "meets_90": "Yes",
+    "note": "a value in the record",
+    "key": "completeness-02"
+   },
+   {
+    "variable": "Ethnicity",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": 0.0,
+    "complete_pct": 0.0,
+    "meets_90": "No",
+    "note": "a value in the record",
+    "key": "completeness-03"
+   },
+   {
+    "variable": "BMI",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": 2424.0,
+    "complete_pct": 94.5,
+    "meets_90": "Yes",
+    "note": "a value in the record",
+    "key": "completeness-04"
+   },
+   {
+    "variable": "Smoking",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": 381.0,
+    "complete_pct": 14.9,
+    "meets_90": "No",
+    "note": "a value in the record",
+    "key": "completeness-05"
+   },
+   {
+    "variable": "Family history of diabetes",
+    "measure": "Present / absent",
+    "n": 2564.0,
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "meets_90": "Not tested (yes / no variable)",
+    "note": "Yes or no for every patient; no record counts as no. Yes for 19.6% of C2",
+    "key": "completeness-06"
+   },
+   {
+    "variable": "Family history: a record exists",
+    "measure": "Recorded value",
+    "n": 2564.0,
+    "complete_n": 507.0,
+    "complete_pct": 19.8,
+    "meets_90": "No",
+    "note": "FamilyHistory record (positive / negative / other relative) or Z83.3",
+    "key": "completeness-07"
+   },
+   {
+    "variable": "Cardiovascular disease",
+    "measure": "Present / absent",
+    "n": 2564.0,
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "meets_90": "Not tested (yes / no variable)",
+    "note": "Yes or no for every patient; no record counts as no. Yes for 17.2% of C2",
+    "key": "completeness-08"
+   },
+   {
+    "variable": "Treated hypertension",
+    "measure": "Present / absent",
+    "n": 2564.0,
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "meets_90": "Not tested (yes / no variable)",
+    "note": "Yes or no for every patient; no record counts as no. Yes for 49.6% of C2 (diagnosis or drug, D36)",
+    "key": "completeness-09"
+   }
+  ],
+  "mapping": [
+   {
+    "input": "Age band",
+    "score": "QDiabetes 25–84",
+    "mapping": "Patient.Age (no date of birth)",
+    "issue": "Outside 25–84: score not computed",
+    "n": 0.0,
+    "unit": "patients",
+    "status": "Works",
+    "source": "nb00/demographics.csv age_outside_25_84_n",
+    "key": "mapping-01"
+   },
+   {
+    "input": "Age band",
+    "score": "LPRS 40–75",
+    "mapping": "Patient.Age",
+    "issue": "Outside the LPRS development band (scored, flagged)",
+    "n": 23.1,
+    "unit": "% of C2",
+    "status": "Works",
+    "source": "nb01/score_computability.csv lrs_outside_dev_age_pct",
+    "key": "mapping-02"
+   },
+   {
+    "input": "Ethnicity",
+    "score": "QDiabetes",
+    "mapping": "Unknown → reference group 'White or not stated'",
+    "issue": "Fixed for every patient: no nationality column; risk may be underestimated for higher-risk groups",
+    "n": 2564.0,
+    "unit": "patients",
+    "status": "Fixed value",
+    "source": "nb01/score_missing_reasons.csv (lrs ethnicity); ingest absent_optional_columns",
+    "key": "mapping-03"
+   },
+   {
+    "input": "Ethnicity",
+    "score": "LPRS",
+    "mapping": "White vs other, from nationality (default)",
+    "issue": "Not computable: ethnicity unknown",
+    "n": 2564.0,
+    "unit": "patients",
+    "status": "Blocked",
+    "source": "nb01/score_missing_reasons.csv",
+    "key": "mapping-04"
+   },
+   {
+    "input": "Ethnicity",
+    "score": "LPRS",
+    "mapping": "White vs other, from the NABIDH EthnicGroup field",
+    "issue": "Still unknown for most patients",
+    "n": 2298.0,
+    "unit": "patients",
+    "status": "Blocked",
+    "source": "nb01/ethnicity_mapping_by_source.csv <missing>",
+    "key": "mapping-05"
+   },
+   {
+    "input": "Treated hypertension",
+    "score": "QDiabetes, LPRS",
+    "mapping": "ICD-10 I10–I16 diagnosis OR an antihypertensive drug (DDC → ingredient → ATC C02/C03/C07/C08/C09); decision D36",
+    "issue": "Counted as treated: diagnosis, drug, or both",
+    "n": 49.6,
+    "unit": "% of C2",
+    "status": "Works",
+    "source": "nb01/htn_derivation.csv",
+    "key": "mapping-06"
+   },
+   {
+    "input": "Treated hypertension",
+    "score": "QDiabetes",
+    "mapping": "Published QDiabetes-2018 definition: diagnosis AND drug",
+    "issue": "Counted now, not under the published definition (diagnosis only + drug only)",
+    "n": 16.2,
+    "unit": "% of C2",
+    "status": "Decision D36",
+    "source": "nb01/htn_derivation.csv",
+    "key": "mapping-07"
+   },
+   {
+    "input": "Treated hypertension",
+    "score": "LPRS",
+    "mapping": "Published LPRS (Gray 2012) definition: drug only",
+    "issue": "Counted now, not under the published definition (diagnosis only)",
+    "n": 12.8,
+    "unit": "% of C2",
+    "status": "Decision D36",
+    "source": "nb01/htn_derivation.csv",
+    "key": "mapping-08"
+   },
+   {
+    "input": "Smoking level",
+    "score": "QDiabetes",
+    "mapping": "Never / Low / Medium / High → never / light / moderate / heavy; Occasional → light (temporary, D7)",
+    "issue": "Smoking status missing: QDiabetes not computed",
+    "n": 2183.0,
+    "unit": "patients",
+    "status": "Works",
+    "source": "nb01/score_missing_reasons.csv",
+    "key": "mapping-09"
+   },
+   {
+    "input": "Smoking level",
+    "score": "QDiabetes",
+    "mapping": "Ex-smoker: no such value in SocialHistory; only from diagnosis code Z87.891",
+    "issue": "QDiabetes 'ex-smoker' category is practically empty",
+    "n": "<10",
+    "unit": "patients",
+    "status": "Gap",
+    "source": "nb01/smoking_level.csv",
+    "key": "mapping-10"
+   },
+   {
+    "input": "Smoking level",
+    "score": "QDiabetes",
+    "mapping": "'Other' (may be shisha / midwakh)",
+    "issue": "Not mapped, decision D7",
+    "n": 306.0,
+    "unit": "rows",
+    "status": "Decision pending",
+    "source": "ingest block, unmapped values",
+    "key": "mapping-11"
+   },
+   {
+    "input": "BMI",
+    "score": "QDiabetes, LPRS",
+    "mapping": "Observation 39156-5, else height 8302-2 + weight 3141-9, else Z68 band",
+    "issue": "BMI missing",
+    "n": 140.0,
+    "unit": "patients",
+    "status": "Works",
+    "source": "nb01/score_missing_reasons.csv",
+    "key": "mapping-12"
+   },
+   {
+    "input": "Sex",
+    "score": "QDiabetes, LPRS",
+    "mapping": "Patient.Gender_Code M / F",
+    "issue": "Not male / female ('U')",
+    "n": "<10",
+    "unit": "patients",
+    "status": "Works",
+    "source": "nb01/score_missing_reasons.csv",
+    "key": "mapping-13"
+   },
+   {
+    "input": "Family history of diabetes",
+    "score": "QDiabetes, LPRS",
+    "mapping": "FamilyHistory (SNOMED / ICD-10 / text) first-degree + Z83.3; present / absent",
+    "issue": "Share with a positive first-degree family history (C1: far higher, section 5)",
+    "n": 19.6,
+    "unit": "% of C2",
+    "status": "Works",
+    "source": "nb01/selection_effect_smd.csv family_history",
+    "key": "mapping-14"
+   },
+   {
+    "input": "Cardiovascular disease",
+    "score": "QDiabetes",
+    "mapping": "ICD-10 I20–I25, I50, I6x, G45; present / absent",
+    "issue": "Share with a CVD diagnosis",
+    "n": 16.9,
+    "unit": "% of C2",
+    "status": "Works",
+    "source": "nb00/framework_match.csv cvd",
+    "key": "mapping-15"
+   }
+  ],
+  "htn": [
+   {
+    "category": "Diagnosis and medication",
+    "n": 856.0,
+    "pct": 33.4,
+    "counted_by": "QDiabetes, LPRS, LRA 2010",
+    "key": "htn-01"
+   },
+   {
+    "category": "Diagnosis only",
+    "n": 328.0,
+    "pct": 12.8,
+    "counted_by": "QDiabetes, LPRS, LRA 2010",
+    "key": "htn-02"
+   },
+   {
+    "category": "Medication only",
+    "n": 88.0,
+    "pct": 3.4,
+    "counted_by": "QDiabetes, LPRS, LRA 2010",
+    "key": "htn-03"
+   },
+   {
+    "category": "Neither",
+    "n": 1292.0,
+    "pct": 50.4,
+    "counted_by": "none",
+    "key": "htn-04"
+   }
+  ],
+  "scores": [
+   {
+    "group": "Prediabetes",
+    "before": 2.63,
+    "now": 2.97,
+    "change": 0.34,
+    "key": "scores-01"
+   },
+   {
+    "group": "T2DM",
+    "before": 6.07,
+    "now": 6.41,
+    "change": 0.34,
+    "key": "scores-02"
+   }
+  ],
+  "smoking": [
+   {
+    "level": "Never",
+    "recorded_as": "never",
+    "n": 318.0,
+    "pct": 12.4,
+    "from_dx": 0.0,
+    "key": "smoking-01"
+   },
+   {
+    "level": "Ex-smoker",
+    "recorded_as": "ex",
+    "n": "<10",
+    "pct": "suppressed (<10)",
+    "from_dx": "<10",
+    "key": "smoking-02"
+   },
+   {
+    "level": "Light",
+    "recorded_as": "light",
+    "n": 26.0,
+    "pct": 1.0,
+    "from_dx": 0.0,
+    "key": "smoking-03"
+   },
+   {
+    "level": "Moderate",
+    "recorded_as": "moderate",
+    "n": 11.0,
+    "pct": 0.4,
+    "from_dx": 0.0,
+    "key": "smoking-04"
+   },
+   {
+    "level": "Moderate",
+    "recorded_as": "current, intensity not recorded (D7 → moderate)",
+    "n": "<10",
+    "pct": "suppressed (<10)",
+    "from_dx": "<10",
+    "key": "smoking-05"
+   },
+   {
+    "level": "Heavy",
+    "recorded_as": "heavy",
+    "n": 11.0,
+    "pct": 0.4,
+    "from_dx": 0.0,
+    "key": "smoking-06"
+   },
+   {
+    "level": "Missing",
+    "recorded_as": "no smoking record",
+    "n": 1248.0,
+    "pct": 48.7,
+    "from_dx": 0.0,
+    "key": "smoking-07"
+   },
+   {
+    "level": "Missing",
+    "recorded_as": "records present, none usable (unknown / unmapped, e.g. other)",
+    "n": 927.0,
+    "pct": 36.2,
+    "from_dx": 0.0,
+    "key": "smoking-08"
+   },
+   {
+    "level": "Missing",
+    "recorded_as": "undated records disagree (D28)",
+    "n": "<10",
+    "pct": "suppressed (<10)",
+    "from_dx": 0.0,
+    "key": "smoking-09"
+   }
+  ],
+  "framework": [
+   {
+    "variable": "Sex",
+    "source_field": "Patient.Gender_Code",
+    "route": "As requested",
+    "patients": "suppressed (<10 missing)",
+    "pct": "suppressed (<10)",
+    "status": "Match",
+    "reason": null,
+    "key": "framework-01"
+   },
+   {
+    "variable": "Age",
+    "source_field": "Patient.Age",
+    "route": "As requested",
+    "patients": 2600.0,
+    "pct": 100.0,
+    "status": "Match",
+    "reason": null,
+    "key": "framework-02"
+   },
+   {
+    "variable": "Ethnicity",
+    "source_field": "Patient.Nationality | Patient.EthnicGroup_Description",
+    "route": "Substitute field",
+    "patients": 267.0,
+    "pct": 10.3,
+    "status": "Partial",
+    "reason": "requested nationality not delivered; only ethnicity_raw has values; values for only 10.3% of patients (< 50%)",
+    "key": "framework-03"
+   },
+   {
+    "variable": "BMI",
+    "source_field": "Observation.ObservationValue (LOINC 39156-5 BMI; 8302-2 height + 3141-9 weight)",
+    "route": "As requested",
+    "patients": 2431.0,
+    "pct": 93.5,
+    "status": "Match",
+    "reason": null,
+    "key": "framework-04"
+   },
+   {
+    "variable": "Smoking",
+    "source_field": "SocialHistory.SocialHabitQty_Description",
+    "route": "As requested",
+    "patients": 381.0,
+    "pct": 14.7,
+    "status": "Partial",
+    "reason": "level seen in < 10 patients: ex; values for only 14.7% of patients (< 50%)",
+    "key": "framework-05"
+   },
+   {
+    "variable": "Family history of diabetes",
+    "source_field": "FamilyHistory.Diagnosis_Code",
+    "route": "Derived by the adapter",
+    "patients": 508.0,
+    "pct": 19.5,
+    "status": "Partial",
+    "reason": "62% of the records not in the requested system (ICD-10 / SNOMED code); values for only 19.5% of patients (< 50%)",
+    "key": "framework-06"
+   },
+   {
+    "variable": "Cardiovascular disease",
+    "source_field": "Diagnosis.Diagnosis_Code",
+    "route": "As requested",
+    "patients": 440.0,
+    "pct": 16.9,
+    "status": "Match",
+    "reason": null,
+    "key": "framework-07"
+   },
+   {
+    "variable": "Treated hypertension",
+    "source_field": "Diagnosis.Diagnosis_Code + Medication.DrugProduct_Code",
+    "route": "Derived by the adapter",
+    "patients": 1272.0,
+    "pct": 48.9,
+    "status": "Partial",
+    "reason": "drug: 100% of the rows not in the requested system (ATC)",
+    "key": "framework-08"
+   }
+  ],
+  "quality": [
+   {
+    "check": "BMI",
+    "unit": "kg/m²",
+    "range": "12–80",
+    "patients": 301.0,
+    "p5": 21.0,
+    "median": 27.0,
+    "p95": 38.0,
+    "rows_out": 14.0,
+    "patients_out": 13.0,
+    "note": "A value outside 12–80 is taken as an entry error and skipped. The patient's latest value inside the range is used; if there is none, BMI is computed from height and weight, then taken from a Z68 code",
+    "key": "quality-01"
+   },
+   {
+    "check": "Height",
+    "unit": "cm",
+    "range": "120–230",
+    "patients": 2435.0,
+    "p5": 151.0,
+    "median": 165.0,
+    "p95": 182.0,
+    "rows_out": 384.0,
+    "patients_out": 182.0,
+    "note": "Mostly below 120 cm (376 rows), skipped; 42 rows given in metres, converted. Latest value inside the range from the full history goes into BMI",
+    "key": "quality-02"
+   },
+   {
+    "check": "Weight",
+    "unit": "kg",
+    "range": "25–350",
+    "patients": 2484.0,
+    "p5": 55.0,
+    "median": 78.0,
+    "p95": 112.0,
+    "rows_out": 211.0,
+    "patients_out": 94.0,
+    "note": "A value outside 25–350 is skipped; the latest value inside the range goes into BMI from height and weight",
+    "key": "quality-03"
+   },
+   {
+    "check": "HbA1c (4548-4)",
+    "unit": "%",
+    "range": "—",
+    "patients": 208.0,
+    "p5": 4.99,
+    "median": 5.78,
+    "p95": 8.68,
+    "rows_out": null,
+    "patients_out": null,
+    "note": "Unit %, no mmol/mol seen",
+    "key": "quality-04"
+   },
+   {
+    "check": "Fasting glucose (1558-6)",
+    "unit": "mg/dL",
+    "range": "—",
+    "patients": 727.0,
+    "p5": 81.1,
+    "median": 101.0,
+    "p95": 181.0,
+    "rows_out": null,
+    "patients_out": null,
+    "note": "Unit mg/dL; 209 rows spelled MG/DL normalised",
+    "key": "quality-05"
+   }
+  ],
+  "unusable": [
+   {
+    "item": "Vital rows with an empty value",
+    "variable": "BMI / height / weight",
+    "rows": 1107.0,
+    "unit": "rows",
+    "action": "Dropped and counted",
+    "key": "unusable-01"
+   },
+   {
+    "item": "Vital rows with a placeholder ('0' or '-')",
+    "variable": "BMI / height / weight",
+    "rows": 2441.0,
+    "unit": "rows",
+    "action": "Dropped and counted",
+    "key": "unusable-02"
+   },
+   {
+    "item": "Smoking rows 'Other'",
+    "variable": "Smoking",
+    "rows": 306.0,
+    "unit": "rows",
+    "action": "Not mapped (decision D7)",
+    "key": "unusable-03"
+   },
+   {
+    "item": "Smoking records present, none usable",
+    "variable": "Smoking",
+    "rows": 927.0,
+    "unit": "patients",
+    "action": "Counted as missing",
+    "key": "unusable-04"
+   },
+   {
+    "item": "Undated smoking records that disagree",
+    "variable": "Smoking",
+    "rows": "<10",
+    "unit": "patients",
+    "action": "Counted as missing (D28)",
+    "key": "unusable-05"
+   },
+   {
+    "item": "Lab results that are not numbers",
+    "variable": "HbA1c / glucose",
+    "rows": 10.0,
+    "unit": "rows",
+    "action": "Dropped and counted",
+    "key": "unusable-06"
+   },
+   {
+    "item": "Diagnoses without a date",
+    "variable": "CVD / hypertension",
+    "rows": 36.0,
+    "unit": "rows",
+    "action": "Dropped and counted",
+    "key": "unusable-07"
+   },
+   {
+    "item": "Diagnoses dated exactly 1970-01-01",
+    "variable": "Diagnoses",
+    "rows": 0,
+    "unit": "rows",
+    "action": "Counted, kept (decision D31)",
+    "key": "unusable-08"
+   },
+   {
+    "item": "Medications without a date",
+    "variable": "Hypertension treatment",
+    "rows": "<10",
+    "unit": "rows",
+    "action": "Dropped and counted",
+    "key": "unusable-09"
+   },
+   {
+    "item": "Sex 'U'",
+    "variable": "Sex",
+    "rows": "<10",
+    "unit": "patients",
+    "action": "Score not computed",
+    "key": "unusable-10"
+   }
+  ],
+  "coding": [
+   {
+    "source": "Diagnosis_Code",
+    "expected": "ICD-10",
+    "arrived": "ICD-10-CM with dots (E11.9, R73.03, I10)",
+    "count": 89.0,
+    "count_label": "cells with 2 codes, split",
+    "ok": "Yes",
+    "key": "coding-01"
+   },
+   {
+    "source": "Diagnosis_Code",
+    "expected": "ICD-10",
+    "arrived": "Trailing dot",
+    "count": "<10",
+    "count_label": "codes cleaned",
+    "ok": "Yes",
+    "key": "coding-02"
+   },
+   {
+    "source": "LabResultItem.TestItemCode_Code",
+    "expected": "LOINC",
+    "arrived": "LOINC 1558-6, 4548-4, 1521-4",
+    "count": null,
+    "count_label": "",
+    "ok": "Yes",
+    "key": "coding-03"
+   },
+   {
+    "source": "Observation.ObservationCode_Code",
+    "expected": "LOINC",
+    "arrived": "LOINC 39156-5, 8302-2, 3141-9 only",
+    "count": null,
+    "count_label": "",
+    "ok": "Yes",
+    "key": "coding-04"
+   },
+   {
+    "source": "Medication.DrugProduct_Code",
+    "expected": "INN / ATC",
+    "arrived": "DDC product code (Dubai Drug Code)",
+    "count": 21217.0,
+    "count_label": "rows",
+    "ok": "Mapped: DDC → ingredient (INN) → ATC",
+    "key": "coding-05"
+   },
+   {
+    "source": "Medication.DrugProduct_Code",
+    "expected": "INN / ATC",
+    "arrived": "DDC scientific code",
+    "count": 3109.0,
+    "count_label": "rows",
+    "ok": "Mapped",
+    "key": "coding-06"
+   },
+   {
+    "source": "Medication.DrugProduct_Code",
+    "expected": "INN / ATC",
+    "arrived": "6-digit DDC stem",
+    "count": 139.0,
+    "count_label": "rows",
+    "ok": "Mapped",
+    "key": "coding-07"
+   },
+   {
+    "source": "Medication.DrugProduct_Code",
+    "expected": "INN / ATC",
+    "arrived": "VMP<id>,<dose>,<form> (no reference list)",
+    "count": 122.0,
+    "count_label": "rows",
+    "ok": "By drug name",
+    "key": "coding-08"
+   },
+   {
+    "source": "Medication.DrugProduct_Code",
+    "expected": "INN / ATC",
+    "arrived": "No code",
+    "count": 35.0,
+    "count_label": "rows",
+    "ok": "By drug name",
+    "key": "coding-09"
+   },
+   {
+    "source": "FamilyHistory.Diagnosis_Code",
+    "expected": "SNOMED / ICD-10",
+    "arrived": "SNOMED",
+    "count": 223.0,
+    "count_label": "rows",
+    "ok": "Yes",
+    "key": "coding-10"
+   },
+   {
+    "source": "FamilyHistory.Diagnosis_Code",
+    "expected": "SNOMED / ICD-10",
+    "arrived": "ICD-10",
+    "count": 33.0,
+    "count_label": "rows",
+    "ok": "Yes",
+    "key": "coding-11"
+   },
+   {
+    "source": "FamilyHistory.Diagnosis_Code",
+    "expected": "SNOMED / ICD-10",
+    "arrived": "Text only (local codes)",
+    "count": 424.0,
+    "count_label": "rows",
+    "ok": "By description text",
+    "key": "coding-12"
+   }
+  ],
+  "missing": [
+   {
+    "key": "qdiabetes|smoking_missing",
+    "cohort": "c2",
+    "score": "qdiabetes",
+    "reason": "smoking_missing",
+    "n": 2183.0,
+    "pct": 85.1
+   },
+   {
+    "key": "qdiabetes|bmi_missing",
+    "cohort": "c2",
+    "score": "qdiabetes",
+    "reason": "bmi_missing",
+    "n": 140.0,
+    "pct": 5.5
+   },
+   {
+    "key": "qdiabetes|sex",
+    "cohort": "c2",
+    "score": "qdiabetes",
+    "reason": "sex",
+    "n": "<10",
+    "pct": "suppressed (<10)"
+   },
+   {
+    "key": "lrs|ethnicity",
+    "cohort": "c2",
+    "score": "lrs",
+    "reason": "ethnicity",
+    "n": 2564.0,
+    "pct": 100.0
+   },
+   {
+    "key": "lrs|bmi_missing",
+    "cohort": "c2",
+    "score": "lrs",
+    "reason": "bmi_missing",
+    "n": 140.0,
+    "pct": 5.5
+   },
+   {
+    "key": "lrs|sex",
+    "cohort": "c2",
+    "score": "lrs",
+    "reason": "sex",
+    "n": "<10",
+    "pct": "suppressed (<10)"
+   }
+  ],
+  "joint": [
+   {
+    "key": "nat|all",
+    "source_label": "Nationality (default)",
+    "group": "all",
+    "n": 2564.0,
+    "joint_core7_n": 372.0,
+    "joint_core7_pct": 14.5,
+    "joint_core8_n": 0.0,
+    "joint_core8_pct": 0.0,
+    "joint_lrs_n": 0.0,
+    "joint_lrs_pct": 0.0
+   },
+   {
+    "key": "nat|Prediabetes",
+    "source_label": "Nationality (default)",
+    "group": "Prediabetes",
+    "n": 1162.0,
+    "joint_core7_n": 211.0,
+    "joint_core7_pct": 18.2,
+    "joint_core8_n": 0.0,
+    "joint_core8_pct": 0.0,
+    "joint_lrs_n": 0.0,
+    "joint_lrs_pct": 0.0
+   },
+   {
+    "key": "nat|T2DM",
+    "source_label": "Nationality (default)",
+    "group": "T2DM",
+    "n": 1402.0,
+    "joint_core7_n": 161.0,
+    "joint_core7_pct": 11.5,
+    "joint_core8_n": 0.0,
+    "joint_core8_pct": 0.0,
+    "joint_lrs_n": 0.0,
+    "joint_lrs_pct": 0.0
+   },
+   {
+    "key": "eth|all",
+    "source_label": "NABIDH EthnicGroup field",
+    "group": "all",
+    "n": 2564.0,
+    "joint_core7_n": 372.0,
+    "joint_core7_pct": 14.5,
+    "joint_core8_n": 31.0,
+    "joint_core8_pct": 1.2,
+    "joint_lrs_n": 237.0,
+    "joint_lrs_pct": 9.2
+   }
+  ],
+  "selection": [
+   {
+    "variable": "Age (mean, years)",
+    "kind": "mean",
+    "c1": 46.145,
+    "c2": 49.723,
+    "smd": -0.331,
+    "imbalanced": "Yes",
+    "key": "selection-01"
+   },
+   {
+    "variable": "BMI (mean)",
+    "kind": "mean",
+    "c1": 28.254,
+    "c2": 28.524,
+    "smd": -0.048,
+    "imbalanced": "No",
+    "key": "selection-02"
+   },
+   {
+    "variable": "Male",
+    "kind": "share",
+    "c1": 40.0,
+    "c2": 60.7,
+    "smd": -0.422,
+    "imbalanced": "Yes",
+    "key": "selection-03"
+   },
+   {
+    "variable": "T2DM (vs prediabetes)",
+    "kind": "share",
+    "c1": 47.0,
+    "c2": 54.7,
+    "smd": -0.155,
+    "imbalanced": "Yes",
+    "key": "selection-04"
+   },
+   {
+    "variable": "Positive family history of diabetes",
+    "kind": "share",
+    "c1": 98.7,
+    "c2": 19.6,
+    "smd": 2.71,
+    "imbalanced": "Yes",
+    "key": "selection-05"
+   },
+   {
+    "variable": "Cardiovascular disease",
+    "kind": "share",
+    "c1": 19.3,
+    "c2": 17.2,
+    "smd": 0.057,
+    "imbalanced": "No",
+    "key": "selection-06"
+   },
+   {
+    "variable": "Hypertension diagnosis",
+    "kind": "share",
+    "c1": 38.5,
+    "c2": 46.2,
+    "smd": -0.157,
+    "imbalanced": "Yes",
+    "key": "selection-07"
+   },
+   {
+    "variable": "Antihypertensive drug",
+    "kind": "share",
+    "c1": 33.1,
+    "c2": 36.8,
+    "smd": -0.078,
+    "imbalanced": "No",
+    "key": "selection-08"
+   },
+   {
+    "variable": "Current smoker",
+    "kind": "share",
+    "c1": 13.2,
+    "c2": 2.2,
+    "smd": 0.422,
+    "imbalanced": "Yes",
+    "key": "selection-09"
+   },
+   {
+    "variable": "Diabetes drug (A10)",
+    "kind": "share",
+    "c1": 47.4,
+    "c2": 43.2,
+    "smd": 0.084,
+    "imbalanced": "No",
+    "key": "selection-10"
+   }
+  ],
+  "lprs_scen": [
+   {
+    "scenario": "White",
+    "n": 2564.0,
+    "n_computable": 2422.0,
+    "pct_computable": 94.5,
+    "median": 4.79,
+    "p25": 4.24,
+    "p75": 5.38,
+    "key": "lprs_scen-01"
+   },
+   {
+    "scenario": "Other",
+    "n": 2564.0,
+    "n_computable": 2422.0,
+    "pct_computable": 94.5,
+    "median": 5.54,
+    "p25": 5.0,
+    "p75": 6.13,
+    "key": "lprs_scen-02"
+   }
+  ],
+  "sweep": [
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 1.0,
+    "threshold_label": "10-year risk ≥ 1%",
+    "n_computable": 372.0,
+    "n_flagged": 323.0,
+    "sens": 86.8,
+    "ci_low": 83.0,
+    "ci_high": 89.9,
+    "key": "sweep-01"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 2.5,
+    "threshold_label": "10-year risk ≥ 2.5%",
+    "n_computable": 372.0,
+    "n_flagged": 246.0,
+    "sens": 66.1,
+    "ci_low": 61.2,
+    "ci_high": 70.8,
+    "key": "sweep-02"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 5.0,
+    "threshold_label": "10-year risk ≥ 5%",
+    "n_computable": 372.0,
+    "n_flagged": 164.0,
+    "sens": 44.1,
+    "ci_low": 39.1,
+    "ci_high": 49.2,
+    "key": "sweep-03"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 7.5,
+    "threshold_label": "10-year risk ≥ 7.5%",
+    "n_computable": 372.0,
+    "n_flagged": 122.0,
+    "sens": 32.8,
+    "ci_low": 28.2,
+    "ci_high": 37.7,
+    "key": "sweep-04"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 10.0,
+    "threshold_label": "10-year risk ≥ 10%",
+    "n_computable": 372.0,
+    "n_flagged": 88.0,
+    "sens": 23.7,
+    "ci_low": 19.6,
+    "ci_high": 28.2,
+    "key": "sweep-05"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 15.0,
+    "threshold_label": "10-year risk ≥ 15%",
+    "n_computable": 372.0,
+    "n_flagged": 49.0,
+    "sens": 13.2,
+    "ci_low": 10.1,
+    "ci_high": 17.0,
+    "key": "sweep-06"
+   },
+   {
+    "score": "QDiabetes",
+    "series": "qdiabetes",
+    "threshold": 20.0,
+    "threshold_label": "10-year risk ≥ 20%",
+    "n_computable": 372.0,
+    "n_flagged": 30.0,
+    "sens": 8.1,
+    "ci_low": 5.7,
+    "ci_high": 11.3,
+    "key": "sweep-07"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 4.0,
+    "threshold_label": "score ≥ 4",
+    "n_computable": 2422.0,
+    "n_flagged": 2054.0,
+    "sens": 84.8,
+    "ci_low": 83.3,
+    "ci_high": 86.2,
+    "key": "sweep-08"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 4.5,
+    "threshold_label": "score ≥ 4.5",
+    "n_computable": 2422.0,
+    "n_flagged": 1547.0,
+    "sens": 63.9,
+    "ci_low": 61.9,
+    "ci_high": 65.8,
+    "key": "sweep-09"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 5.0,
+    "threshold_label": "score ≥ 5",
+    "n_computable": 2422.0,
+    "n_flagged": 987.0,
+    "sens": 40.8,
+    "ci_low": 38.8,
+    "ci_high": 42.7,
+    "key": "sweep-10"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 5.5,
+    "threshold_label": "score ≥ 5.5",
+    "n_computable": 2422.0,
+    "n_flagged": 511.0,
+    "sens": 21.1,
+    "ci_low": 19.5,
+    "ci_high": 22.8,
+    "key": "sweep-11"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 6.0,
+    "threshold_label": "score ≥ 6",
+    "n_computable": 2422.0,
+    "n_flagged": 203.0,
+    "sens": 8.4,
+    "ci_low": 7.3,
+    "ci_high": 9.6,
+    "key": "sweep-12"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 6.5,
+    "threshold_label": "score ≥ 6.5",
+    "n_computable": 2422.0,
+    "n_flagged": 73.0,
+    "sens": 3.0,
+    "ci_low": 2.4,
+    "ci_high": 3.8,
+    "key": "sweep-13"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 7.0,
+    "threshold_label": "score ≥ 7",
+    "n_computable": 2422.0,
+    "n_flagged": 18.0,
+    "sens": 0.7,
+    "ci_low": 0.5,
+    "ci_high": 1.2,
+    "key": "sweep-14"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as White",
+    "series": "lprs_white",
+    "threshold": 7.5,
+    "threshold_label": "score ≥ 7.5",
+    "n_computable": 2422.0,
+    "n_flagged": "<10",
+    "sens": "suppressed (<10)",
+    "ci_low": "suppressed (<10)",
+    "ci_high": "suppressed (<10)",
+    "key": "sweep-15"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 4.0,
+    "threshold_label": "score ≥ 4",
+    "n_computable": 2422.0,
+    "n_flagged": 2396.0,
+    "sens": 98.9,
+    "ci_low": 98.4,
+    "ci_high": 99.3,
+    "key": "sweep-16"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 4.5,
+    "threshold_label": "score ≥ 4.5",
+    "n_computable": 2422.0,
+    "n_flagged": 2237.0,
+    "sens": 92.4,
+    "ci_low": 91.2,
+    "ci_high": 93.4,
+    "key": "sweep-17"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 5.0,
+    "threshold_label": "score ≥ 5",
+    "n_computable": 2422.0,
+    "n_flagged": 1816.0,
+    "sens": 75.0,
+    "ci_low": 73.2,
+    "ci_high": 76.7,
+    "key": "sweep-18"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 5.5,
+    "threshold_label": "score ≥ 5.5",
+    "n_computable": 2422.0,
+    "n_flagged": 1262.0,
+    "sens": 52.1,
+    "ci_low": 50.1,
+    "ci_high": 54.1,
+    "key": "sweep-19"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 6.0,
+    "threshold_label": "score ≥ 6",
+    "n_computable": 2422.0,
+    "n_flagged": 734.0,
+    "sens": 30.3,
+    "ci_low": 28.5,
+    "ci_high": 32.2,
+    "key": "sweep-20"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 6.5,
+    "threshold_label": "score ≥ 6.5",
+    "n_computable": 2422.0,
+    "n_flagged": 338.0,
+    "sens": 14.0,
+    "ci_low": 12.6,
+    "ci_high": 15.4,
+    "key": "sweep-21"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 7.0,
+    "threshold_label": "score ≥ 7",
+    "n_computable": 2422.0,
+    "n_flagged": 123.0,
+    "sens": 5.1,
+    "ci_low": 4.3,
+    "ci_high": 6.0,
+    "key": "sweep-22"
+   },
+   {
+    "score": "LPRS · unknown ethnicity as Other",
+    "series": "lprs_other",
+    "threshold": 7.5,
+    "threshold_label": "score ≥ 7.5",
+    "n_computable": 2422.0,
+    "n_flagged": 33.0,
+    "sens": 1.4,
+    "ci_low": 1.0,
+    "ci_high": 1.9,
+    "key": "sweep-23"
+   }
+  ],
+  "score_completeness": [
+   {
+    "score": "QDiabetes",
+    "input": "Sex",
+    "needed": "Required",
+    "complete_n": "suppressed (<10 missing)",
+    "complete_pct": "suppressed (<10)",
+    "kind": "var",
+    "key": "score_completeness-01"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Age (25–84)",
+    "needed": "Required",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-02"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Ethnicity",
+    "needed": "Not required: unknown → reference group",
+    "complete_n": 0.0,
+    "complete_pct": 0.0,
+    "kind": "var",
+    "key": "score_completeness-03"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "BMI",
+    "needed": "Required",
+    "complete_n": 2424.0,
+    "complete_pct": 94.5,
+    "kind": "var",
+    "key": "score_completeness-04"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Smoking",
+    "needed": "Required",
+    "complete_n": 381.0,
+    "complete_pct": 14.9,
+    "kind": "var",
+    "key": "score_completeness-05"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Family history of diabetes",
+    "needed": "Present / absent: 100% by definition",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-06"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Cardiovascular disease",
+    "needed": "Present / absent: 100% by definition",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-07"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "Treated hypertension (diagnosis or drug, D36)",
+    "needed": "Present / absent: 100% by definition",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-08"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "All inputs, ethnicity as reference group = score computed",
+    "needed": "Joint",
+    "complete_n": 372.0,
+    "complete_pct": 14.5,
+    "kind": "joint",
+    "key": "score_completeness-09"
+   },
+   {
+    "score": "QDiabetes",
+    "input": "All inputs, ethnicity required (KPI 'Joint Completeness – QDiabetes')",
+    "needed": "Joint",
+    "complete_n": 0.0,
+    "complete_pct": 0.0,
+    "kind": "joint",
+    "key": "score_completeness-10"
+   },
+   {
+    "score": "LPRS",
+    "input": "Age",
+    "needed": "Required",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-11"
+   },
+   {
+    "score": "LPRS",
+    "input": "Sex",
+    "needed": "Required",
+    "complete_n": "suppressed (<10 missing)",
+    "complete_pct": "suppressed (<10)",
+    "kind": "var",
+    "key": "score_completeness-12"
+   },
+   {
+    "score": "LPRS",
+    "input": "Ethnicity · nationality (default)",
+    "needed": "Required",
+    "complete_n": 0.0,
+    "complete_pct": 0.0,
+    "kind": "var",
+    "key": "score_completeness-13"
+   },
+   {
+    "score": "LPRS",
+    "input": "Ethnicity · NABIDH EthnicGroup field",
+    "needed": "Required",
+    "complete_n": 266.0,
+    "complete_pct": 10.4,
+    "kind": "var",
+    "key": "score_completeness-14"
+   },
+   {
+    "score": "LPRS",
+    "input": "BMI",
+    "needed": "Required",
+    "complete_n": 2424.0,
+    "complete_pct": 94.5,
+    "kind": "var",
+    "key": "score_completeness-15"
+   },
+   {
+    "score": "LPRS",
+    "input": "Family history of diabetes",
+    "needed": "Present / absent: 100% by definition",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-16"
+   },
+   {
+    "score": "LPRS",
+    "input": "Hypertension (diagnosis or drug, D36)",
+    "needed": "Present / absent: 100% by definition",
+    "complete_n": 2564.0,
+    "complete_pct": 100.0,
+    "kind": "var",
+    "key": "score_completeness-17"
+   },
+   {
+    "score": "LPRS",
+    "input": "All inputs · ethnicity from nationality = score computed (KPI 'Joint Completeness – LRS')",
+    "needed": "Joint",
+    "complete_n": 0.0,
+    "complete_pct": 0.0,
+    "kind": "joint",
+    "key": "score_completeness-18"
+   },
+   {
+    "score": "LPRS",
+    "input": "All inputs · ethnicity from the EthnicGroup field",
+    "needed": "Joint",
+    "complete_n": 237.0,
+    "complete_pct": 9.2,
+    "kind": "joint",
+    "key": "score_completeness-19"
+   }
+  ]
+ }
+}

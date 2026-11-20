@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C2 End-of-Day Report</title>
+<style>
+:root {
+  --cds-rem-scale: 1;
+  --cds-gap-xs: .5rem; --cds-gap-sm: .75rem; --cds-gap-md: 1rem; --cds-gap-lg: 1.75rem; --cds-gap-xl: 2.5rem;
+  --cds-pad-sm: .5rem; --cds-pad-md: .75rem; --cds-pad-lg: 1rem; --cds-radius: .5rem;
+  --cds-font-size-caption: .75rem; --cds-font-size-body: .875rem; --cds-font-size-heading: .9375rem;
+  --cds-font-size-title: 1.375rem; --cds-font-weight-medium: 500;
+  --font-anthropic-sans: "Anthropic Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-anthropic-serif: "Anthropic Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --page-bg: #faf9f5; --color-panel: #ffffff; --color-fg: #1a1a19; --color-fg-muted: #6d6b67;
+  --color-border-line: rgb(31 30 29 / 0.12); --cds-border: rgb(31 30 29 / 0.12); --cds-chart-grid: rgb(31 30 29 / 0.1);
+  --color-ok: #3b7d23; --color-bad: #b53333; --color-warn: #a35f00;
+  --cds-surface-popover: #ffffff; --cds-shadow-popover: 0 8px 24px #0000001f, 0 2px 6px #00000014;
+  --cds-text-secondary: #6d6b67;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page-bg: #1a1a19; --color-panel: #20201f; --color-fg: #f0efec; --color-fg-muted: #898781;
+    --color-border-line: rgb(255 255 255 / 0.1); --cds-border: rgb(255 255 255 / 0.1); --cds-chart-grid: rgb(255 255 255 / 0.1);
+    --color-ok: #53c556; --color-bad: #fa8080; --color-warn: #e49c06;
+    --cds-surface-popover: #303030; --cds-shadow-popover: 0 8px 24px #00000052, 0 2px 6px #0003;
+    --cds-text-secondary: rgb(255 255 255 / 0.57);
+    color-scheme: dark;
+  }
+}
+html, body { margin: 0; background: var(--page-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans);
+  font-size: var(--cds-font-size-body); -webkit-text-size-adjust: 100%; }
+#dash-root { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; box-sizing: border-box; }
+.report-source { max-width: 1120px; margin: 0 auto; padding: 16px 16px 0; box-sizing: border-box;
+  font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.5; }
+a { color: inherit; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+</head>
+<body>
+<p class="report-source">Exported from the live C2 report on 20 Nov 2026. Source: VM COPY block <code>logs/enclave/2026-11-20.log</code>, <code>run all</code> 20 Nov 2026 10:51 UTC, bundle 72efc39be6ba, ingest 1.4.2. Aggregates only; counts under 10 show as "&lt;10". Charts load d3 from cdnjs; offline, text and tables still show.</p>
+<div id="dash-root">
+<style>
+.c1r { display: flex; flex-direction: column; gap: var(--cds-gap-xl); color: var(--color-fg); font-family: var(--font-anthropic-sans); }
+.c1r .c1-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.c1r .c1-kicker { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .04em; margin: 0 0 var(--cds-gap-xs); }
+.c1r .c1-lede { margin: var(--cds-gap-sm) 0 0; max-width: 76ch; line-height: 1.6; }
+.c1r .c1-lede b, .c1r .c1-p b { font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+.c1r .c1-sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+.c1r .c1-sec > h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; text-wrap: balance; }
+.c1r .c1-sub h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0 0 var(--cds-gap-xs); }
+.c1r .c1-p { margin: 0; max-width: 80ch; line-height: 1.55; }
+.c1r .c1-note { margin: var(--cds-gap-xs) 0 0; max-width: 80ch; line-height: 1.5; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.c1r .c1-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--cds-gap-lg); align-items: start; }
+.c1r .c1-grid2 > * { min-width: 0; }
+.c1r .c1-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); }
+.c1r .c1-flag { border-left: 3px solid var(--color-warn); padding: var(--cds-pad-sm) var(--cds-pad-md); background: var(--color-panel); border-radius: var(--cds-radius); max-width: 80ch; line-height: 1.5; margin: 0; }
+.c1r .c1-flag ul { margin: var(--cds-gap-xs) 0 0; padding-left: 1.2em; }
+.c1r .c1-wrap { overflow-x: auto; }
+.c1r table.c1-t { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.c1r .c1-t th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); border-bottom: 1px solid var(--color-border-line); padding: 6px 8px; white-space: nowrap; }
+.c1r .c1-t td { border-bottom: 1px solid var(--color-border-line); padding: 6px 8px; vertical-align: top; line-height: 1.4; }
+.c1r .c1-t .num { text-align: right; white-space: nowrap; }
+.c1r .c1-t td.c1-msg { color: var(--color-fg-muted); }
+.c1r .c1-t td.c1-wide { min-width: 220px; }
+.c1r .c1-t tr.c1-joint td { font-weight: var(--cds-font-weight-medium); border-top: 2px solid var(--color-border-line); }
+.c1r .c1-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: var(--cds-font-size-caption); white-space: nowrap; }
+.c1r .c1-chip.ok { color: var(--color-ok); }
+.c1r .c1-chip.bad { color: var(--color-bad); }
+.c1r .c1-chip.warn { color: var(--color-warn); }
+.c1r .c1-chip.muted { color: var(--color-fg-muted); }
+.c1r .c1-chart { position: relative; min-height: 240px; }
+.c1r .c1-chart svg { display: block; overflow: visible; }
+.c1r .c1-chart text { fill: var(--cds-text-secondary); font-size: 11px; font-family: var(--font-anthropic-sans); }
+.c1r .c1-chart .c1-lab { fill: var(--color-fg); font-size: 12px; }
+.c1r .c1-chart .c1-val { fill: var(--color-fg); font-size: 12px; font-variant-numeric: tabular-nums; }
+.c1r .c1-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); box-shadow: var(--cds-shadow-popover); border-radius: var(--cds-radius); padding: 6px 8px; font-size: var(--cds-font-size-caption); color: var(--color-fg); max-width: 280px; z-index: 3; line-height: 1.4; }
+.c1r .c1-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.c1r .c1-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.c1r code { font-size: .92em; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 4px; padding: 1px 5px; }
+.c1r details.c1-defs summary { cursor: pointer; color: var(--color-fg-muted); }
+.c1r details.c1-defs ul { margin: var(--cds-gap-sm) 0 0; padding-left: 1.2em; line-height: 1.55; max-width: 80ch; }
+</style>
+
+<div class="c1r">
+  <header class="c1-head" id="summary">
+    <p class="c1-kicker">DHA HEALTH DATA SANDBOX · PHASE 1 · COHORT C2</p>
+    <h1>C2 End-of-Day Report</h1>
+    <p class="c1-lede" data-read lang="en">C2 is a random sample of the same known type 2 diabetes and prediabetes patients, with no completeness requirement: the realistic picture of NABIDH data. The question is still whether the pipeline works, not how good the scores are. Of <b data-draw="v" data-source="funnel" data-field="n" data-where="step=2" data-fmt="int">—</b> known positives, QDiabetes ran for <b data-draw="v" data-source="funnel" data-field="n" data-where="step=3" data-fmt="int">—</b> (<b data-draw="v" data-source="funnel" data-field="pct" data-where="step=3" data-fmt="pct">—</b>). Smoking decides it: QDiabetes needs it, and it is missing for <b data-draw="v" data-source="missing" data-field="pct" data-where="key=qdiabetes%7Csmoking_missing" data-fmt="pct">—</b> of C2. LPRS ran for <b data-draw="v" data-source="funnel" data-field="n" data-where="step=5" data-fmt="int">—</b>: it needs ethnicity, and ethnicity did not arrive. Positive family history is <b data-draw="v" data-source="selection" data-field="c2" data-where="key=selection-05" data-fmt="pct">—</b> here, against <b data-draw="v" data-source="selection" data-field="c1" data-where="key=selection-05" data-fmt="pct">—</b> in C1 (section 5). Scored with unknown ethnicity as White or as Other, LPRS runs for <b data-draw="v" data-source="lprs_scen" data-field="pct_computable" data-where="key=lprs_scen-01" data-fmt="pct">—</b> of C2 (BMI is the rest); what each score flags at each threshold is in section 6.</p>
+    <p class="c1-note">From the enclave run of 20 November 2026, 10:51 UTC: bundle 72efc39be6ba, ingest 1.4.2, all four steps exit 0. Treated hypertension follows decision D36 (diagnosis or drug, for QDiabetes and LPRS).</p>
+  </header>
+
+  <section class="c1-sec" id="computability">
+    <h2>1 · Can the scores run?</h2>
+    <p class="c1-p" data-read lang="en">From delivered patients to patients each score was produced for. The other colour is the same run with ethnicity read from the NABIDH EthnicGroup field instead of nationality, from NB1's ethnicity source comparison.</p>
+    <div class="c1-legend" id="funnel-legend">
+      <span><i data-swatch="0"></i>Ethnicity from nationality (default)</span>
+      <span><i data-swatch="2"></i>Ethnicity from the NABIDH EthnicGroup field</span>
+      <span><i data-swatch="3"></i>Scenario: unknown ethnicity scored as White or Other</span>
+    </div>
+    <div class="c1-chart" id="funnel-chart" data-draw="funnel-chart" data-source="funnel"></div>
+    <div class="c1-sub" id="mapping">
+      <h3>Each score input: how it is mapped, and what went wrong</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="mapping" data-row-key="key">
+          <thead><tr><th data-field="input">Input</th><th data-field="score">Score</th><th data-field="mapping">Mapping</th><th data-field="issue">Issue</th><th class="num" data-field="n">Value</th><th data-field="unit">Unit</th><th data-field="status">Status</th></tr></thead>
+          <tbody data-draw="mapping-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">For present / absent inputs (family history, cardiovascular disease, hypertension) the value is the share of C2 with the condition, not a completeness figure.</p>
+    </div>
+    <div class="c1-grid2">
+      <div class="c1-sub" id="htn">
+        <h3>Treated hypertension: diagnosis, drug, or both</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="htn" data-row-key="key">
+            <thead><tr><th data-field="category">C2 patients with</th><th class="num" data-field="n">Patients</th><th class="num" data-field="pct">%</th><th data-field="counted_by">Counted as treated by</th></tr></thead>
+            <tbody data-draw="htn-rows"></tbody>
+          </table>
+        </div>
+        <p class="c1-note">Decision D36 (20 November): QDiabetes and LPRS count a hypertension diagnosis or an antihypertensive drug. The published definitions are narrower: QDiabetes-2018 needs both, LPRS (Gray 2012) the drug only. Both stay available as sensitivity runs. LRA 2010 is the older Leicester assessment, for reference.</p>
+      </div>
+      <div class="c1-sub" id="smoking">
+        <h3>Smoking level as QDiabetes reads it</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="smoking" data-row-key="key">
+            <thead><tr><th data-field="level">Level</th><th data-field="recorded_as">Recorded as</th><th class="num" data-field="n">Patients</th><th class="num" data-field="pct">%</th><th class="num" data-field="from_dx">From a diagnosis code</th></tr></thead>
+            <tbody data-draw="smoking-rows"></tbody>
+          </table>
+        </div>
+        <p class="c1-note">SocialHistory has no ex-smoker value, so that level comes only from a diagnosis code. "Current, intensity not recorded" is set to moderate (decision D7).</p>
+      </div>
+    </div>
+    <div class="c1-sub" id="scores">
+      <h3>QDiabetes 10-year risk in C2 (median): what D36 changed</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="scores" data-row-key="key">
+          <thead><tr><th data-field="group">Group</th><th class="num" data-field="before">Diagnosis and drug (09:56 run)</th><th class="num" data-field="now">Diagnosis or drug (D36, from 10:25)</th><th class="num" data-field="change">Change, points</th></tr></thead>
+          <tbody data-draw="scores-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">Same data, same patients; only the hypertension rule differs. The <b data-draw="v" data-source="mapping" data-field="n" data-where="key=mapping-07" data-fmt="pct">—</b> of C2 with a diagnosis or a drug alone now get the hypertension term, so their risk rises. Risk is shown to describe the pipeline, not to judge the score: C2 holds known positives only.</p>
+    </div>
+  </section>
+
+  <section class="c1-sec" id="completeness">
+    <h2>2 · Data Completeness (KPI, target ≥ 90%, owner DHA)</h2>
+    <p class="c1-p" data-read lang="en">C2 has no completeness requirement, so this is how full the data really is: which variables are missing, and which are filled but not usable.</p>
+    <div class="c1-wrap">
+      <table class="c1-t" data-source="kpi" data-row-key="key">
+        <thead><tr><th data-field="kpi">KPI</th><th data-field="target">Target</th><th data-field="actual">Actual (today's KPI run)</th><th data-field="met">Status</th><th data-field="role">What it means for C2</th></tr></thead>
+        <tbody data-draw="kpi-completeness"></tbody>
+      </table>
+    </div>
+    <p class="c1-p" data-read lang="en">The KPI takes the weakest of the 8 core variables. Ethnicity is 0%, so the KPI is 0%. Without ethnicity the weakest is smoking at <b data-draw="v" data-source="completeness" data-field="complete_pct" data-where="key=completeness-05" data-fmt="pct">—</b>, and all 7 other variables are complete together for <b data-draw="v" data-source="funnel" data-field="pct" data-where="step=4" data-fmt="pct">—</b> of C2.</p>
+    <div class="c1-sub" id="by-variable">
+      <h3>Completeness by variable</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="completeness" data-row-key="key">
+          <thead><tr><th data-field="variable">Variable</th><th data-field="measure">Measured as</th><th class="num" data-field="n">Patients</th><th class="num" data-field="complete_n">With a usable value</th><th class="num" data-field="complete_pct">%</th><th data-field="meets_90">≥ 90%</th><th data-field="note">What is counted</th></tr></thead>
+          <tbody data-draw="completeness-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">Family history, cardiovascular disease and hypertension are present / absent: a patient with no record of the condition is counted as not having it. Every patient therefore has a value (yes or no), so these rows are 100% by construction and say nothing about how full the data is; the ≥ 90% test does not apply to them. "A record exists" shows how many patients have any family history record. "With a usable value" counts patients who have the variable; the rest are missing it (for smoking, see the smoking level table in section 1 for why). Where fewer than 10 patients are missing a value, the count and the rate are both hidden.</p>
+    </div>
+    <div class="c1-sub" id="per-score">
+      <h3>Completeness per score: the inputs each score reads</h3>
+      <div class="c1-grid2">
+        <div class="c1-card">
+          <b>QDiabetes (reduced Model A)</b>
+          <div class="c1-wrap">
+            <table class="c1-t" data-source="score_completeness" data-row-key="key">
+              <thead><tr><th data-field="input">Input</th><th data-field="needed">Needed as</th><th class="num" data-field="complete_n">With a usable value</th><th class="num" data-field="complete_pct">%</th></tr></thead>
+              <tbody data-draw="score-qd-rows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="c1-card">
+          <b>LPRS (Leicester Practice Risk Score, no waist)</b>
+          <div class="c1-wrap">
+            <table class="c1-t" data-source="score_completeness" data-row-key="key">
+              <thead><tr><th data-field="input">Input</th><th data-field="needed">Needed as</th><th class="num" data-field="complete_n">With a usable value</th><th class="num" data-field="complete_pct">%</th></tr></thead>
+              <tbody data-draw="score-lprs-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <p class="c1-note">The two scores read different inputs, so their completeness differs. QDiabetes runs without ethnicity: an unknown ethnicity takes its reference group, so <b data-draw="v" data-source="score_completeness" data-field="complete_pct" data-where="key=score_completeness-09" data-fmt="pct">—</b> of C2 is scored: smoking is what is missing. The KPI "Joint Completeness – QDiabetes" requires ethnicity as well, so it reads 0%. LPRS needs ethnicity and has no reference group, so it is scored for nobody with nationality and for <b data-draw="v" data-source="score_completeness" data-field="complete_pct" data-where="key=score_completeness-19" data-fmt="pct">—</b> with the EthnicGroup field. Whether ethnicity should count for QDiabetes completeness is part of decision D32.</p>
+    </div>
+    <div class="c1-grid2">
+      <div class="c1-sub" id="unusable">
+        <h3>Filled but not usable</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="unusable" data-row-key="key">
+            <thead><tr><th data-field="item">What</th><th data-field="variable">Variable</th><th class="num" data-field="rows">Rows</th><th data-field="action">Handling</th></tr></thead>
+            <tbody data-draw="unusable-rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="c1-sub" id="missing">
+        <h3>Patients a score could not be produced for</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="missing" data-row-key="key">
+            <thead><tr><th data-field="score">Score</th><th data-field="reason">Missing input</th><th class="num" data-field="n">Patients</th><th class="num" data-field="pct">%</th></tr></thead>
+            <tbody data-draw="missing-rows"></tbody>
+          </table>
+        </div>
+        <h3 id="joint" style="margin-top: var(--cds-gap-md)">Joint completeness by group and ethnicity source</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="joint" data-row-key="key">
+            <thead><tr><th data-field="source_label">Ethnicity source</th><th data-field="group">Group</th><th class="num" data-field="n">Patients</th><th class="num" data-field="joint_core7_n">7 core</th><th class="num" data-field="joint_core7_pct">%</th><th class="num" data-field="joint_core8_n">8 core</th><th class="num" data-field="joint_core8_pct">%</th><th class="num" data-field="joint_lrs_n">LPRS inputs</th><th class="num" data-field="joint_lrs_pct">%</th></tr></thead>
+            <tbody data-draw="joint-rows"></tbody>
+          </table>
+        </div>
+        <p class="c1-note">Joint completeness is the share of patients who have every variable in a set at the same time, not one by one. Each variable can be nearly full on its own while the set is not, because the gaps fall on different patients, and one variable that never arrived (ethnicity) takes the whole set to 0%. 7 core: all but ethnicity, what QDiabetes needs here (ethnicity is fixed at its reference group). 8 core: all eight. LPRS inputs: age, sex, ethnicity, BMI, family history, hypertension. Per score, input by input: see "Completeness per score" above.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="c1-sec" id="framework">
+    <h2>3 · Applicant Data Requirement Framework Match (Universal KPI)</h2>
+    <p class="c1-p" data-read lang="en">Did the 8 requested variables arrive, and in the requested form? The KPI is now read variable by variable, and it is Partial. Ethnicity arrived only as the EthnicGroup field, filled for few patients, because nationality is not in the view. Drugs arrived as Dubai Drug Codes, so treated hypertension is derived, not delivered as ATC. Part of family history is recognised from text, not from a code. SocialHistory has no ex-smoker value.</p>
+    <div class="c1-wrap">
+      <table class="c1-t" data-source="kpi" data-row-key="key">
+        <thead><tr><th data-field="kpi">KPI</th><th data-field="target">Target</th><th data-field="actual">Actual (today's KPI run)</th><th data-field="met">Status</th><th data-field="role">What it means for C2</th></tr></thead>
+        <tbody data-draw="kpi-framework"></tbody>
+      </table>
+    </div>
+    <div class="c1-wrap">
+      <table class="c1-t" data-source="framework" data-row-key="key">
+        <thead><tr><th data-field="variable">Variable</th><th data-field="source_field">Arrived as (view.column)</th><th data-field="route">Route</th><th class="num" data-field="patients">Patients with a value</th><th class="num" data-field="pct">%</th><th data-field="status">Match</th><th data-field="reason">Why not a full match</th></tr></thead>
+        <tbody data-draw="framework-rows"></tbody>
+      </table>
+    </div>
+    <p class="c1-note">From NB0 (nb00/framework_variables.csv). Partial means the variable arrived, but not as requested: a substitute field, a missing level, more than 5% of records in another code system, or values for fewer than 50% of patients. These two thresholds are the developer's proposal and wait for the medical team (decisions D29, D30). For CVD and hypertension the share is of patients with the condition.</p>
+  </section>
+
+  <section class="c1-sec" id="quality">
+    <h2>4 · Data quality</h2>
+    <div class="c1-sub" id="ranges">
+      <h3>Ranges and units, after cleaning</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="quality" data-row-key="key">
+          <thead><tr><th data-field="check">Measure</th><th data-field="unit">Unit</th><th class="num" data-field="patients">Patients</th><th class="num" data-field="p5">p5</th><th class="num" data-field="median">Median</th><th class="num" data-field="p95">p95</th><th data-field="range">Plausible range</th><th class="num" data-field="rows_out">Rows outside</th><th class="num" data-field="patients_out">Patients affected</th><th data-field="note">Note</th></tr></thead>
+          <tbody data-draw="quality-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">Plausible range: the values an adult measurement can realistically take, ends included: BMI 12–80 kg/m², height 120–230 cm, weight 25–350 kg, waist 40–250 cm. A value outside it is treated as an entry error (for example a unit mix-up or a test value; heights given in metres are converted to cm first) and is not used; the row stays in the data and is counted here. "Rows outside" counts such rows; "Patients affected" counts patients with at least one. The ranges are set in the code in one place (<code>phenotype.VITAL_PLAUSIBLE_RANGE</code>) and are the developer's choice, not a clinical decision yet.</p>
+      <p class="c1-note">HbA1c and fasting glucose are eligibility and outcome evidence only; lab values are never score inputs.</p>
+    </div>
+    <div class="c1-sub" id="coding">
+      <h3>Coding systems</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="coding" data-row-key="key">
+          <thead><tr><th data-field="source">Field</th><th data-field="expected">Expected</th><th data-field="arrived">Arrived</th><th class="num" data-field="count">Count</th><th data-field="count_label">Of</th><th data-field="ok">Usable</th></tr></thead>
+          <tbody data-draw="coding-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="c1-sec" id="selection">
+    <h2>5 · How C2 differs from C1 (selection effect)</h2>
+    <p class="c1-p" data-read lang="en">C2 is the random sample; C1 the complete-case extract of the same positives. The standardised mean difference (SMD) shows how far apart they are; above 0.1 counts as an imbalance. Read from C2, the outlier is C1: almost every C1 patient has a positive family history of diabetes, against about one in five here. C2 is the better guide to what an unselected NABIDH population looks like; its scores are less inflated by family history, but most of it cannot be scored yet because smoking is missing. C2 is also more male, older, and has fewer current smokers recorded.</p>
+    <div class="c1-wrap">
+      <table class="c1-t" data-source="selection" data-row-key="key">
+        <thead><tr><th data-field="variable">Variable</th><th class="num" data-field="c1">C1</th><th class="num" data-field="c2">C2</th><th class="num" data-field="smd">SMD</th><th data-field="imbalanced">|SMD| &gt; 0.1</th></tr></thead>
+        <tbody data-draw="selection-rows"></tbody>
+      </table>
+    </div>
+    <p class="c1-note">Shares are % of patients with a value; age and BMI are means. Ethnic groups are not compared: ethnicity is unknown in both cohorts.</p>
+  </section>
+
+  <section class="c1-sec" id="sensitivity">
+    <h2>6 · Sensitivity in known positives</h2>
+    <p class="c1-p" data-read lang="en">Every C2 patient is a known positive (type 2 diabetes or prediabetes), so the one thing a score can be checked on here is how many of them it flags as high risk: sensitivity. A score's threshold is not decided yet (D5 for QDiabetes, D23 for LPRS), so sensitivity is shown at a range of thresholds. LPRS needs ethnicity, which did not arrive, so it is scored twice: every unknown ethnicity taken as White, then as Other. The truth lies between the two.</p>
+    <div class="c1-flag" id="no-negatives"><b>Why there is no specificity, PPV, F1 or AUROC here.</b> These need patients without diabetes: how many of them the score wrongly flags. C1 and C2 hold only patients with diabetes or prediabetes, so there are none, and any such figure would be invented. They come from C3 in Phase 2, where patients start without diabetes and some develop it.</div>
+    <div class="c1-sub" id="lprs-scenarios">
+      <h3>LPRS with unknown ethnicity scored as White, then as Other</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="lprs_scen" data-row-key="key">
+          <thead><tr><th data-field="scenario">Unknown ethnicity scored as</th><th class="num" data-field="n">Patients</th><th class="num" data-field="n_computable">Scored</th><th class="num" data-field="pct_computable">%</th><th class="num" data-field="median">Median score</th><th class="num" data-field="p25">p25</th><th class="num" data-field="p75">p75</th></tr></thead>
+          <tbody data-draw="lprs-scen-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">"Other" adds the LPRS ethnicity term (0.757) for every patient whose ethnicity is unknown, so its scores are higher by that amount. Patients not scored here are missing BMI or sex, not ethnicity. Known ethnicity (none with nationality) is kept as it is.</p>
+    </div>
+    <div class="c1-grid2">
+      <div class="c1-card" id="sens-qd">
+        <b>QDiabetes: share flagged at each 10-year risk threshold</b>
+        <div class="c1-legend"><span><i data-swatch="0"></i>QDiabetes</span></div>
+        <div class="c1-chart" data-draw="sens-chart" data-source="sweep" data-series="qdiabetes" data-xlabel="10-year risk threshold, %"></div>
+      </div>
+      <div class="c1-card" id="sens-lprs">
+        <b>LPRS: share flagged at each score threshold</b>
+        <div class="c1-legend"><span><i data-swatch="1"></i>Unknown ethnicity as White</span><span><i data-swatch="2"></i>Unknown ethnicity as Other</span></div>
+        <div class="c1-chart" data-draw="sens-chart" data-source="sweep" data-series="lprs_white lprs_other" data-xlabel="LPRS score threshold"></div>
+      </div>
+    </div>
+    <div class="c1-sub" id="sweep-table">
+      <h3>All thresholds, with 95% confidence intervals</h3>
+      <div class="c1-wrap">
+        <table class="c1-t" data-source="sweep" data-row-key="key">
+          <thead><tr><th data-field="score">Score</th><th data-field="threshold_label">Flagged when</th><th class="num" data-field="n_computable">Scored</th><th class="num" data-field="n_flagged">Flagged</th><th class="num" data-field="sens">Sensitivity %</th><th class="num" data-field="ci_low">95% CI low</th><th class="num" data-field="ci_high">95% CI high</th></tr></thead>
+          <tbody data-draw="sweep-rows"></tbody>
+        </table>
+      </div>
+      <p class="c1-note">Sensitivity = flagged / scored, with the Wilson 95% interval. Reference date: the end of the data. Where the flagged count, or the rest, is under 10, the rate is hidden. These are prevalent cases scored on their current record, not a prospective test.</p>
+    </div>
+  </section>
+
+  <section class="c1-sec" id="process">
+    <h2>7 · Process KPIs, and what C2 does not measure</h2>
+    <div class="c1-grid2">
+      <div class="c1-sub">
+        <h3>Critical process KPIs (measured over the whole sandbox, not from data)</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="kpi" data-row-key="key">
+            <thead><tr><th data-field="kpi">KPI</th><th data-field="target">Target</th><th data-field="actual">Actual</th><th data-field="met">Status</th><th data-field="note">Note</th></tr></thead>
+            <tbody data-draw="kpi-process"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="c1-sub" id="not-measured">
+        <h3>Performance KPIs: not measured in C2 (Phase 2, C3)</h3>
+        <div class="c1-wrap">
+          <table class="c1-t" data-source="not_measured" data-row-key="key">
+            <thead><tr><th data-field="kpi">KPI</th><th data-field="target">Target</th><th data-field="met">Status</th></tr></thead>
+            <tbody data-draw="notmeasured-rows"></tbody>
+          </table>
+        </div>
+        <p class="c1-note">These KPI rows are measured in C3 (Phase 2). Section 6 shows sensitivity in known positives only, for orientation; it is not the KPI.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="c1-flag" id="next">
+    <b>Open items</b>
+    <ul data-read lang="en">
+      <li>Decisions for the medical team and DHA are collected, with today's numbers, in the <a href="https://claude.ai/artifact/4f6qU3GPJdmU7JngbQ8xmp" target="_blank" rel="noopener">Phase 1 Decision Pack</a>: ethnicity source (D6), smoking 'Other' (D7), the Partial thresholds (D29, D30), placeholder dates (D31), the Data Completeness definition (D32), and how detection is shown (D33).</li>
+      <li>Audit Trail is 100%: the run left open on 19 November was closed by appending a closing record (D34); nothing was deleted.</li>
+      <li>From DHA: a nationality field, a facility field (none is mapped, so facility representation cannot be shown), and what "Unknown" and "Other" mean in SocialHistory (927 C2 patients have only those).</li>
+      <li>Which row of section 6 is "the" detection rate depends on a threshold for each score (D5 for QDiabetes, D23 for LPRS) and, for LPRS, on the ethnicity source (D6).</li>
+    </ul>
+  </div>
+
+  <details class="c1-defs" id="definitions">
+    <summary>Definitions</summary>
+    <ul data-read lang="en">
+      <li>Known positive: a C2 patient with type 2 diabetes or prediabetes evidence (diagnosis, HbA1c, fasting glucose or a diabetes drug).</li>
+      <li>The 8 core variables: sex, age, ethnicity, BMI, smoking, family history of diabetes, cardiovascular disease, treated hypertension.</li>
+      <li>Family history of diabetes: from the NABIDH FamilyHistory view and the patient's own Z83.3 diagnosis. A record counts as diabetes by its code (ICD-10 E08–E14 or Z83.3; SNOMED 160303001, 73211009, 44054006, 46635009) or, when the code is a local number or text, by its description ("diabet", "DM"); prediabetes records and other conditions are left out. There is no yes / no column, so a diabetes record is positive unless its text negates it ("No history of …", "denies"). Father, mother, brother, sister, child or parent is first degree; aunts, uncles, grandparents and cousins are recorded but not counted positive. A patient is positive with any first-degree positive record, whatever its date (D27), or with Z83.3.</li>
+      <li>QDiabetes-2018 Model A without lab values, on the 8 core variables (reduced model, decision D9). LPRS is the Leicester Practice Risk Score (Gray 2012), without waist circumference.</li>
+      <li>Open decisions: see the Decision Pack linked above. D5 / D23 score thresholds are only needed for a single detection rate and in Phase 2.</li>
+      <li>Treated hypertension (D36): a hypertension diagnosis or an antihypertensive drug counts, for QDiabetes and LPRS. This departs from both published definitions (QDiabetes-2018: diagnosis and drug; LPRS: drug only).</li>
+      <li>All numbers are aggregates from the enclave's output block. Counts under 10 show as "&lt;10"; a rate whose count, or the rest of the group, is under 10 shows as "suppressed". Status and note columns are the project team's reading of those numbers.</li>
+    </ul>
+  </details>
+</div>
+</div>
+<script id="report-data" type="application/json">{"meta": [{"label": "Source", "value": "VM COPY block in the repo, logs/enclave/2026-11-20.log: COPY START | enclave run all | 2026-11-20 10:51 UTC | ingest v1.4.2 | commit ac4d803 bundle 72efc39be6ba | python 3.10.12 | 20261120T105136Z_enclave_run_553ca0; QDiabetes medians before D36 from the earlier block in the same file: COPY START | enclave run all | 2026-11-20 09:56 UTC | ingest v1.4.2 | commit d731593 bundle 9fbeb63bdda0 | python 3.10.12 | 20261120T095641Z_enclave_run_c3722b"}, {"label": "Reading", "value": "Numbers come from the block. The status / note / handling columns are the Progress Tracker's reading of them, following the medical team's C1 / C2 checklist."}], "datasets": {"funnel": [{"step": 1, "label": "Patients delivered (Patient view)", "n": 2600.0, "pct": null, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "ingest block, C2 line", "n_bar": 2600.0}, {"step": 2, "label": "Known positives (T2DM or prediabetes evidence)", "n": 2564.0, "pct": 100.0, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "nb01/score_computability.csv n", "n_bar": 2564.0}, {"step": 3, "label": "QDiabetes computable", "n": 372.0, "pct": 14.5, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "nb01/c1_detection_rate.csv n_computable · score_computability qd_computable_pct", "n_bar": 372.0}, {"step": 4, "label": "7 core variables complete (all but ethnicity)", "n": 372.0, "pct": 14.5, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "nb01/joint_completeness.csv joint_core7", "n_bar": 372.0}, {"step": 5, "label": "LPRS computable · ethnicity from nationality (default)", "n": 0.0, "pct": 0.0, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "nb01/ethnicity_source_compare.csv", "n_bar": 0.0}, {"step": 6, "label": "LPRS computable · NABIDH EthnicGroup field", "n": 237.0, "pct": 9.2, "run": "Same run · ethnicity from the NABIDH EthnicGroup field (NB1 comparison)", "alt": true, "source": "nb01/ethnicity_source_compare.csv", "n_bar": 237.0}, {"step": 7, "label": "All 8 core variables · nationality (default)", "n": 0.0, "pct": 0.0, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": false, "source": "nb01/ethnicity_source_compare.csv", "n_bar": 0.0}, {"step": 8, "label": "All 8 core variables · NABIDH EthnicGroup field", "n": 31.0, "pct": 1.2, "run": "Same run · ethnicity from the NABIDH EthnicGroup field (NB1 comparison)", "alt": true, "source": "nb01/ethnicity_source_compare.csv", "n_bar": 31.0}, {"step": 5.5, "label": "LPRS computable · unknown ethnicity scored as White or Other (scenario)", "n": 2422.0, "pct": 94.5, "run": "Run all · 20 Nov 10:51 UTC · ingest 1.4.2", "alt": "scenario", "source": "nb01/lprs_ethnicity_scenarios.csv", "n_bar": 2422.0}], "kpi": [{"kpi": "Audit Trail Completeness", "target": "100%", "actual": "100.0% (96/96 runs)", "met": "Met", "role": "Process KPI (Critical), not data", "note": "Closed after the fact as abandoned (run_end appended, D34): 20261119T054135Z_nb00_data_profile_b068d0", "key": "kpi-01"}, {"kpi": "Evidence Package Completeness", "target": "Complete", "actual": null, "met": "Pending", "role": "Process KPI (Critical), not data", "note": null, "key": "kpi-02"}, {"kpi": "Data Security / No-Incident", "target": "0 incidents", "actual": "0 incidents", "met": "Met", "role": "Process KPI (Critical), not data", "note": null, "key": "kpi-03"}, {"kpi": "Applicant Data Requirement Framework Match", "target": "Match", "actual": "Partial: ethnicity, smoking, family_history, hypertension", "met": "Partial", "role": "Did the 8 variables arrive, and in the requested form", "note": null, "key": "kpi-04"}, {"kpi": "Data Completeness for Required Variables", "target": ">= 90%", "actual": "C1 0.0%; C2 0.0%", "met": "Not Met", "role": "C2 is a random sample: the realistic picture of how full NABIDH data is", "note": "Weakest variable: C1 ethnicity 0.0%; C2 ethnicity 0.0% · Without ethnicity (weakest of the other 7): C1 smoking 97.1%; C2 smoking 14.9% · Joint core-7 (all but ethnicity): C1 97.1% (N=2519/2595); C2 14.5% (N=372/2564) · Present / absent, 100% by definition (not a fill rate): family_history, cvd, hypertension", "key": "kpi-05"}], "not_measured": [{"kpi": "Sensitivity (Recall, positive class)", "target": ">= 70%", "met": "Pending", "key": "not_measured-01"}, {"kpi": "Specificity", "target": ">= 70%", "met": "Pending", "key": "not_measured-02"}, {"kpi": "NPV & PPV", "target": "Documented", "met": "Pending", "key": "not_measured-03"}, {"kpi": "AUROC", "target": ">= 0.75", "met": "Pending", "key": "not_measured-04"}, {"kpi": "C-Index", "target": "0.55-0.90", "met": "Pending", "key": "not_measured-05"}, {"kpi": "Precision / Recall / F1", "target": "Documented", "met": "Pending", "key": "not_measured-06"}, {"kpi": "Recalibration Slope / O:E", "target": "Documented", "met": "Pending", "key": "not_measured-07"}, {"kpi": "Alert Rate per 1,000 Patients", "target": "Pending NABIDH", "met": "Pending", "key": "not_measured-08"}], "completeness": [{"variable": "Sex", "measure": "Recorded value", "n": 2564.0, "complete_n": "suppressed (<10 missing)", "complete_pct": "suppressed (<10)", "meets_90": "Yes", "note": "a value in the record", "key": "completeness-01"}, {"variable": "Age", "measure": "Recorded value", "n": 2564.0, "complete_n": 2564.0, "complete_pct": 100.0, "meets_90": "Yes", "note": "a value in the record", "key": "completeness-02"}, {"variable": "Ethnicity", "measure": "Recorded value", "n": 2564.0, "complete_n": 0.0, "complete_pct": 0.0, "meets_90": "No", "note": "a value in the record", "key": "completeness-03"}, {"variable": "BMI", "measure": "Recorded value", "n": 2564.0, "complete_n": 2424.0, "complete_pct": 94.5, "meets_90": "Yes", "note": "a value in the record", "key": "completeness-04"}, {"variable": "Smoking", "measure": "Recorded value", "n": 2564.0, "complete_n": 381.0, "complete_pct": 14.9, "meets_90": "No", "note": "a value in the record", "key": "completeness-05"}, {"variable": "Family history of diabetes", "measure": "Present / absent", "n": 2564.0, "complete_n": 2564.0, "complete_pct": 100.0, "meets_90": "Not tested (yes / no variable)", "note": "Yes or no for every patient; no record counts as no. Yes for 19.6% of C2", "key": "completeness-06"}, {"variable": "Family history: a record exists", "measure": "Recorded value", "n": 2564.0, "complete_n": 507.0, "complete_pct": 19.8, "meets_90": "No", "note": "FamilyHistory record (positive / negative / other relative) or Z83.3", "key": "completeness-07"}, {"variable": "Cardiovascular disease", "measure": "Present / absent", "n": 2564.0, "complete_n": 2564.0, "complete_pct": 100.0, "meets_90": "Not tested (yes / no variable)", "note": "Yes or no for every patient; no record counts as no. Yes for 17.2% of C2", "key": "completeness-08"}, {"variable": "Treated hypertension", "measure": "Present / absent", "n": 2564.0, "complete_n": 2564.0, "complete_pct": 100.0, "meets_90": "Not tested (yes / no variable)", "note": "Yes or no for every patient; no record counts as no. Yes for 49.6% of C2 (diagnosis or drug, D36)", "key": "completeness-09"}], "mapping": [{"input": "Age band", "score": "QDiabetes 25–84", "mapping": "Patient.Age (no date of birth)", "issue": "Outside 25–84: score not computed", "n": 0.0, "unit": "patients", "status": "Works", "source": "nb00/demographics.csv age_outside_25_84_n", "key": "mapping-01"}, {"input": "Age band", "score": "LPRS 40–75", "mapping": "Patient.Age", "issue": "Outside the LPRS development band (scored, flagged)", "n": 23.1, "unit": "% of C2", "status": "Works", "source": "nb01/score_computability.csv lrs_outside_dev_age_pct", "key": "mapping-02"}, {"input": "Ethnicity", "score": "QDiabetes", "mapping": "Unknown → reference group 'White or not stated'", "issue": "Fixed for every patient: no nationality column; risk may be underestimated for higher-risk groups", "n": 2564.0, "unit": "patients", "status": "Fixed value", "source": "nb01/score_missing_reasons.csv (lrs ethnicity); ingest absent_optional_columns", "key": "mapping-03"}, {"input": "Ethnicity", "score": "LPRS", "mapping": "White vs other, from nationality (default)", "issue": "Not computable: ethnicity unknown", "n": 2564.0, "unit": "patients", "status": "Blocked", "source": "nb01/score_missing_reasons.csv", "key": "mapping-04"}, {"input": "Ethnicity", "score": "LPRS", "mapping": "White vs other, from the NABIDH EthnicGroup field", "issue": "Still unknown for most patients", "n": 2298.0, "unit": "patients", "status": "Blocked", "source": "nb01/ethnicity_mapping_by_source.csv <missing>", "key": "mapping-05"}, {"input": "Treated hypertension", "score": "QDiabetes, LPRS", "mapping": "ICD-10 I10–I16 diagnosis OR an antihypertensive drug (DDC → ingredient → ATC C02/C03/C07/C08/C09); decision D36", "issue": "Counted as treated: diagnosis, drug, or both", "n": 49.6, "unit": "% of C2", "status": "Works", "source": "nb01/htn_derivation.csv", "key": "mapping-06"}, {"input": "Treated hypertension", "score": "QDiabetes", "mapping": "Published QDiabetes-2018 definition: diagnosis AND drug", "issue": "Counted now, not under the published definition (diagnosis only + drug only)", "n": 16.2, "unit": "% of C2", "status": "Decision D36", "source": "nb01/htn_derivation.csv", "key": "mapping-07"}, {"input": "Treated hypertension", "score": "LPRS", "mapping": "Published LPRS (Gray 2012) definition: drug only", "issue": "Counted now, not under the published definition (diagnosis only)", "n": 12.8, "unit": "% of C2", "status": "Decision D36", "source": "nb01/htn_derivation.csv", "key": "mapping-08"}, {"input": "Smoking level", "score": "QDiabetes", "mapping": "Never / Low / Medium / High → never / light / moderate / heavy; Occasional → light (temporary, D7)", "issue": "Smoking status missing: QDiabetes not computed", "n": 2183.0, "unit": "patients", "status": "Works", "source": "nb01/score_missing_reasons.csv", "key": "mapping-09"}, {"input": "Smoking level", "score": "QDiabetes", "mapping": "Ex-smoker: no such value in SocialHistory; only from diagnosis code Z87.891", "issue": "QDiabetes 'ex-smoker' category is practically empty", "n": "<10", "unit": "patients", "status": "Gap", "source": "nb01/smoking_level.csv", "key": "mapping-10"}, {"input": "Smoking level", "score": "QDiabetes", "mapping": "'Other' (may be shisha / midwakh)", "issue": "Not mapped, decision D7", "n": 306.0, "unit": "rows", "status": "Decision pending", "source": "ingest block, unmapped values", "key": "mapping-11"}, {"input": "BMI", "score": "QDiabetes, LPRS", "mapping": "Observation 39156-5, else height 8302-2 + weight 3141-9, else Z68 band", "issue": "BMI missing", "n": 140.0, "unit": "patients", "status": "Works", "source": "nb01/score_missing_reasons.csv", "key": "mapping-12"}, {"input": "Sex", "score": "QDiabetes, LPRS", "mapping": "Patient.Gender_Code M / F", "issue": "Not male / female ('U')", "n": "<10", "unit": "patients", "status": "Works", "source": "nb01/score_missing_reasons.csv", "key": "mapping-13"}, {"input": "Family history of diabetes", "score": "QDiabetes, LPRS", "mapping": "FamilyHistory (SNOMED / ICD-10 / text) first-degree + Z83.3; present / absent", "issue": "Share with a positive first-degree family history (C1: far higher, section 5)", "n": 19.6, "unit": "% of C2", "status": "Works", "source": "nb01/selection_effect_smd.csv family_history", "key": "mapping-14"}, {"input": "Cardiovascular disease", "score": "QDiabetes", "mapping": "ICD-10 I20–I25, I50, I6x, G45; present / absent", "issue": "Share with a CVD diagnosis", "n": 16.9, "unit": "% of C2", "status": "Works", "source": "nb00/framework_match.csv cvd", "key": "mapping-15"}], "htn": [{"category": "Diagnosis and medication", "n": 856.0, "pct": 33.4, "counted_by": "QDiabetes, LPRS, LRA 2010", "key": "htn-01"}, {"category": "Diagnosis only", "n": 328.0, "pct": 12.8, "counted_by": "QDiabetes, LPRS, LRA 2010", "key": "htn-02"}, {"category": "Medication only", "n": 88.0, "pct": 3.4, "counted_by": "QDiabetes, LPRS, LRA 2010", "key": "htn-03"}, {"category": "Neither", "n": 1292.0, "pct": 50.4, "counted_by": "none", "key": "htn-04"}], "scores": [{"group": "Prediabetes", "before": 2.63, "now": 2.97, "change": 0.34, "key": "scores-01"}, {"group": "T2DM", "before": 6.07, "now": 6.41, "change": 0.34, "key": "scores-02"}], "smoking": [{"level": "Never", "recorded_as": "never", "n": 318.0, "pct": 12.4, "from_dx": 0.0, "key": "smoking-01"}, {"level": "Ex-smoker", "recorded_as": "ex", "n": "<10", "pct": "suppressed (<10)", "from_dx": "<10", "key": "smoking-02"}, {"level": "Light", "recorded_as": "light", "n": 26.0, "pct": 1.0, "from_dx": 0.0, "key": "smoking-03"}, {"level": "Moderate", "recorded_as": "moderate", "n": 11.0, "pct": 0.4, "from_dx": 0.0, "key": "smoking-04"}, {"level": "Moderate", "recorded_as": "current, intensity not recorded (D7 → moderate)", "n": "<10", "pct": "suppressed (<10)", "from_dx": "<10", "key": "smoking-05"}, {"level": "Heavy", "recorded_as": "heavy", "n": 11.0, "pct": 0.4, "from_dx": 0.0, "key": "smoking-06"}, {"level": "Missing", "recorded_as": "no smoking record", "n": 1248.0, "pct": 48.7, "from_dx": 0.0, "key": "smoking-07"}, {"level": "Missing", "recorded_as": "records present, none usable (unknown / unmapped, e.g. other)", "n": 927.0, "pct": 36.2, "from_dx": 0.0, "key": "smoking-08"}, {"level": "Missing", "recorded_as": "undated records disagree (D28)", "n": "<10", "pct": "suppressed (<10)", "from_dx": 0.0, "key": "smoking-09"}], "framework": [{"variable": "Sex", "source_field": "Patient.Gender_Code", "route": "As requested", "patients": "suppressed (<10 missing)", "pct": "suppressed (<10)", "status": "Match", "reason": null, "key": "framework-01"}, {"variable": "Age", "source_field": "Patient.Age", "route": "As requested", "patients": 2600.0, "pct": 100.0, "status": "Match", "reason": null, "key": "framework-02"}, {"variable": "Ethnicity", "source_field": "Patient.Nationality | Patient.EthnicGroup_Description", "route": "Substitute field", "patients": 267.0, "pct": 10.3, "status": "Partial", "reason": "requested nationality not delivered; only ethnicity_raw has values; values for only 10.3% of patients (< 50%)", "key": "framework-03"}, {"variable": "BMI", "source_field": "Observation.ObservationValue (LOINC 39156-5 BMI; 8302-2 height + 3141-9 weight)", "route": "As requested", "patients": 2431.0, "pct": 93.5, "status": "Match", "reason": null, "key": "framework-04"}, {"variable": "Smoking", "source_field": "SocialHistory.SocialHabitQty_Description", "route": "As requested", "patients": 381.0, "pct": 14.7, "status": "Partial", "reason": "level seen in < 10 patients: ex; values for only 14.7% of patients (< 50%)", "key": "framework-05"}, {"variable": "Family history of diabetes", "source_field": "FamilyHistory.Diagnosis_Code", "route": "Derived by the adapter", "patients": 508.0, "pct": 19.5, "status": "Partial", "reason": "62% of the records not in the requested system (ICD-10 / SNOMED code); values for only 19.5% of patients (< 50%)", "key": "framework-06"}, {"variable": "Cardiovascular disease", "source_field": "Diagnosis.Diagnosis_Code", "route": "As requested", "patients": 440.0, "pct": 16.9, "status": "Match", "reason": null, "key": "framework-07"}, {"variable": "Treated hypertension", "source_field": "Diagnosis.Diagnosis_Code + Medication.DrugProduct_Code", "route": "Derived by the adapter", "patients": 1272.0, "pct": 48.9, "status": "Partial", "reason": "drug: 100% of the rows not in the requested system (ATC)", "key": "framework-08"}], "quality": [{"check": "BMI", "unit": "kg/m²", "range": "12–80", "patients": 301.0, "p5": 21.0, "median": 27.0, "p95": 38.0, "rows_out": 14.0, "patients_out": 13.0, "note": "A value outside 12–80 is taken as an entry error and skipped. The patient's latest value inside the range is used; if there is none, BMI is computed from height and weight, then taken from a Z68 code", "key": "quality-01"}, {"check": "Height", "unit": "cm", "range": "120–230", "patients": 2435.0, "p5": 151.0, "median": 165.0, "p95": 182.0, "rows_out": 384.0, "patients_out": 182.0, "note": "Mostly below 120 cm (376 rows), skipped; 42 rows given in metres, converted. Latest value inside the range from the full history goes into BMI", "key": "quality-02"}, {"check": "Weight", "unit": "kg", "range": "25–350", "patients": 2484.0, "p5": 55.0, "median": 78.0, "p95": 112.0, "rows_out": 211.0, "patients_out": 94.0, "note": "A value outside 25–350 is skipped; the latest value inside the range goes into BMI from height and weight", "key": "quality-03"}, {"check": "HbA1c (4548-4)", "unit": "%", "range": "—", "patients": 208.0, "p5": 4.99, "median": 5.78, "p95": 8.68, "rows_out": null, "patients_out": null, "note": "Unit %, no mmol/mol seen", "key": "quality-04"}, {"check": "Fasting glucose (1558-6)", "unit": "mg/dL", "range": "—", "patients": 727.0, "p5": 81.1, "median": 101.0, "p95": 181.0, "rows_out": null, "patients_out": null, "note": "Unit mg/dL; 209 rows spelled MG/DL normalised", "key": "quality-05"}], "unusable": [{"item": "Vital rows with an empty value", "variable": "BMI / height / weight", "rows": 1107.0, "unit": "rows", "action": "Dropped and counted", "key": "unusable-01"}, {"item": "Vital rows with a placeholder ('0' or '-')", "variable": "BMI / height / weight", "rows": 2441.0, "unit": "rows", "action": "Dropped and counted", "key": "unusable-02"}, {"item": "Smoking rows 'Other'", "variable": "Smoking", "rows": 306.0, "unit": "rows", "action": "Not mapped (decision D7)", "key": "unusable-03"}, {"item": "Smoking records present, none usable", "variable": "Smoking", "rows": 927.0, "unit": "patients", "action": "Counted as missing", "key": "unusable-04"}, {"item": "Undated smoking records that disagree", "variable": "Smoking", "rows": "<10", "unit": "patients", "action": "Counted as missing (D28)", "key": "unusable-05"}, {"item": "Lab results that are not numbers", "variable": "HbA1c / glucose", "rows": 10.0, "unit": "rows", "action": "Dropped and counted", "key": "unusable-06"}, {"item": "Diagnoses without a date", "variable": "CVD / hypertension", "rows": 36.0, "unit": "rows", "action": "Dropped and counted", "key": "unusable-07"}, {"item": "Diagnoses dated exactly 1970-01-01", "variable": "Diagnoses", "rows": 0, "unit": "rows", "action": "Counted, kept (decision D31)", "key": "unusable-08"}, {"item": "Medications without a date", "variable": "Hypertension treatment", "rows": "<10", "unit": "rows", "action": "Dropped and counted", "key": "unusable-09"}, {"item": "Sex 'U'", "variable": "Sex", "rows": "<10", "unit": "patients", "action": "Score not computed", "key": "unusable-10"}], "coding": [{"source": "Diagnosis_Code", "expected": "ICD-10", "arrived": "ICD-10-CM with dots (E11.9, R73.03, I10)", "count": 89.0, "count_label": "cells with 2 codes, split", "ok": "Yes", "key": "coding-01"}, {"source": "Diagnosis_Code", "expected": "ICD-10", "arrived": "Trailing dot", "count": "<10", "count_label": "codes cleaned", "ok": "Yes", "key": "coding-02"}, {"source": "LabResultItem.TestItemCode_Code", "expected": "LOINC", "arrived": "LOINC 1558-6, 4548-4, 1521-4", "count": null, "count_label": "", "ok": "Yes", "key": "coding-03"}, {"source": "Observation.ObservationCode_Code", "expected": "LOINC", "arrived": "LOINC 39156-5, 8302-2, 3141-9 only", "count": null, "count_label": "", "ok": "Yes", "key": "coding-04"}, {"source": "Medication.DrugProduct_Code", "expected": "INN / ATC", "arrived": "DDC product code (Dubai Drug Code)", "count": 21217.0, "count_label": "rows", "ok": "Mapped: DDC → ingredient (INN) → ATC", "key": "coding-05"}, {"source": "Medication.DrugProduct_Code", "expected": "INN / ATC", "arrived": "DDC scientific code", "count": 3109.0, "count_label": "rows", "ok": "Mapped", "key": "coding-06"}, {"source": "Medication.DrugProduct_Code", "expected": "INN / ATC", "arrived": "6-digit DDC stem", "count": 139.0, "count_label": "rows", "ok": "Mapped", "key": "coding-07"}, {"source": "Medication.DrugProduct_Code", "expected": "INN / ATC", "arrived": "VMP<id>,<dose>,<form> (no reference list)", "count": 122.0, "count_label": "rows", "ok": "By drug name", "key": "coding-08"}, {"source": "Medication.DrugProduct_Code", "expected": "INN / ATC", "arrived": "No code", "count": 35.0, "count_label": "rows", "ok": "By drug name", "key": "coding-09"}, {"source": "FamilyHistory.Diagnosis_Code", "expected": "SNOMED / ICD-10", "arrived": "SNOMED", "count": 223.0, "count_label": "rows", "ok": "Yes", "key": "coding-10"}, {"source": "FamilyHistory.Diagnosis_Code", "expected": "SNOMED / ICD-10", "arrived": "ICD-10", "count": 33.0, "count_label": "rows", "ok": "Yes", "key": "coding-11"}, {"source": "FamilyHistory.Diagnosis_Code", "expected": "SNOMED / ICD-10", "arrived": "Text only (local codes)", "count": 424.0, "count_label": "rows", "ok": "By description text", "key": "coding-12"}], "missing": [{"key": "qdiabetes|smoking_missing", "cohort": "c2", "score": "qdiabetes", "reason": "smoking_missing", "n": 2183.0, "pct": 85.1}, {"key": "qdiabetes|bmi_missing", "cohort": "c2", "score": "qdiabetes", "reason": "bmi_missing", "n": 140.0, "pct": 5.5}, {"key": "qdiabetes|sex", "cohort": "c2", "score": "qdiabetes", "reason": "sex", "n": "<10", "pct": "suppressed (<10)"}, {"key": "lrs|ethnicity", "cohort": "c2", "score": "lrs", "reason": "ethnicity", "n": 2564.0, "pct": 100.0}, {"key": "lrs|bmi_missing", "cohort": "c2", "score": "lrs", "reason": "bmi_missing", "n": 140.0, "pct": 5.5}, {"key": "lrs|sex", "cohort": "c2", "score": "lrs", "reason": "sex", "n": "<10", "pct": "suppressed (<10)"}], "joint": [{"key": "nat|all", "source_label": "Nationality (default)", "group": "all", "n": 2564.0, "joint_core7_n": 372.0, "joint_core7_pct": 14.5, "joint_core8_n": 0.0, "joint_core8_pct": 0.0, "joint_lrs_n": 0.0, "joint_lrs_pct": 0.0}, {"key": "nat|Prediabetes", "source_label": "Nationality (default)", "group": "Prediabetes", "n": 1162.0, "joint_core7_n": 211.0, "joint_core7_pct": 18.2, "joint_core8_n": 0.0, "joint_core8_pct": 0.0, "joint_lrs_n": 0.0, "joint_lrs_pct": 0.0}, {"key": "nat|T2DM", "source_label": "Nationality (default)", "group": "T2DM", "n": 1402.0, "joint_core7_n": 161.0, "joint_core7_pct": 11.5, "joint_core8_n": 0.0, "joint_core8_pct": 0.0, "joint_lrs_n": 0.0, "joint_lrs_pct": 0.0}, {"key": "eth|all", "source_label": "NABIDH EthnicGroup field", "group": "all", "n": 2564.0, "joint_core7_n": 372.0, "joint_core7_pct": 14.5, "joint_core8_n": 31.0, "joint_core8_pct": 1.2, "joint_lrs_n": 237.0, "joint_lrs_pct": 9.2}], "selection": [{"variable": "Age (mean, years)", "kind": "mean", "c1": 46.145, "c2": 49.723, "smd": -0.331, "imbalanced": "Yes", "key": "selection-01"}, {"variable": "BMI (mean)", "kind": "mean", "c1": 28.254, "c2": 28.524, "smd": -0.048, "imbalanced": "No", "key": "selection-02"}, {"variable": "Male", "kind": "share", "c1": 40.0, "c2": 60.7, "smd": -0.422, "imbalanced": "Yes", "key": "selection-03"}, {"variable": "T2DM (vs prediabetes)", "kind": "share", "c1": 47.0, "c2": 54.7, "smd": -0.155, "imbalanced": "Yes", "key": "selection-04"}, {"variable": "Positive family history of diabetes", "kind": "share", "c1": 98.7, "c2": 19.6, "smd": 2.71, "imbalanced": "Yes", "key": "selection-05"}, {"variable": "Cardiovascular disease", "kind": "share", "c1": 19.3, "c2": 17.2, "smd": 0.057, "imbalanced": "No", "key": "selection-06"}, {"variable": "Hypertension diagnosis", "kind": "share", "c1": 38.5, "c2": 46.2, "smd": -0.157, "imbalanced": "Yes", "key": "selection-07"}, {"variable": "Antihypertensive drug", "kind": "share", "c1": 33.1, "c2": 36.8, "smd": -0.078, "imbalanced": "No", "key": "selection-08"}, {"variable": "Current smoker", "kind": "share", "c1": 13.2, "c2": 2.2, "smd": 0.422, "imbalanced": "Yes", "key": "selection-09"}, {"variable": "Diabetes drug (A10)", "kind": "share", "c1": 47.4, "c2": 43.2, "smd": 0.084, "imbalanced": "No", "key": "selection-10"}], "lprs_scen": [{"scenario": "White", "n": 2564.0, "n_computable": 2422.0, "pct_computable": 94.5, "median": 4.79, "p25": 4.24, "p75": 5.38, "key": "lprs_scen-01"}, {"scenario": "Other", "n": 2564.0, "n_computable": 2422.0, "pct_computable": 94.5, "median": 5.54, "p25": 5.0, "p75": 6.13, "key": "lprs_scen-02"}], "sweep": [{"score": "QDiabetes", "series": "qdiabetes", "threshold": 1.0, "threshold_label": "10-year risk ≥ 1%", "n_computable": 372.0, "n_flagged": 323.0, "sens": 86.8, "ci_low": 83.0, "ci_high": 89.9, "key": "sweep-01"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 2.5, "threshold_label": "10-year risk ≥ 2.5%", "n_computable": 372.0, "n_flagged": 246.0, "sens": 66.1, "ci_low": 61.2, "ci_high": 70.8, "key": "sweep-02"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 5.0, "threshold_label": "10-year risk ≥ 5%", "n_computable": 372.0, "n_flagged": 164.0, "sens": 44.1, "ci_low": 39.1, "ci_high": 49.2, "key": "sweep-03"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 7.5, "threshold_label": "10-year risk ≥ 7.5%", "n_computable": 372.0, "n_flagged": 122.0, "sens": 32.8, "ci_low": 28.2, "ci_high": 37.7, "key": "sweep-04"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 10.0, "threshold_label": "10-year risk ≥ 10%", "n_computable": 372.0, "n_flagged": 88.0, "sens": 23.7, "ci_low": 19.6, "ci_high": 28.2, "key": "sweep-05"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 15.0, "threshold_label": "10-year risk ≥ 15%", "n_computable": 372.0, "n_flagged": 49.0, "sens": 13.2, "ci_low": 10.1, "ci_high": 17.0, "key": "sweep-06"}, {"score": "QDiabetes", "series": "qdiabetes", "threshold": 20.0, "threshold_label": "10-year risk ≥ 20%", "n_computable": 372.0, "n_flagged": 30.0, "sens": 8.1, "ci_low": 5.7, "ci_high": 11.3, "key": "sweep-07"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 4.0, "threshold_label": "score ≥ 4", "n_computable": 2422.0, "n_flagged": 2054.0, "sens": 84.8, "ci_low": 83.3, "ci_high": 86.2, "key": "sweep-08"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 4.5, "threshold_label": "score ≥ 4.5", "n_computable": 2422.0, "n_flagged": 1547.0, "sens": 63.9, "ci_low": 61.9, "ci_high": 65.8, "key": "sweep-09"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 5.0, "threshold_label": "score ≥ 5", "n_computable": 2422.0, "n_flagged": 987.0, "sens": 40.8, "ci_low": 38.8, "ci_high": 42.7, "key": "sweep-10"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 5.5, "threshold_label": "score ≥ 5.5", "n_computable": 2422.0, "n_flagged": 511.0, "sens": 21.1, "ci_low": 19.5, "ci_high": 22.8, "key": "sweep-11"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 6.0, "threshold_label": "score ≥ 6", "n_computable": 2422.0, "n_flagged": 203.0, "sens": 8.4, "ci_low": 7.3, "ci_high": 9.6, "key": "sweep-12"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 6.5, "threshold_label": "score ≥ 6.5", "n_computable": 2422.0, "n_flagged": 73.0, "sens": 3.0, "ci_low": 2.4, "ci_high": 3.8, "key": "sweep-13"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 7.0, "threshold_label": "score ≥ 7", "n_computable": 2422.0, "n_flagged": 18.0, "sens": 0.7, "ci_low": 0.5, "ci_high": 1.2, "key": "sweep-14"}, {"score": "LPRS · unknown ethnicity as White", "series": "lprs_white", "threshold": 7.5, "threshold_label": "score ≥ 7.5", "n_computable": 2422.0, "n_flagged": "<10", "sens": "suppressed (<10)", "ci_low": "suppressed (<10)", "ci_high": "suppressed (<10)", "key": "sweep-15"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 4.0, "threshold_label": "score ≥ 4", "n_computable": 2422.0, "n_flagged": 2396.0, "sens": 98.9, "ci_low": 98.4, "ci_high": 99.3, "key": "sweep-16"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 4.5, "threshold_label": "score ≥ 4.5", "n_computable": 2422.0, "n_flagged": 2237.0, "sens": 92.4, "ci_low": 91.2, "ci_high": 93.4, "key": "sweep-17"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 5.0, "threshold_label": "score ≥ 5", "n_computable": 2422.0, "n_flagged": 1816.0, "sens": 75.0, "ci_low": 73.2, "ci_high": 76.7, "key": "sweep-18"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 5.5, "threshold_label": "score ≥ 5.5", "n_computable": 2422.0, "n_flagged": 1262.0, "sens": 52.1, "ci_low": 50.1, "ci_high": 54.1, "key": "sweep-19"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 6.0, "threshold_label": "score ≥ 6", "n_computable": 2422.0, "n_flagged": 734.0, "sens": 30.3, "ci_low": 28.5, "ci_high": 32.2, "key": "sweep-20"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 6.5, "threshold_label": "score ≥ 6.5", "n_computable": 2422.0, "n_flagged": 338.0, "sens": 14.0, "ci_low": 12.6, "ci_high": 15.4, "key": "sweep-21"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 7.0, "threshold_label": "score ≥ 7", "n_computable": 2422.0, "n_flagged": 123.0, "sens": 5.1, "ci_low": 4.3, "ci_high": 6.0, "key": "sweep-22"}, {"score": "LPRS · unknown ethnicity as Other", "series": "lprs_other", "threshold": 7.5, "threshold_label": "score ≥ 7.5", "n_computable": 2422.0, "n_flagged": 33.0, "sens": 1.4, "ci_low": 1.0, "ci_high": 1.9, "key": "sweep-23"}], "score_completeness": [{"score": "QDiabetes", "input": "Sex", "needed": "Required", "complete_n": "suppressed (<10 missing)", "complete_pct": "suppressed (<10)", "kind": "var", "key": "score_completeness-01"}, {"score": "QDiabetes", "input": "Age (25–84)", "needed": "Required", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-02"}, {"score": "QDiabetes", "input": "Ethnicity", "needed": "Not required: unknown → reference group", "complete_n": 0.0, "complete_pct": 0.0, "kind": "var", "key": "score_completeness-03"}, {"score": "QDiabetes", "input": "BMI", "needed": "Required", "complete_n": 2424.0, "complete_pct": 94.5, "kind": "var", "key": "score_completeness-04"}, {"score": "QDiabetes", "input": "Smoking", "needed": "Required", "complete_n": 381.0, "complete_pct": 14.9, "kind": "var", "key": "score_completeness-05"}, {"score": "QDiabetes", "input": "Family history of diabetes", "needed": "Present / absent: 100% by definition", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-06"}, {"score": "QDiabetes", "input": "Cardiovascular disease", "needed": "Present / absent: 100% by definition", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-07"}, {"score": "QDiabetes", "input": "Treated hypertension (diagnosis or drug, D36)", "needed": "Present / absent: 100% by definition", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-08"}, {"score": "QDiabetes", "input": "All inputs, ethnicity as reference group = score computed", "needed": "Joint", "complete_n": 372.0, "complete_pct": 14.5, "kind": "joint", "key": "score_completeness-09"}, {"score": "QDiabetes", "input": "All inputs, ethnicity required (KPI 'Joint Completeness – QDiabetes')", "needed": "Joint", "complete_n": 0.0, "complete_pct": 0.0, "kind": "joint", "key": "score_completeness-10"}, {"score": "LPRS", "input": "Age", "needed": "Required", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-11"}, {"score": "LPRS", "input": "Sex", "needed": "Required", "complete_n": "suppressed (<10 missing)", "complete_pct": "suppressed (<10)", "kind": "var", "key": "score_completeness-12"}, {"score": "LPRS", "input": "Ethnicity · nationality (default)", "needed": "Required", "complete_n": 0.0, "complete_pct": 0.0, "kind": "var", "key": "score_completeness-13"}, {"score": "LPRS", "input": "Ethnicity · NABIDH EthnicGroup field", "needed": "Required", "complete_n": 266.0, "complete_pct": 10.4, "kind": "var", "key": "score_completeness-14"}, {"score": "LPRS", "input": "BMI", "needed": "Required", "complete_n": 2424.0, "complete_pct": 94.5, "kind": "var", "key": "score_completeness-15"}, {"score": "LPRS", "input": "Family history of diabetes", "needed": "Present / absent: 100% by definition", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-16"}, {"score": "LPRS", "input": "Hypertension (diagnosis or drug, D36)", "needed": "Present / absent: 100% by definition", "complete_n": 2564.0, "complete_pct": 100.0, "kind": "var", "key": "score_completeness-17"}, {"score": "LPRS", "input": "All inputs · ethnicity from nationality = score computed (KPI 'Joint Completeness – LRS')", "needed": "Joint", "complete_n": 0.0, "complete_pct": 0.0, "kind": "joint", "key": "score_completeness-18"}, {"score": "LPRS", "input": "All inputs · ethnicity from the EthnicGroup field", "needed": "Joint", "complete_n": 237.0, "complete_pct": 9.2, "kind": "joint", "key": "score_completeness-19"}]}}</script>
+<script>
+if (!window.d3) {   // offline: number formats only; charts are skipped
+  window.d3 = {format: (s) => s === ',d' ? (v) => Math.round(v).toLocaleString('en-US')
+    : s === '.1f' ? (v) => (+v).toFixed(1) : s === '.2f' ? (v) => (+v).toFixed(2) : (v) => String(+(+v).toPrecision(6))};
+}
+window.dash = (function () {
+  const DATA = JSON.parse(document.getElementById('report-data').textContent);
+  const loaders = {}, draws = {}, cache = {};
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const colors = dark ? ['#e08363', '#c9c2b3', '#b98e5a', '#93a877', '#7eaddb', '#a97a9b', '#d8a747', '#8d9aa3']
+                      : ['#d97757', '#3d3929', '#c2b280', '#788c5d', '#6a9bcc', '#8b5d7d', '#c9952b', '#5f6b73'];
+  function data(id) {
+    if (!(id in cache)) {
+      const l = loaders[id];
+      if (!l) return {status: 'missing', data: []};
+      try { const r = l.fn({answer: DATA}); cache[id] = {status: 'ok', data: r.data, columns: r.columns, meta: r.meta}; }
+      catch (e) { cache[id] = {status: 'error', data: [], message: String(e)}; }
+    }
+    return cache[id];
+  }
+  function drawAll() {
+    for (const [name, fn] of Object.entries(draws)) {
+      document.querySelectorAll('[data-draw="' + name + '"]').forEach((el) => {
+        try { fn(el); } catch (e) { if (name.endsWith('chart')) el.replaceChildren(); console.warn(name, e); }
+      });
+    }
+  }
+  let t = null;
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(drawAll, 150); });
+  return {loader: (id, o) => { loaders[id] = o; }, draw: (name, fn) => { draws[name] = fn; }, data, colors,
+          onData: (fn) => fn(), calc: () => {}, params: () => ({}), drawAll};
+})();
+</script>
+<script>
+dash.loader('funnel', {description: 'c1_report.json, funnel table', fn: ({answer}) => { const rows = answer.datasets.funnel; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('kpi', {description: 'c1_report.json, kpi table', fn: ({answer}) => { const rows = answer.datasets.kpi; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('not_measured', {description: 'c1_report.json, not_measured table', fn: ({answer}) => { const rows = answer.datasets.not_measured; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('mapping', {description: 'c1_report.json, mapping table', fn: ({answer}) => { const rows = answer.datasets.mapping; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('framework', {description: 'c1_report.json, framework table', fn: ({answer}) => { const rows = answer.datasets.framework; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('quality', {description: 'c1_report.json, quality table', fn: ({answer}) => { const rows = answer.datasets.quality; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('unusable', {description: 'c1_report.json, unusable table', fn: ({answer}) => { const rows = answer.datasets.unusable; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('coding', {description: 'c1_report.json, coding table', fn: ({answer}) => { const rows = answer.datasets.coding; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('missing', {description: 'c1_report.json, missing table', fn: ({answer}) => { const rows = answer.datasets.missing; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('completeness', {description: 'c1_report.json, completeness table', fn: ({answer}) => { const rows = answer.datasets.completeness; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('htn', {description: 'c1_report.json, htn table', fn: ({answer}) => { const rows = answer.datasets.htn; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('smoking', {description: 'c1_report.json, smoking table', fn: ({answer}) => { const rows = answer.datasets.smoking; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('selection', {description: 'c1_report.json, selection table', fn: ({answer}) => { const rows = answer.datasets.selection; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('scores', {description: 'c1_report.json, scores table', fn: ({answer}) => { const rows = answer.datasets.scores; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('score_completeness', {description: 'c1_report.json, score_completeness table', fn: ({answer}) => { const rows = answer.datasets.score_completeness; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('lprs_scen', {description: 'c2_report.json, lprs_scen table', fn: ({answer}) => { const rows = answer.datasets.lprs_scen; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('sweep', {description: 'c2_report.json, sweep table', fn: ({answer}) => { const rows = answer.datasets.sweep; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+dash.loader('joint', {description: 'c1_report.json, joint table', fn: ({answer}) => { const rows = answer.datasets.joint; return {data: rows, columns: [...new Set(rows.flatMap(Object.keys))], meta: answer.meta}; }});
+
+const fInt = d3.format(',d');
+const fOne = d3.format('.1f');
+const fTwo = (v) => (isNum(v) ? d3.format('.2f')(v) : fmtNum(v));
+const isNum = (v) => typeof v === 'number' && isFinite(v);
+const fmtNum = (v, f = fInt) => (isNum(v) ? f(v) : (v == null || v === '' ? '—' : String(v)));
+const fmtPct = (v) => (isNum(v) ? fOne(v) + '%' : (v == null || v === '' ? '—' : String(v)));
+const fmtAuto = (v) => (isNum(v) ? (Number.isInteger(v) ? fInt(v) : fOne(v)) : (v == null || v === '' ? '—' : String(v)));
+const GROUP = {all: 'All', T2DM: 'T2DM', Prediabetes: 'Prediabetes'};
+const SCORE = {qdiabetes: 'QDiabetes', lrs: 'LPRS'};
+const REASON = {smoking_missing: 'Smoking status', sex: 'Sex not male / female', bmi_missing: 'BMI', ethnicity: 'Ethnicity', age_out_of_range: 'Age outside 25–84'};
+const PROCESS = ['Audit Trail Completeness', 'Evidence Package Completeness', 'Data Security / No-Incident'];
+
+function chipClass(v) {
+  const s = String(v || '').toLowerCase();
+  if (s === 'met' || s === 'works' || s === 'match' || s === 'yes') return 'ok';
+  if (s === 'not met' || s === 'blocked' || s === 'missing' || s === 'absent' || s === 'no') return 'bad';
+  if (s === 'partial') return 'warn';
+  if (s === 'gap') return 'bad';
+  if (s.startsWith('decision') || s.startsWith('fixed') || s.includes('after mapping') || s.startsWith('match (') || s.startsWith('mapped') || s.startsWith('by ')) return 'warn';
+  return 'muted';
+}
+function msgRow(n, text) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = n; td.className = 'c1-msg'; td.textContent = text; tr.append(td); return tr; }
+function stateText(d) { return d.status === 'error' ? 'This part could not be loaded.' : d.status === 'loading' ? 'Loading…' : '—'; }
+function fillRows(tbody, id, cols, opts = {}) {
+  const d = dash.data(id);
+  if (d.status !== 'ok') { tbody.replaceChildren(msgRow(cols.length, stateText(d))); return; }
+  let rows = d.data;
+  if (opts.filter) rows = rows.filter(opts.filter);
+  if (!rows.length) { tbody.replaceChildren(msgRow(cols.length, 'No rows.')); return; }
+  tbody.replaceChildren(...rows.map((r) => {
+    const tr = document.createElement('tr');
+    if (opts.rowClass) { const c = opts.rowClass(r); if (c) tr.className = c; }
+    tr.dataset.key = encodeURIComponent(r.key);
+    for (const c of cols) {
+      const td = document.createElement('td');
+      if (c.num) td.className = 'num';
+      if (c.wide) td.className = 'c1-wide';
+      const v = r[c.f];
+      if (c.chip) { const s = document.createElement('span'); s.className = 'c1-chip ' + chipClass(v); s.textContent = v == null ? '—' : String(v); td.append(s); }
+      else td.textContent = c.fmt ? c.fmt(v, r) : (v == null || v === '' ? '—' : String(v));
+      tr.append(td);
+    }
+    return tr;
+  }));
+}
+function tipBox(el) { const t = document.createElement('div'); t.className = 'c1-tip'; t.hidden = true; el.append(t); return t; }
+function showTip(el, tip, evt, lines) {
+  tip.replaceChildren(...lines.map((l, i) => { const div = document.createElement('div'); div.textContent = l; if (i === 0) div.style.fontWeight = '600'; return div; }));
+  tip.hidden = false;
+  const box = el.getBoundingClientRect();
+  let x = evt.clientX - box.left + 12, y = evt.clientY - box.top + 12;
+  if (x + tip.offsetWidth > el.clientWidth) x = Math.max(0, evt.clientX - box.left - tip.offsetWidth - 12);
+  if (y + tip.offsetHeight > el.clientHeight) y = Math.max(0, evt.clientY - box.top - tip.offsetHeight - 12);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+
+document.querySelectorAll('[data-swatch]').forEach((i) => { i.style.background = dash.colors[+i.getAttribute('data-swatch')]; });
+
+dash.draw('v', (el) => {
+  const id = el.getAttribute('data-source'), field = el.getAttribute('data-field');
+  const where = el.getAttribute('data-where'), fmt = el.getAttribute('data-fmt');
+  const d = dash.data(id);
+  if (d.status !== 'ok' || !Array.isArray(d.data)) { el.textContent = '—'; el.classList.toggle('dash-skeleton', d.status === 'loading'); return; }
+  el.classList.remove('dash-skeleton');
+  let row = d.data[0];
+  if (where) { const i = where.indexOf('='); const col = where.slice(0, i), val = decodeURIComponent(where.slice(i + 1)); row = d.data.find((r) => String(r[col]) === val); }
+  const x = row ? row[field] : null;
+  el.textContent = fmt === 'pct' ? fmtPct(x) : fmtNum(x);
+});
+
+dash.draw('funnel-chart', (el) => {
+  const d = dash.data('funnel');
+  if (d.status !== 'ok') { const p = document.createElement('p'); p.className = 'c1-note'; p.textContent = stateText(d); el.replaceChildren(p); return; }
+  const rows = d.data.slice().sort((a, b) => a.step - b.step);
+  const W = Math.max(300, el.clientWidth), narrow = W < 560;
+  const rowH = narrow ? 44 : 30, bh = 14, top = 4;
+  const H = top + rows.length * rowH + 6;
+  const svg = d3.create('svg').attr('width', W).attr('height', H).attr('role', 'img')
+    .attr('aria-label', 'C2 patients from delivery to the patients each score was produced for');
+  el.replaceChildren(svg.node());
+  const tip = tipBox(el);
+  const labels = svg.append('g').selectAll('text').data(rows).join('text').attr('class', 'c1-lab')
+    .attr('x', 0).attr('y', (_, i) => top + i * rowH + (narrow ? 12 : rowH / 2 + 4)).text((r) => r.label);
+  const left = narrow ? 0 : Math.min(W * 0.55, d3.max(labels.nodes(), (n) => n.getComputedTextLength()) + 14);
+  const vals = svg.append('g').selectAll('text').data(rows).join('text').attr('class', 'c1-val')
+    .text((r) => fmtNum(r.n) + (isNum(r.pct) ? ` · ${fmtPct(r.pct)}` : ''));
+  const right = d3.max(vals.nodes(), (n) => n.getComputedTextLength()) + 10;
+  const max = d3.max(rows, (r) => (isNum(r.n) ? r.n : 0)) || 1;
+  const x = d3.scaleLinear().domain([0, max]).range([left, W - right]);
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + (narrow ? 20 : (rowH - bh) / 2);
+    const explore = r.alt === true, scenario = r.alt === 'scenario';
+    svg.append('rect').attr('x', left).attr('y', y).attr('height', bh).attr('width', W - right - left)
+      .style('fill', 'var(--cds-chart-grid)').attr('rx', 2).attr('opacity', 0.5);
+    svg.append('rect').attr('x', left).attr('y', y).attr('height', bh).attr('rx', 2)
+      .attr('width', isNum(r.n_bar) ? Math.max(r.n_bar > 0 ? 2 : 0, x(r.n_bar) - left) : 0)
+      .style('fill', scenario ? dash.colors[3] : explore ? dash.colors[2] : dash.colors[0]);
+    d3.select(vals.nodes()[i]).attr('x', (isNum(r.n_bar) ? x(r.n_bar) : left) + 6).attr('y', y + bh - 2);
+    svg.append('rect').attr('x', 0).attr('y', top + i * rowH).attr('width', W).attr('height', rowH).style('fill', 'transparent')
+      .on('pointermove', (e) => showTip(el, tip, e, [r.label, `${fmtNum(r.n)} patients${isNum(r.pct) ? ' · ' + fmtPct(r.pct) + ' of known positives' : ''}`, r.run, 'From ' + r.source]))
+      .on('pointerleave', () => { tip.hidden = true; });
+  });
+});
+
+const KPI_COLS = [{f: 'kpi'}, {f: 'target'}, {f: 'actual'}, {f: 'met', chip: true}, {f: 'role'}];
+dash.draw('kpi-completeness', (tb) => fillRows(tb, 'kpi', KPI_COLS, {filter: (r) => r.kpi === 'Data Completeness for Required Variables'}));
+dash.draw('kpi-framework', (tb) => fillRows(tb, 'kpi', KPI_COLS, {filter: (r) => r.kpi === 'Applicant Data Requirement Framework Match'}));
+dash.draw('kpi-process', (tb) => fillRows(tb, 'kpi', [{f: 'kpi'}, {f: 'target'}, {f: 'actual'}, {f: 'met', chip: true}, {f: 'note'}], {filter: (r) => PROCESS.includes(r.kpi)}));
+dash.draw('completeness-rows', (tb) => fillRows(tb, 'completeness', [
+  {f: 'variable'}, {f: 'measure'}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'complete_n', num: true, fmt: fmtAuto}, {f: 'complete_pct', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'meets_90', chip: true}, {f: 'note', wide: true}]));
+const SC_COLS = [{f: 'input', wide: true}, {f: 'needed'}, {f: 'complete_n', num: true, fmt: fmtAuto}, {f: 'complete_pct', num: true, fmt: (v) => fmtNum(v, fOne)}];
+const jointRow = (r) => (r.kind === 'joint' ? 'c1-joint' : '');
+dash.draw('score-qd-rows', (tb) => fillRows(tb, 'score_completeness', SC_COLS, {filter: (r) => r.score === 'QDiabetes', rowClass: jointRow}));
+dash.draw('score-lprs-rows', (tb) => fillRows(tb, 'score_completeness', SC_COLS, {filter: (r) => r.score === 'LPRS', rowClass: jointRow}));
+dash.draw('lprs-scen-rows', (tb) => fillRows(tb, 'lprs_scen', [{f: 'scenario'}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'n_computable', num: true, fmt: fmtAuto},
+  {f: 'pct_computable', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'median', num: true, fmt: fTwo}, {f: 'p25', num: true, fmt: fTwo}, {f: 'p75', num: true, fmt: fTwo}]));
+dash.draw('sweep-rows', (tb) => fillRows(tb, 'sweep', [{f: 'score'}, {f: 'threshold_label'}, {f: 'n_computable', num: true, fmt: fmtAuto}, {f: 'n_flagged', num: true, fmt: fmtAuto},
+  {f: 'sens', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'ci_low', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'ci_high', num: true, fmt: (v) => fmtNum(v, fOne)}]));
+const SERIES_COLOR = {qdiabetes: 0, lprs_white: 1, lprs_other: 2};
+dash.draw('sens-chart', (el) => {
+  const d = dash.data('sweep');
+  if (d.status !== 'ok') { const p = document.createElement('p'); p.className = 'c1-note'; p.textContent = stateText(d); el.replaceChildren(p); return; }
+  const want = el.getAttribute('data-series').split(' ');
+  const rows = d.data.filter((r) => want.includes(r.series) && isNum(r.threshold));
+  const W = Math.max(260, el.clientWidth), H = 230, m = {t: 10, r: 14, b: 40, l: 42};
+  const svg = d3.create('svg').attr('width', W).attr('height', H).attr('role', 'img')
+    .attr('aria-label', 'Sensitivity at each threshold: ' + want.join(', '));
+  el.replaceChildren(svg.node());
+  const tip = tipBox(el);
+  const x = d3.scaleLinear().domain(d3.extent(rows, (r) => r.threshold)).nice().range([m.l, W - m.r]);
+  const y = d3.scaleLinear().domain([0, 100]).range([H - m.b, m.t]);
+  svg.append('g').selectAll('line').data(y.ticks(5)).join('line').attr('x1', m.l).attr('x2', W - m.r)
+    .attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).style('stroke', 'var(--cds-chart-grid)');
+  svg.append('g').selectAll('text').data(y.ticks(5)).join('text').attr('x', m.l - 6).attr('y', (t) => y(t) + 4)
+    .attr('text-anchor', 'end').text((t) => t + '%');
+  const xt = x.ticks(Math.max(3, Math.floor((W - m.l - m.r) / 60)));
+  svg.append('g').selectAll('text').data(xt).join('text').attr('x', (t) => x(t)).attr('y', H - m.b + 16)
+    .attr('text-anchor', 'middle').text((t) => d3.format('~g')(t));
+  svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 6).attr('text-anchor', 'middle').text(el.getAttribute('data-xlabel'));
+  for (const s of want) {
+    const pts = rows.filter((r) => r.series === s && isNum(r.sens)).sort((a, b) => a.threshold - b.threshold);
+    const color = dash.colors[SERIES_COLOR[s]];
+    svg.append('path').datum(pts).attr('fill', 'none').style('stroke', color).attr('stroke-width', 2)
+      .attr('d', d3.line().x((r) => x(r.threshold)).y((r) => y(r.sens)));
+    svg.append('g').selectAll('circle').data(pts).join('circle').attr('cx', (r) => x(r.threshold)).attr('cy', (r) => y(r.sens))
+      .attr('r', 4).style('fill', color)
+      .on('pointermove', (e, r) => showTip(el, tip, e, [r.score, r.threshold_label, `Sensitivity ${fmtPct(r.sens)} (95% CI ${fmtNum(r.ci_low, fOne)}–${fmtNum(r.ci_high, fOne)})`, `${fmtNum(r.n_flagged)} of ${fmtNum(r.n_computable)} scored`]))
+      .on('pointerleave', () => { tip.hidden = true; });
+  }
+});
+dash.draw('scores-rows', (tb) => fillRows(tb, 'scores', [{f: 'group'}, {f: 'before', num: true, fmt: fmtPct}, {f: 'now', num: true, fmt: fmtPct},
+  {f: 'change', num: true, fmt: (v) => (isNum(v) ? (v > 0 ? '+' : '') + d3.format('.2f')(v) : fmtNum(v))}]));
+dash.draw('htn-rows', (tb) => fillRows(tb, 'htn', [{f: 'category'}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'pct', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'counted_by'}]));
+dash.draw('smoking-rows', (tb) => fillRows(tb, 'smoking', [
+  {f: 'level'}, {f: 'recorded_as', wide: true}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'pct', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'from_dx', num: true, fmt: fmtAuto}]));
+dash.draw('selection-rows', (tb) => fillRows(tb, 'selection', [
+  {f: 'variable'}, {f: 'c1', num: true, fmt: (v, r) => r.kind === 'share' ? fmtPct(v) : fmtNum(v, fOne)}, {f: 'c2', num: true, fmt: (v, r) => r.kind === 'share' ? fmtPct(v) : fmtNum(v, fOne)},
+  {f: 'smd', num: true, fmt: (v) => (isNum(v) ? d3.format('.2f')(v) : fmtNum(v))}, {f: 'imbalanced', chip: true}]));
+dash.draw('notmeasured-rows', (tb) => fillRows(tb, 'not_measured', [{f: 'kpi'}, {f: 'target'}, {f: 'met', chip: true}]));
+dash.draw('mapping-rows', (tb) => fillRows(tb, 'mapping', [
+  {f: 'input'}, {f: 'score'}, {f: 'mapping', wide: true}, {f: 'issue', wide: true}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'unit'}, {f: 'status', chip: true}]));
+dash.draw('unusable-rows', (tb) => fillRows(tb, 'unusable', [{f: 'item'}, {f: 'variable'}, {f: 'rows', num: true, fmt: fmtAuto}, {f: 'action'}]));
+dash.draw('missing-rows', (tb) => fillRows(tb, 'missing', [
+  {f: 'score', fmt: (v) => SCORE[v] || v}, {f: 'reason', fmt: (v) => REASON[v] || v}, {f: 'n', num: true, fmt: fmtAuto}, {f: 'pct', num: true, fmt: (v) => fmtNum(v, fOne)}]));
+dash.draw('joint-rows', (tb) => fillRows(tb, 'joint', [
+  {f: 'source_label'}, {f: 'group', fmt: (v) => GROUP[v] || v}, {f: 'n', num: true, fmt: fmtAuto},
+  {f: 'joint_core7_n', num: true, fmt: fmtAuto}, {f: 'joint_core7_pct', num: true, fmt: (v) => fmtNum(v, fOne)},
+  {f: 'joint_core8_n', num: true, fmt: fmtAuto}, {f: 'joint_core8_pct', num: true, fmt: (v) => fmtNum(v, fOne)},
+  {f: 'joint_lrs_n', num: true, fmt: fmtAuto}, {f: 'joint_lrs_pct', num: true, fmt: (v) => fmtNum(v, fOne)}]));
+dash.draw('framework-rows', (tb) => fillRows(tb, 'framework', [
+  {f: 'variable'}, {f: 'source_field', wide: true}, {f: 'route'}, {f: 'patients', num: true, fmt: fmtAuto}, {f: 'pct', num: true, fmt: (v) => fmtNum(v, fOne)}, {f: 'status', chip: true}, {f: 'reason', wide: true}]));
+dash.draw('quality-rows', (tb) => fillRows(tb, 'quality', [
+  {f: 'check'}, {f: 'unit'}, {f: 'patients', num: true, fmt: fmtAuto}, {f: 'p5', num: true, fmt: fmtAuto}, {f: 'median', num: true, fmt: fmtAuto},
+  {f: 'p95', num: true, fmt: fmtAuto}, {f: 'range'}, {f: 'rows_out', num: true, fmt: fmtAuto}, {f: 'patients_out', num: true, fmt: fmtAuto}, {f: 'note', wide: true}]));
+dash.draw('coding-rows', (tb) => fillRows(tb, 'coding', [
+  {f: 'source'}, {f: 'expected'}, {f: 'arrived', wide: true}, {f: 'count', num: true, fmt: fmtAuto}, {f: 'count_label'}, {f: 'ok', chip: true}]));
+</script>
+<script>dash.drawAll();</script>
+</body>
+</html>
