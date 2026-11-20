@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -302,6 +303,52 @@ class TestAdapterOptions(unittest.TestCase):
                          [("A1", "light"), ("A1", "light"), ("A2", "moderate"), ("A2", "unmapped:other"),
                           ("A3", "heavy"), ("A4", "light")])
         self.assertEqual(nabidh.FH_RELATION_DEGREE["1st degree relative"], "first")
+
+    def test_smoking_amounts(self):
+        """Ingest 1.5.0: a plain number under Cigarettes / Cigars (C1 1, 1.5, .25; C2 15) is an amount → current, its
+        intensity waits for the unit (DHA B7); 0, text and numbers under the Smoking item stay unmapped."""
+        rows = ["A1,Cigarettes,15,", "A2,\"Cigarettes,Cigars\",.25,", "A3,Cigars,0,", "A4,Smoking,15,",
+                "A4,Cigarettes,1.5,2020-01-01", "A3,Cigarettes,10 per day,", "A1,Cigarettes,,"]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_raw(d, social_rows=rows)
+            ds, rep = nabidh.load(d, "c1")
+            with mock.patch.object(nabidh, "SMOKING_AMOUNT_UNIT", "packs_per_day"):
+                ds_packs, _ = nabidh.load(d, "c1")
+            with mock.patch.object(nabidh, "SMOKING_AMOUNT_UNIT", "cigarettes_per_day"):
+                ds_cigs, _ = nabidh.load(d, "c1")
+
+        def values(x):
+            sm = x["observations"][x["observations"]["concept"] == "smoking_status"]
+            return sorted(zip(sm["patient_id"], sm["value"].astype(str)))
+
+        self.assertEqual(values(ds), [("A1", "current"), ("A2", "current"), ("A3", "unmapped:0"),
+                                      ("A3", "unmapped:10 per day"), ("A4", "current"), ("A4", "unmapped:15")])
+        self.assertEqual(values(ds_packs), [("A1", "heavy"), ("A2", "light"), ("A3", "unmapped:0"),
+                                            ("A3", "unmapped:10 per day"), ("A4", "heavy"), ("A4", "unmapped:15")])
+        self.assertEqual(values(ds_cigs), [("A1", "moderate"), ("A2", "light"), ("A3", "unmapped:0"),
+                                           ("A3", "unmapped:10 per day"), ("A4", "light"), ("A4", "unmapped:15")])
+        # undated amount only (D28) → "current" → QDiabetes smoking category = the D7 default (moderate)
+        snap = phenotype.core_snapshot(ds, pd.Series(pd.Timestamp("2022-01-01"), index=["A1", "A2"]), None)
+        self.assertEqual(list(snap["smoking_raw"]), ["current", "current"])
+        self.assertEqual(list(snap["smoking_source"]), ["undated_consistent", "undated_consistent"])
+        self.assertEqual(list(qd.prepare_inputs(snap)["smoke_cat"]), [PARAMS["qd_smoking_current_category"]] * 2)
+        vc = pd.DataFrame(rep["value_counts"])
+        amounts = set(vc.loc[vc["field"] == nabidh.SMOKING_AMOUNT_FIELD, "value"])
+        self.assertEqual(amounts, {"Cigarettes | 10–19 → current", "Cigarettes,Cigars | < 1 → current",
+                                   "Cigars | 0 → not mapped (0: non or ex?)",
+                                   "Cigarettes | 1–9, not whole (e.g. 1.5) → current"})
+        # the ingest summary counts every value containing "unmapped": the amount lines must not add to it
+        self.assertFalse(any("unmapped" in v for v in amounts))
+
+    def test_smoking_amount_helpers(self):
+        amount = nabidh.smoking_amount(pd.Series(["15", " 1.5 ", ".25", "2.", "1,5", "-3", "10 per day", None]))
+        self.assertEqual([None if x != x else x for x in amount], [15.0, 1.5, 0.25, 2.0, None, None, None, None])
+        self.assertEqual([nabidh.smoking_amount_band(x) for x in (0, 0.5, 1, 3, 3.5, 10, 19.9, 20, 40)],
+                         ["0", "< 1", "1", "2–9", "1–9, not whole (e.g. 1.5)", "10–19", "10–19", "≥ 20", "≥ 20"])
+        # QDiabetes-2018 bands (cigarettes a day): light 1–9, moderate 10–19, heavy ≥ 20
+        self.assertEqual([codelists.qd_smoking_intensity(x) for x in (0.5, 9, 9.99, 10, 19.5, 20, 60, 0, -1, "x", None)],
+                         ["light", "light", "light", "moderate", "moderate", "heavy", "heavy", None, None, None, None])
 
     def test_family_history_text(self):
         """FamilyHistory has no status column: negation and relative degree from the description text (2026-11-19)."""

@@ -863,6 +863,301 @@ SMOKING_USABLE_SQL = ("SocialHabitQty_Description IS NOT NULL AND "
                       "UPPER(TRIM(SocialHabitQty_Description)) NOT IN ('UNKNOWN', 'OTHER', '')")
 SMOKING_DX_SQL = "(Diagnosis_Code LIKE 'F17%' OR Diagnosis_Code LIKE 'Z72.0%' OR Diagnosis_Code LIKE 'Z87.891%')"
 
+# Smoking check 2s (C2, 2026-11-20: 927 patients with records but none usable, 1,248 without a record): rows are read
+# into the enclave process and classified with the adapter's own rules (nabidh.SMOKING_VALUES, the SocialHistory item
+# filter, the amount rule of ingest 1.5.0). Only counts per class from a closed list are printed (< 10 → "<10"): no
+# free-text value, no patient key; a diagnosis code is printed only if ≥ 10 patients have it.
+SH_ITEMS_KNOWN = ("Smoking", "Cigarettes", "Cigars", "Cigarettes,Cigars", "Tobacco", "ALCOHOL", "Beverages", "Other",
+                  "Unknown", "Pipe", "Shisha", "Recreational")   # C1 / C2 items (ingest 2026-11-19 / 20; C2 GROUP BY)
+TOBACCO_WORDS = ("smok", "tobac", "cigar", "shisha", "hookah", "midwakh", "dokha", "nicotin", "pipe", "vape", "chew")
+SMOKING_USABLE = ("never", "ex", "current", "light", "moderate", "heavy")
+# Tobacco-related ICD-10(-CM) codes in any spelling (dots / no dots, truncated); normalised prefix → class. The code
+# list (codelists smoking_current / smoking_ex) decides what the analysis uses; this only shows what else is there.
+TOBACCO_DX_CLASSES = (
+    ("F17", "F17 nicotine dependence"), ("Z720", "Z72.0 tobacco use"),
+    ("Z87891", "Z87.891 history of nicotine dependence"), ("Z716", "Z71.6 tobacco counselling"),
+    ("O9933", "O99.33 smoking in pregnancy"), ("T652", "T65.2 toxic effect of tobacco"),
+    ("Z7722", "exposure to tobacco smoke (not a smoker)"), ("Z5731", "exposure to tobacco smoke (not a smoker)"),
+    ("Z587", "exposure to tobacco smoke (not a smoker)"),
+)
+TOBACCO_DX_LIKE = ("F17", "Z72.0", "Z720", "Z87.891", "Z87891", "Z71.6", "Z716", "O99.33", "O9933", "T65.2", "T652",
+                   "Z77.22", "Z7722", "Z57.31", "Z5731", "Z58.7", "Z587")
+TOBACCO_TEXT_LIKE = ("SMOK", "TOBAC", "NICOTIN", "CIGAR", "SHISHA", "HOOKAH", "MIDWAKH", "DOKHA")
+
+
+def _txt(v) -> str | None:
+    from sandbox.io import explore
+
+    t = explore.to_text(v)
+    t = t.strip() if t is not None else None
+    return None if not t or t.upper() == "NULL" else t
+
+
+def sh_item_class(v) -> str:
+    """SocialHistory item → a known item name, '<empty>', or '(other item[, tobacco word])' — never the text itself."""
+    t = _txt(v)
+    if t is None:
+        return "<empty>"
+    known = {k.lower(): k for k in SH_ITEMS_KNOWN}
+    if t.lower() in known:
+        return known[t.lower()]
+    return "(other item, tobacco word)" if any(w in t.lower() for w in TOBACCO_WORDS) else "(other item)"
+
+
+def sh_value_class(v) -> str:
+    """SocialHabitQty → a dictionary word (nabidh.SMOKING_VALUES key or 'other'), 'number: <band>', '<empty>' or
+    '(other text)'. The words are the adapter's closed vocabulary; free text is never returned."""
+    import pandas as pd
+
+    from sandbox.io.adapters import nabidh
+
+    t = _txt(v)
+    if t is None:
+        return "<empty>"
+    if t.lower() in nabidh.SMOKING_VALUES or t.lower() == "other":
+        return t.lower()
+    x = float(nabidh.smoking_amount(pd.Series([t], dtype=object)).iloc[0])
+    return f"number: {nabidh.smoking_amount_band(x)}" if x == x else "(other text)"
+
+
+def sh_coarse(item_cls: str, value_cls: str) -> str:
+    """One tobacco row → usable (ingest 1.4.2) / unknown / other / empty / amount > 0 / amount 0 / text."""
+    from sandbox.io.adapters import nabidh
+
+    if value_cls.startswith("number: "):
+        if item_cls.lower() not in nabidh.SMOKING_AMOUNT_ITEMS:
+            return "number, not an amount item"
+        return "amount 0" if value_cls == "number: 0" else "amount > 0"
+    canon = nabidh.SMOKING_VALUES.get(value_cls)
+    if canon in SMOKING_USABLE:
+        return "usable"
+    if canon == "unknown":
+        return "unknown"
+    return {"other": "other", "<empty>": "empty"}.get(value_cls, "text")
+
+
+def smoking_rows_frame(sh):
+    """SocialHistory rows (Patient, item, value) → + item_cls, value_cls, tobacco (adapter item filter), coarse."""
+    from sandbox.io.adapters import nabidh
+
+    tob = {x.lower() for x in nabidh.SOURCES["social_history"]["filter"]["item"]}
+    d = sh.copy()
+    d["item_cls"] = [sh_item_class(v) for v in d["item"]]
+    d["value_cls"] = [sh_value_class(v) for v in d["value"]]
+    d["tobacco"] = [(_txt(v) or "").lower() in tob for v in d["item"]]
+    d["coarse"] = [sh_coarse(i, c) for i, c in zip(d["item_cls"], d["value_cls"])]
+    return d
+
+
+def smoking_rows_table(sh):
+    """Item × value class: rows, patients; tobacco items (the adapter's filter) first."""
+    d = smoking_rows_frame(sh)
+    g = (d.groupby(["tobacco", "item_cls", "value_cls"]).agg(rows=("patient", "size"), patients=("patient", "nunique"))
+         .reset_index().sort_values(["tobacco", "patients", "rows"], ascending=[False, False, False]))
+    g["tobacco_item"] = g["tobacco"].map({True: "yes", False: "no"})
+    return g[["tobacco_item", "item_cls", "value_cls", "rows", "patients"]].rename(
+        columns={"item_cls": "item", "value_cls": "value"})
+
+
+def smoking_pattern_table(sh):
+    """Patients with a tobacco-item row and no usable value (ingest 1.4.2): which kinds of value their rows hold, and
+    what would count them."""
+    import pandas as pd
+
+    d = smoking_rows_frame(sh)
+    d = d[d["tobacco"]]
+    sets = d.groupby("patient")["coarse"].agg(lambda s: tuple(sorted(set(s))))
+    sets = sets[[("usable" not in s) for s in sets]]
+    if sets.empty:
+        return pd.DataFrame(columns=["records_hold", "counted_by", "patients"])
+    label = sets.map(lambda s: s[0] + " only" if len(s) == 1 else " + ".join(s))
+
+    def counted(s):
+        if "amount > 0" in s:
+            return "ingest 1.5.0: amount → current (intensity: DHA B7)"
+        if "other" in s:
+            return "D7: only if Other is given a level"
+        return "none: unknown / empty stay missing (D8)"
+
+    out = pd.DataFrame({"records_hold": label, "counted_by": sets.map(counted)})
+    g = out.groupby(["records_hold", "counted_by"]).size().rename("patients").reset_index()
+    return g.sort_values("patients", ascending=False)
+
+
+def tobacco_dx_rows(dx):
+    """Diagnosis rows (patient, code[, description]) → one row per code (comma cells split) with class and whether
+    the analysis code list (smoking_current / smoking_ex) recognises it."""
+    import pandas as pd
+
+    from sandbox import codelists
+
+    rows = []
+    has_desc = "description" in dx
+    for pat, code, desc in zip(dx["patient"], dx["code"], dx["description"] if has_desc else [None] * len(dx)):
+        codes = [c.strip() for c in (_txt(code) or "").split(",") if c.strip()] or [""]
+        text_hit = bool(_txt(desc)) and any(w in _txt(desc).upper() for w in TOBACCO_TEXT_LIKE)
+        for c in codes:
+            norm = re.sub(r"[.\s]", "", c.upper())
+            cls = next((lab for pre, lab in TOBACCO_DX_CLASSES if norm.startswith(pre)), None)
+            if cls is None and not text_hit:
+                continue                            # another code of a multi-code cell
+            rows.append({"patient": pat, "code": c.upper() or "<empty>",
+                         "dx_class": cls or "other code, description mentions tobacco"})
+    r = pd.DataFrame(rows, columns=["patient", "code", "dx_class"])
+    if len(r):
+        cond = pd.DataFrame({"code": r["code"], "code_system": "ICD-10"})
+        r["in_code_list"] = (codelists.match_dx(cond, "smoking_current") | codelists.match_dx(cond, "smoking_ex")).to_numpy()
+    else:
+        r["in_code_list"] = pd.Series(dtype=bool)
+    return r
+
+
+def tobacco_dx_table(dx, sh):
+    """Tobacco-related codes: class × code (shown if ≥ 10 patients) × in code list → rows, patients, and patients of
+    those without any tobacco-item SocialHistory row."""
+    import pandas as pd
+
+    from sandbox.config import PARAMS
+
+    cols = ["dx_class", "code", "in_code_list", "rows", "patients", "patients_without_tobacco_item"]
+    k = int(PARAMS["small_cell_threshold"])
+    r = tobacco_dx_rows(dx)
+    if r.empty:
+        return pd.DataFrame(columns=cols)
+    d = smoking_rows_frame(sh)
+    with_item = set(d.loc[d["tobacco"], "patient"])
+    n_pat = r.groupby("code")["patient"].nunique()
+    r["code"] = r["code"].map(lambda c: c if n_pat.get(c, 0) >= k else f"(codes < {k} patients each)")
+    r["patient_no_item"] = r["patient"].where(~r["patient"].isin(with_item))
+    g = (r.groupby(["dx_class", "code", "in_code_list"])
+         .agg(rows=("patient", "size"), patients=("patient", "nunique"),
+              patients_without_tobacco_item=("patient_no_item", "nunique"))
+         .reset_index().sort_values(["dx_class", "patients"], ascending=[True, False]))
+    g["in_code_list"] = g["in_code_list"].map({True: "yes", False: "no"})
+    return g[cols]
+
+
+def no_record_table(patients, sh, dx):
+    """Patients (Patient view) without any tobacco-item row: what SocialHistory holds for them, and tobacco codes."""
+    import pandas as pd
+
+    d = smoking_rows_frame(sh)
+    with_item = set(d.loc[d["tobacco"], "patient"])
+    ids = [p for p in patients if p not in with_item]
+    rest = d[d["patient"].isin(ids)]
+    items = rest.groupby("patient")["item_cls"].agg(lambda s: " + ".join(sorted(set(s))))
+    empty_vals = (rest[rest["item_cls"].eq("<empty>")].groupby("patient")["coarse"]
+                  .agg(lambda s: " + ".join(sorted(set(s)))))
+    r = tobacco_dx_rows(dx)
+    in_list = set(r.loc[r["in_code_list"].astype(bool), "patient"])
+    other_dx = set(r["patient"]) - in_list
+
+    def what(p):
+        if p not in items.index:
+            return "no SocialHistory row"
+        s = f"SocialHistory items: {items[p]}"
+        return s + (f" (empty-item values: {empty_vals[p]})" if p in empty_vals.index else "")
+
+    def dxc(p):
+        return "code list (F17.2xx / Z72.0 / Z87.891)" if p in in_list else (
+            "other tobacco code / text only" if p in other_dx else "none")
+
+    out = pd.DataFrame({"what_they_have": [what(p) for p in ids], "tobacco_dx": [dxc(p) for p in ids]})
+    if out.empty:
+        return pd.DataFrame(columns=["what_they_have", "tobacco_dx", "patients"])
+    g = out.groupby(["what_they_have", "tobacco_dx"]).size().rename("patients").reset_index()
+    return g.sort_values("patients", ascending=False)
+
+
+def _sh_rows(conn, schema: str):
+    """SocialHistory → patient, item, value (column names from SOURCES['social_history']; C3 has _Description)."""
+    from sandbox.io import explore, iris
+    from sandbox.io.adapters import nabidh
+
+    spec = nabidh.SOURCES["social_history"]
+    have = {c.upper(): c for c in explore.list_columns(conn, schema, "SocialHistory")["column"].astype(str)}
+    pick = lambda src: next((have[c.upper()] for c in nabidh.alternatives(src) if c.upper() in have), None)  # noqa: E731
+    pat, val, item = pick(spec["columns"]["patient_id"]), pick(spec["columns"]["value"]), pick(spec["optional_columns"]["item"])
+    if not (pat and val and item):
+        raise KeyError("SocialHistory: patient / item / value column not found")
+    q = ", ".join(iris.quote_ident(c) for c in (pat, item, val))
+    df = explore.run_query(conn, f"SELECT {q} FROM {explore.ident(schema, 'SocialHistory')} "
+                                 f"WHERE {iris.quote_ident(pat)} IS NOT NULL", lower=False)
+    df.columns = ["patient", "item", "value"]
+    df["patient"] = df["patient"].astype(str)
+    return df
+
+
+def _dx_rows(conn, schema: str):
+    """Diagnosis rows whose code (any spelling) or description looks tobacco-related → patient, code[, description]."""
+    from sandbox.io import explore, iris
+
+    have = {c.upper(): c for c in explore.list_columns(conn, schema, "Diagnosis")["column"].astype(str)}
+    code, desc = have.get("DIAGNOSIS_CODE"), have.get("DIAGNOSIS_DESCRIPTION")
+    if not code or "PATIENT" not in have:
+        raise KeyError("Diagnosis: Patient / Diagnosis_Code not found")
+    qi = iris.quote_ident
+    cond = [f"UPPER({qi(code)}) LIKE '%{p}%'" for p in TOBACCO_DX_LIKE]
+    cond += [f"UPPER({qi(desc)}) LIKE '%{w}%'" for w in TOBACCO_TEXT_LIKE] if desc else []
+    cols = [qi(have["PATIENT"]), qi(code)] + ([qi(desc)] if desc else [])
+    df = explore.run_query(conn, f"SELECT {', '.join(cols)} FROM {explore.ident(schema, 'Diagnosis')} "
+                                 f"WHERE {qi(have['PATIENT'])} IS NOT NULL AND ({' OR '.join(cond)})", lower=False)
+    df.columns = ["patient", "code"] + (["description"] if desc else [])
+    df["patient"] = df["patient"].astype(str)
+    return df
+
+
+def _patient_ids(conn, schema: str) -> list[str]:
+    from sandbox.io import explore
+
+    df = explore.run_query(conn, f"SELECT ID FROM {explore.ident(schema, 'Patient')} WHERE ID IS NOT NULL")
+    return sorted(set(df.iloc[:, 0].astype(str)))
+
+
+def _print_counts(out: Block, df, count_cols) -> None:
+    from sandbox import sdc
+
+    out.table(sdc.suppress_small_counts(df, count_cols), 60)
+
+
+def check_smoking_rows(a, out: Block, schema: str) -> None:
+    conn, _ = connect(a)
+    try:
+        sh = _sh_rows(conn, schema)
+    finally:
+        conn.close()
+    _print_counts(out, smoking_rows_table(sh), ["rows", "patients"])
+
+
+def check_smoking_patterns(a, out: Block, schema: str) -> None:
+    conn, _ = connect(a)
+    try:
+        sh = _sh_rows(conn, schema)
+    finally:
+        conn.close()
+    _print_counts(out, smoking_pattern_table(sh), ["patients"])
+
+
+def check_smoking_no_record(a, out: Block, schema: str) -> None:
+    conn, _ = connect(a)
+    try:
+        ids, sh, dx = _patient_ids(conn, schema), _sh_rows(conn, schema), _dx_rows(conn, schema)
+    finally:
+        conn.close()
+    _print_counts(out, no_record_table(ids, sh, dx), ["patients"])
+
+
+def check_tobacco_dx(a, out: Block, schema: str) -> None:
+    conn, _ = connect(a)
+    try:
+        sh, dx = _sh_rows(conn, schema), _dx_rows(conn, schema)
+    finally:
+        conn.close()
+    if "description" not in dx:
+        out("  (Diagnosis_Description absent: codes only)")
+    _print_counts(out, tobacco_dx_table(dx, sh), ["rows", "patients", "patients_without_tobacco_item"])
+
+
 # Phase 1 step 1 value checks (docs/faz1_c1_c2.md §1) for `checks`: id → (title, [(table, column, top, where)]).
 # Each query is the `values` command on every cohort given (≥ 10 patient rule; continuous numbers → percentiles only).
 VITAL_CODES = ("39156-5", "8302-2", "3141-9")          # BMI, height, weight (Observation has no unit column)
@@ -912,6 +1207,24 @@ CHECKS = {
          "AND ID NOT IN (SELECT Patient FROM {t}.Diagnosis WHERE Patient IS NOT NULL AND " + SMOKING_DX_SQL + ")"),
         ("#find", "SMOK"),
         ("#find", "TOBAC")]),
+    # Follow-up of 1s (NB1 2026-11-20, C2: 927 with records but none usable, 1,248 without a record). ("#call", label,
+    # function) = the function reads the rows inside the enclave and prints only counts per closed class (see
+    # SH_ITEMS_KNOWN / sh_value_class): Patient view patients, not only the analysis cohort (C2 2,564 = patients with a
+    # Diagnosis row, counted first).
+    "2s": ("smoking: what the patients without a usable status have", [
+        ("#count", "patients with a Diagnosis row (C2 analysis cohort 2,564 on 2026-11-20)",
+         "SELECT DISTINCT Patient FROM {t}.Diagnosis WHERE Patient IS NOT NULL"),
+        ("#call", "SocialHistory rows: item × value class (tobacco_item = the adapter's item filter)",
+         check_smoking_rows),
+        ("#call", "patients with a tobacco item but no usable value (ingest 1.4.2): what their rows hold",
+         check_smoking_patterns),
+        ("#call", "patients without a tobacco item: what SocialHistory holds for them, tobacco diagnosis codes",
+         check_smoking_no_record),
+        ("#call", "tobacco-related diagnosis codes in any spelling (code list = what the analysis uses)",
+         check_tobacco_dx),
+        ("#find", "HABIT"),
+        ("#find", "NICOT"),
+        ("#find", "CIGAR")]),
 }
 
 
@@ -965,6 +1278,9 @@ def cmd_checks(a, out: Block, run) -> int:
                     elif entry[0] == "#find":
                         out(f"== {cid} · {cohort} · tables / columns whose name contains {entry[1]!r}")
                         check_find(a, out, entry[1], cohort_alias(cohort))
+                    elif entry[0] == "#call":
+                        out(f"== {cid} · {cohort} · {entry[1]}")
+                        entry[2](a, out, cohort_alias(cohort))
                     else:
                         table, column, top, where = entry
                         out(f"== {cid} · {cohort}.{table}.{column}" + (f" · WHERE {where}" if where else ""))
@@ -1135,6 +1451,11 @@ LAB_FIELDS = [
 VITAL_FIELDS = [("vital value by concept | unit", 10, False), ("height in metres → cm (1.2–2.3 × 100)", 1, False)]
 
 
+# Smoking summary (source "social_history"): amounts under Cigarettes / Cigars (ingest 1.5.0) by item | band
+# (no value printed; the bands tell packs from cigarettes for DHA question B7)
+SMOKING_FIELDS = [("smoking amount (unit unknown, DHA B7): item | amount → canonical", 12, False)]
+
+
 def field_summary(v, source: str, fields, suffix: bool = False):
     import pandas as pd
 
@@ -1189,6 +1510,11 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             if len(v):
                 out("   unmapped values (to add to the adapter dictionaries; < 10 suppressed):")
                 out.table(v, a.max_rows)
+            sm = field_summary(v_all, "social_history", SMOKING_FIELDS)
+            if len(sm):
+                out("   smoking amounts (SocialHistory Cigarettes / Cigars; > 0 → current, intensity waits for the "
+                    "unit, DHA B7):")
+                out.table(sm, a.max_rows)
             m = medication_summary(v_all)
             if len(m):
                 out("   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):")
@@ -1501,9 +1827,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample", type=int, default=5000)
     p.add_argument("--list", action="store_true", help="value list for dates / continuous numbers too (≥ 10 patient rule)")
 
-    p = sub.add_parser("checks", parents=[common], help="Phase 1 step 1 value checks in one block: 1a 1c 1d 1s or all")
+    p = sub.add_parser("checks", parents=[common],
+                       help="Phase 1 step 1 value checks in one block: 1a 1c 1d 1s 2s or all")
     p.add_argument("ids", nargs="*", metavar="ID", help="1a (smoking item), 1c (lab / vital units), 1d (codes), "
-                                                         "1s (where smoking status is lost); default all")
+                                                         "1s (where smoking status is lost), 2s (what patients "
+                                                         "without a usable smoking status have); default all")
     p.add_argument("--cohorts", nargs="+", choices=["c1", "c2", "c3"], default=["c1", "c2"], help="default c1 c2")
     p.add_argument("--sample", type=int, default=5000)
 

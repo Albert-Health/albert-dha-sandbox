@@ -184,6 +184,21 @@ SMOKING_TEXT_TO_CAT = {
     "current": None,
 }
 
+# QDiabetes-2018 smoking intensity by cigarettes a day (Hippisley-Cox & Coupland, BMJ 2017): light 1–9 (here < 10,
+# so less than one a day is light), moderate 10–19, heavy ≥ 20. Used when a source gives an amount whose unit is known.
+QD_SMOKING_INTENSITY_BANDS = (("light", 10.0), ("moderate", 20.0), ("heavy", float("inf")))
+
+
+def qd_smoking_intensity(cigs_per_day: float) -> str | None:
+    """Cigarettes a day → light / moderate / heavy; None if not a positive number."""
+    try:
+        x = float(cigs_per_day)
+    except (TypeError, ValueError):
+        return None
+    if not x > 0:
+        return None
+    return next(name for name, upper in QD_SMOKING_INTENSITY_BANDS if x < upper)
+
 # --------------------------------------------------------------------------
 # Ethnicity mappings  [DECISION PENDING — medical team approval]
 # --------------------------------------------------------------------------
