@@ -65,6 +65,8 @@ src/sandbox/
   io/explore.py        terminalden IRIS keşfi (INFORMATION_SCHEMA / SQLite): şema, tablo, sütun profili, değer
                        dağılımı; ifşa kuralları (hassas ad / kimlik gibi sütunda değer yok, değer ≥ 10 hastada)
   phenotype.py         glisemik olaylar, DM/prediyabet kanıtı, 8 çekirdek değişken snapshot
+  breakdowns.py        C1/C2 kırılımları: tedavi edilen HT (tanı / ilaç / ikisi), QDiabetes sigara seviyesi, vital
+                       makul aralık dışı (aralıklar phenotype.VITAL_PLAUSIBLE_RANGE)
   cohorts.py           positive_pool, build_c1_c2, build_c3 (v2 kuralları + washout)
   scores/              qdiabetes2018a.py (CRAN QDiabetes 1.0-2 katsayıları), lrs.py (Leicester varyant
                        seçici `lrs_variant` + LRA 2010), lprs.py (Leicester Practice Risk Score 2012,

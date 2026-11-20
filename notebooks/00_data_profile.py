@@ -34,7 +34,7 @@ if "ipykernel" not in sys.modules:   # no display needed when run as a script
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from sandbox import codelists, cohorts, phenotype, sdc
+from sandbox import breakdowns, codelists, cohorts, phenotype, sdc
 from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
@@ -86,6 +86,19 @@ for c, d in data.items():
 fac = pd.DataFrame(fac)
 run.save_table(fac, "nb00/facility_representation.csv", "Facility representation")
 print(fac.to_string(index=False))
+
+# %% [markdown]
+# ## 2b. Vital values outside the plausible range
+# Values outside `phenotype.VITAL_PLAUSIBLE_RANGE` (column `plausible_range`) or not a number are not used by the
+# snapshot. Every row of the table (full history). `patients_without_plausible_value` = rows present, none inside the
+# range → the variable is missing for that patient. Placeholders "0" / "-" are dropped and counted at ingest.
+
+# %%
+vit = pd.concat([breakdowns.vital_plausibility(d).assign(cohort=c) for c, d in data.items()], ignore_index=True)
+vit = vit[["cohort", *vit.columns.drop("cohort")]]
+run.save_table(sdc.suppress_small_counts(vit, [col for col in vit.columns if col.startswith(("rows", "patients"))]),
+               "nb00/vital_plausibility.csv", "Vital rows / patients outside the plausible range (not used)")
+print(vit.to_string(index=False))
 
 # %% [markdown]
 # ## 3. Demographics
