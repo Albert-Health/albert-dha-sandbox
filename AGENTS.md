@@ -82,6 +82,7 @@ tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, bui
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
+logs/enclave/          VM'den taşınan COPY blokları, günde bir dosya (<UTC tarih>.log); logs/archive/ eski elle kopyalar
 .run/                  IntelliJ run configuration'ları (repoda)
 ```
 Notebook başlığı her zaman aynı ROOT bloğuyla başlar (cwd'den yukarı `src/sandbox` arar).
@@ -110,6 +111,8 @@ python tools/build_evidence_package.py
 #   START/END) yalnız meta veri / özet girer; yeni komut eklerken bu kuralı koru, tests/test_enclave.py'ye vaka ekle
 # git pull yoksa: python tools/build_bundle.py (commit'ten sonra) → dist/sandbox_bundle.py elle VM'e →
 #   python3 sandbox_bundle.py bundle-info → run ingest --cohorts c1 c2 / run nb0 / nb1 / kpi (docs/enclave_terminal.md §1)
+# Her blok (yalnız COPY START … END, ekran çıktısı değil) repo kökünde logs/enclave/<UTC tarih>.log'a eklenir; VM'de
+#   commit'lenmez — dosya elle kopyalanıp Mac'teki repoda aynı adla commit'lenir. logs/archive/ = eski elle kopyalar
 ```
 
 ## Değişiklik yaparken

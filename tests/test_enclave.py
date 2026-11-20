@@ -217,14 +217,27 @@ class TestIrisDialect(unittest.TestCase):
 
 @contextlib.contextmanager
 def temp_outputs():
-    """Point the audit at a temporary directory (no test run in the real outputs/audit_log.jsonl). The directory is
-    inside the repo (outputs/ is untracked): the audit writes output paths relative to the repo root."""
+    """Point the audit and the day's block file at a temporary directory (no test run in the real
+    outputs/audit_log.jsonl or logs/enclave/). The directory is inside the repo (outputs/ is untracked): the audit
+    writes output paths relative to the repo root. The block files are under <out>.parent / "logs" / "enclave"."""
     (ROOT / "outputs").mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=ROOT / "outputs", prefix=".test_enclave_") as d:
         out = Path(d) / "outputs"
         with mock.patch.object(audit, "OUTPUT_DIR", out), mock.patch.object(audit, "AUDIT_DIR", out / "audit"), \
-                mock.patch("sandbox.config.OUTPUT_DIR", out):
+                mock.patch("sandbox.config.OUTPUT_DIR", out), \
+                mock.patch.object(enclave, "LOG_DIR", Path(d) / "logs" / "enclave"):
             yield out
+
+
+def day_logs(out: Path) -> list[Path]:
+    """The day files written under temp_outputs()."""
+    return sorted((out.parent / "logs" / "enclave").glob("*.log"))
+
+
+def screen_block(text: str) -> str:
+    """The block as printed: COPY START … COPY END (the 'Saved to' line below it is outside)."""
+    i, j = text.index(enclave.MARK_START), text.index(enclave.MARK_END)
+    return text[i:j + len(enclave.MARK_END)]
 
 
 def run_main(argv) -> tuple[int, str]:
@@ -241,15 +254,16 @@ class TestEnclaveCli(_Db, unittest.TestCase):
             self.assertEqual(rc, 0, text)
             lines = text.strip().splitlines()
             self.assertTrue(lines[0].startswith("----8<---- COPY START"))
-            self.assertEqual(lines[-1], enclave.MARK_END)
+            self.assertEqual(lines[-2], enclave.MARK_END)
+            self.assertRegex(lines[-1], r"^Saved to outputs/\.test_enclave_\w+/logs/enclave/\d{4}-\d{2}-\d{2}\.log ")
             self.assertIn("India", text)
             self.assertNotIn("Rareland", text)
             self.assertNotIn("Nepal", text)
             saved = list(out.glob("*_enclave_values_*/enclave/block.txt"))
             self.assertEqual(len(saved), 1)
-            self.assertEqual(saved[0].read_text(encoding="utf-8").strip(), text.strip())
+            self.assertEqual(saved[0].read_text(encoding="utf-8").strip(), screen_block(text))
             rc, again = run_main(["last"])
-            self.assertEqual(again.strip(), text.strip())
+            self.assertEqual(screen_block(again), screen_block(text))
 
     def test_cohort_alias(self):
         self.assertEqual(enclave.cohort_alias("c1.Patient"), f"{SCHEMA}.Patient")
@@ -274,7 +288,7 @@ class TestEnclaveCli(_Db, unittest.TestCase):
             rc, text = run_main(["tables", "NOPE", "--iris-sqlite", str(self.dir)])
         self.assertEqual(rc, 1)
         self.assertIn("no such schema", text)
-        self.assertTrue(text.strip().endswith(enclave.MARK_END))
+        self.assertEqual(text.strip().splitlines()[-2], enclave.MARK_END)
 
     def test_req_stdlib_checks(self):
         with temp_outputs():
@@ -283,6 +297,39 @@ class TestEnclaveCli(_Db, unittest.TestCase):
         self.assertIn("Summary: R9", text)
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             enclave.main(["req", "R10"])
+
+
+class TestDayLog(_Db, unittest.TestCase):
+    """logs/enclave/<UTC date>.log: only the block (header … end marker) goes in, under the header's date; a second
+    command the same day is appended to the same file; `last` reprints without appending."""
+
+    def test_blocks_appended_to_the_day_file_last_not_again(self):
+        with temp_outputs() as out:
+            self.assertTrue(enclave.LOG_DIR.is_relative_to(out.parent))     # not the real logs/enclave/
+            rc1, t1 = run_main(["values", f"{SCHEMA}.Patient", "Nationality", "--iris-sqlite", str(self.dir)])
+            rc2, t2 = run_main(["req", "R9"])
+            files = day_logs(out)
+            self.assertEqual(len(files), 1, files)
+            day = files[0]
+            self.assertIn(f" | {day.stem} ", screen_block(t1).splitlines()[0])  # file date = the header's UTC date
+            self.assertEqual(day.read_text(encoding="utf-8"), screen_block(t1) + "\n\n" + screen_block(t2) + "\n")
+            self.assertEqual(t1.strip().splitlines()[-1], f"Saved to {enclave.repo_rel(day)} (block 1 of the UTC day)")
+            self.assertEqual(t2.strip().splitlines()[-1], f"Saved to {enclave.repo_rel(day)} (block 2 of the UTC day)")
+            before = day.read_text(encoding="utf-8")
+            rc, again = run_main(["last"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(day.read_text(encoding="utf-8"), before)
+            self.assertIn(screen_block(again), before)                  # (same-second runs: either block)
+            self.assertNotIn("Saved to", again)
+            self.assertEqual(again.strip().splitlines()[-1], f"Already in {enclave.repo_rel(day)} (not saved again)")
+
+    def test_unwritable_log_dir_keeps_the_block(self):
+        with temp_outputs() as out:
+            blocker = out.parent / "logs"
+            blocker.write_text("not a directory", encoding="utf-8")    # mkdir logs/enclave fails
+            rc, text = run_main(["req", "R9"])
+        self.assertEqual(text.strip().splitlines()[-2], enclave.MARK_END)
+        self.assertIn("(could not save the block to", text.strip().splitlines()[-1])
 
 
 class TestChecks(unittest.TestCase):
@@ -307,7 +354,7 @@ class TestChecks(unittest.TestCase):
             rc, text = run_main(["checks", "1c", "1D", "--cohorts", "c1", "--iris-sqlite", str(self.dir)])
         self.assertEqual(rc, 0, text)
         self.assertEqual(text.count("COPY START"), 1)
-        self.assertEqual(text.strip().splitlines()[-1], enclave.MARK_END)
+        self.assertEqual(text.strip().splitlines()[-2], enclave.MARK_END)
         self.assertIn("== 1c · c1.Observation.ObservationValue · WHERE ObservationCode_Code = '8302-2'", text)
         self.assertIn("Distribution (sample)", text)                    # continuous → percentiles, no value list
         self.assertIn("== 1c · c1.LabResultItem.TestItemCode_Code", text)

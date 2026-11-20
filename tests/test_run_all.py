@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import enclave  # noqa: E402
 from sandbox import kpi  # noqa: E402
-from test_enclave import temp_outputs  # noqa: E402
+from test_enclave import day_logs, screen_block, temp_outputs  # noqa: E402
 
 
 class TestRunAll(unittest.TestCase):
@@ -30,9 +30,18 @@ class TestRunAll(unittest.TestCase):
             return [sys.executable, "-c", f"print('SCREEN-ONLY {step} 3 patients')"]
 
         buf = io.StringIO()
-        with temp_outputs(), mock.patch.object(enclave, "step_command", fake_step), contextlib.redirect_stdout(buf):
+        with temp_outputs() as out, mock.patch.object(enclave, "step_command", fake_step), \
+                contextlib.redirect_stdout(buf):
             rc = enclave.main(["run", "all", "--source", "nabidh_dryrun_iris"])
+            logs = day_logs(out)
+            saved = logs[0].read_text(encoding="utf-8") if logs else ""
         text = buf.getvalue()
+        self.assertEqual(len(logs), 1, logs)                              # the day's file: the block only
+        self.assertEqual(saved, screen_block(text) + "\n")
+        for screen in ("SCREEN-ONLY", "Running:", "===== run all", "stays inside the enclave; the summary"):
+            self.assertIn(screen, text)
+            self.assertNotIn(screen, saved)
+        self.assertTrue(text.strip().splitlines()[-1].startswith("Saved to "))
         self.assertEqual(started, list(enclave.RUN_ALL))
         self.assertEqual(text.count("COPY START"), 1)
         block = text[text.index("COPY START"):text.index("COPY END")]
@@ -42,6 +51,21 @@ class TestRunAll(unittest.TestCase):
             self.assertIn(f"### {i}/{len(enclave.RUN_ALL)} · run {step}", block)
         self.assertIn("run all · exit codes: ingest 0 · nb0 0 · nb1 0 · kpi 0", block)
         self.assertEqual(rc, 0)                                          # every step exited 0
+
+    def test_single_step_day_file_has_no_screen_output(self):
+        buf = io.StringIO()
+        fake = lambda step: [sys.executable, "-c", "print('SCREEN-ONLY nb1 3 patients')"]   # noqa: E731
+        with temp_outputs() as out, mock.patch.object(enclave, "step_command", fake), \
+                contextlib.redirect_stdout(buf):
+            enclave.main(["run", "nb1", "--source", "nabidh_dryrun_iris"])
+            saved = day_logs(out)[0].read_text(encoding="utf-8")
+            step_log = next(out.glob("*_enclave_run_*/enclave/nb1.log")).read_text(encoding="utf-8")
+        text = buf.getvalue()
+        self.assertIn("SCREEN-ONLY", step_log)                           # the full screen output stays in outputs/
+        self.assertEqual(saved, screen_block(text) + "\n")
+        self.assertNotIn("SCREEN-ONLY", saved)
+        self.assertNotIn("Running:", saved)
+        self.assertIn("enclave/nb1.log", saved)                          # the block names the screen log, not its text
 
 
 class TestAuditRunning(unittest.TestCase):

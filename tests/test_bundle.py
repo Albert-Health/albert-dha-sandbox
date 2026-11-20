@@ -41,11 +41,22 @@ class BundleCase(unittest.TestCase):
         self.bundle = self.root / "ingest_bundle.py"
         self.bundle.write_text(self.text, encoding="utf-8")
 
-    def run_bundle(self, *args) -> tuple[int, str]:
+    def run_bundle(self, *args, cwd=None) -> tuple[int, str]:
         env = {k: v for k, v in os.environ.items() if not k.startswith("SANDBOX_")}
-        p = subprocess.run([sys.executable, str(self.bundle), *args], cwd=self.root, env=env, capture_output=True,
-                           text=True, timeout=300)
+        p = subprocess.run([sys.executable, str(self.bundle), *args], cwd=cwd or self.root, env=env,
+                           capture_output=True, text=True, timeout=300)
         return p.returncode, p.stdout + p.stderr
+
+    def day_log(self) -> tuple[Path, str]:
+        """The one logs/enclave/<UTC date>.log under the repo root (the bundle writes there, not next to itself)."""
+        files = sorted((self.root / "logs" / "enclave").glob("*.log"))
+        self.assertEqual(len(files), 1, files)
+        return files[0], files[0].read_text(encoding="utf-8")
+
+
+def block_of(out: str) -> str:
+    i, j = out.index("----8<---- COPY START"), out.index("----8<---- COPY END ----8<----")
+    return out[i:j + len("----8<---- COPY END ----8<----")]
 
 
 class TestBuild(BundleCase):
@@ -99,6 +110,21 @@ class TestBuild(BundleCase):
         self.assertNotEqual(rc, 0, out)
         self.assertIn("not in this bundle", out)
 
+    def test_block_saved_in_the_repo_root_from_dist(self):
+        dist = self.root / "dist"
+        dist.mkdir()
+        self.bundle = self.bundle.rename(dist / self.bundle.name)
+        rc, out = self.run_bundle("run", "nb1", cwd=dist)                 # error inside the block: still saved
+        self.assertNotEqual(rc, 0, out)
+        p, saved = self.day_log()
+        self.assertFalse((dist / "logs").exists())
+        self.assertEqual(saved, block_of(out) + "\n")
+        self.assertIn(f"bundle {self.meta['payload_sha256'][:12]}", saved.splitlines()[0])
+        self.assertIn(f"Saved to logs/enclave/{p.name} (block 1 of the UTC day)", out)
+        rc, again = self.run_bundle("last", cwd=dist)
+        self.assertEqual(rc, 0, again)
+        self.assertEqual(p.read_text(encoding="utf-8"), saved)            # `last` does not append
+
 
 class TestIngest(BundleCase):
     def test_same_canonical_output_as_the_repo(self):
@@ -122,6 +148,10 @@ class TestIngest(BundleCase):
         self.assertIn(f"bundle {self.meta['payload_sha256'][:12]}", out)       # COPY START header
         self.assertIn("COPY END", out)
         block = out[out.index("COPY START"):]
+        _, saved = self.day_log()                                       # the day's file: the block, no screen output
+        self.assertEqual(saved, block_of(out) + "\n")
+        self.assertIn("Running:", out)
+        self.assertNotIn("Running:", saved)
         if rc == 1:          # schema_errors: the summary reports them; no "Error:" tail (raw table, counts < 10)
             self.assertIn("status: schema_errors", block)
             self.assertFalse([ln for ln in block.splitlines() if ln.startswith(("Error:", "Where:"))], block)

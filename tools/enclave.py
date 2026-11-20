@@ -17,8 +17,10 @@ Each command's result is printed between two marker lines:
 Only this block is copied out of the enclave. The block holds metadata and summaries only: table / column names,
 types, statuses, counts (< 10 → "<10"), value shapes and categorical values seen in ≥ 10 patients. No patient-level
 value is printed (rules: src/sandbox/io/explore.py). The full screen output of `run` steps stays outside the block.
-Every command is audited: outputs/<run_id>/enclave/block.txt (+ the full output .log for run steps); `last`
-reprints the last block. Only SELECT goes to IRIS; the password is never printed or written to a file or the audit.
+Every block (header … end marker, nothing else) is also appended to logs/enclave/<UTC date>.log in the repo root,
+the file carried to the repo outside the enclave; the line under the block names it. Every command is audited:
+outputs/<run_id>/enclave/block.txt (+ the full output .log for run steps); `last` reprints the last block (not
+appended again). Only SELECT goes to IRIS; the password is never printed or written to a file or the audit.
 
 This file starts with the standard library only: `req` runs even without pandas and reports what is missing.
 """
@@ -53,7 +55,10 @@ DEFAULT_IRIS_HOST = "dhasbxnbprddb01.dha.ae"      # DHA's connection string (VM 
 DEFAULT_IRIS_PORT = 51772
 CMD = "bash tools/enclave.sh"   # from the repo root
 MARK = "----8<----"
+MARK_START = f"{MARK} COPY START"
 MARK_END = f"{MARK} COPY END {MARK}"
+# one file per UTC day, blocks in order: copied whole to the repo outside the enclave (docs/enclave_terminal.md §1)
+LOG_DIR = REPO_ROOT / "logs" / "enclave"
 
 # run steps: script, audit run name (outputs/<ts>_<name>_<hex>)
 STEPS = {
@@ -168,14 +173,42 @@ def open_run(cmd: str):
         return None
 
 
-def finish_run(run, block: Block, rc: int, argv: list[str]) -> None:
+def repo_rel(p: Path) -> str:
+    try:
+        return Path(p).resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+def day_log(when: dt.datetime) -> Path:
+    return LOG_DIR / f"{when:%Y-%m-%d}.log"
+
+
+def save_block(block: Block, when: dt.datetime) -> Path | None:
+    """Appends the block's lines (header … end marker; screen output never enters `block.lines`) to the day's file
+    and prints its path under the block. `when` = the header's time, so a run past midnight stays in its day."""
+    p = day_log(when)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        gap = "\n" if p.is_file() and p.stat().st_size else ""
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(gap + "\n".join(block.lines) + "\n")
+        n = sum(ln.startswith(MARK_START) for ln in p.read_text(encoding="utf-8").splitlines())
+    except OSError as e:
+        print(f"(could not save the block to {repo_rel(p)}: {type(e).__name__}: {e})")
+        return None
+    print(f"Saved to {repo_rel(p)} (block {n} of the UTC day)")
+    return p
+
+
+def finish_run(run, block: Block, rc: int, argv: list[str], saved: Path | None = None) -> None:
     if run is None:
         return
     try:
         p = run.path("enclave/block.txt")
         p.write_text("\n".join(block.lines) + "\n", encoding="utf-8")
         run.register_output(p, "COPY block printed to the terminal")
-        run.log("enclave command", argv=argv, exit_code=rc)
+        run.log("enclave command", argv=argv, exit_code=rc, block_log=repo_rel(saved) if saved else None)
         run.finish("success" if rc == 0 else "failed")
     except Exception as e:
         print(f"(could not write the audit: {type(e).__name__}: {e})")
@@ -1281,7 +1314,12 @@ def cmd_last(a) -> int:
     if not blocks:
         print("No saved block")
         return 1
-    print(blocks[-1].read_text(encoding="utf-8"), end="")
+    text = blocks[-1].read_text(encoding="utf-8")
+    print(text, end="")                                    # reprint only: not appended to the day's file again
+    m = re.search(r" \| (\d{4}-\d{2}-\d{2}) \d{2}:\d{2} UTC \| ", text.split("\n", 1)[0])
+    p = day_log(dt.datetime.strptime(m.group(1), "%Y-%m-%d")) if m else None
+    if p and p.is_file() and text.split("\n", 1)[0] in p.read_text(encoding="utf-8"):
+        print(f"Already in {repo_rel(p)} (not saved again)")
     return 0
 
 
@@ -1397,10 +1435,11 @@ def main(argv: list[str] | None = None) -> int:
     if needs_password(a):
         ensure_password(a)
     run = open_run(a.cmd)
-    utc = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = dt.datetime.now(dt.timezone.utc)
+    utc = now.strftime("%Y-%m-%d %H:%M UTC")
     argv = safe_argv(argv)
     shown = shlex.join(argv)
-    out = Block(f"{MARK} COPY START | enclave {shown[:120]}{'...' if len(shown) > 120 else ''} | {utc} | "
+    out = Block(f"{MARK_START} | enclave {shown[:120]}{'...' if len(shown) > 120 else ''} | {utc} | "
                 f"ingest v{ingest_version()} | commit {commit_label()} | python {platform.python_version()} | "
                 f"{run.run_id if run else 'no audit'} "
                 f"{MARK}")
@@ -1413,7 +1452,7 @@ def main(argv: list[str] | None = None) -> int:
         out(f"ERROR: {type(e).__name__}: {str(e)[:500]}")
         rc = 1
     out.close()
-    finish_run(run, out, rc, argv)
+    finish_run(run, out, rc, argv, save_block(out, now))
     return rc
 
 

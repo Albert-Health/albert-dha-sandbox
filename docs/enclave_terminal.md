@@ -11,7 +11,10 @@ Her komut sonucunu iki işaret satırı arasında basar. Enclave dışına kopya
 ----8<---- COPY START | enclave req R5 | 2026-11-18 10:00 UTC | commit 1c877f2 | python 3.11.9 | <run_id> ----8<----
 ...
 ----8<---- COPY END ----8<----
+Saved to logs/enclave/2026-11-18.log (block 1 of the UTC day)
 ```
+
+Blok aynı anda repo kökündeki günlük dosyaya da eklenir; Mac'e o dosya taşınır ([§1](#blok-dosyası--mac-logsenclave)).
 
 ## Nasıl işler
 
@@ -30,7 +33,8 @@ enclave'de: git pull --ff-only (salt-okuma token) → komutu tekrar çalıştır
   DHA'nın çıktı kuralları geçerli.
 - `run` adımlarının tam ekran çıktısı bloğun üstünde kalır ve kopyalanmaz.
 - Şifre ve token hiçbir bloğa, dosyaya ya da mesaja yapıştırılmaz.
-- Her komut audit'lenir: `outputs/<run_id>/enclave/block.txt`. Blok ekrandan kaydıysa: [`last`](#6-faz-1i-çalıştır).
+- Her komut audit'lenir: `outputs/<run_id>/enclave/block.txt`; blok ayrıca `logs/enclave/<UTC tarih>.log`'a
+  eklenir. Blok ekrandan kaydıysa: [`last`](#6-faz-1i-çalıştır).
 
 ## 1. Repo ve güncelleme
 
@@ -116,6 +120,23 @@ python3 sandbox_bundle.py run kpi
 Diğer `enclave.sh` komutları da bundle'ın koduyla çalışır (`python3 sandbox_bundle.py mapping c1 c2`, `help`).
 Bundle'da olmayan bir adım (`run nb2`) reddedilir; gerekirse dışarıda `--steps ingest nb0 nb1 kpi nb2` ile
 yeniden üretilir. Gömülü kodu okumak için: `python3 sandbox_bundle.py bundle-extract /tmp/bundle_src`.
+
+### Blok dosyası → Mac (`logs/enclave/`)
+
+Her komut (`bash tools/enclave.sh …` ya da `python3 sandbox_bundle.py …`; bundle `dist/` içinden çalışsa da) bloğu
+ekrana basarken repo kökündeki günlük dosyaya da ekler ve bloğun altında yolunu yazar:
+`Saved to logs/enclave/2026-11-20.log (block 3 of the UTC day)`.
+
+- Dosya adı başlıktaki UTC tarihidir; o günün blokları sırayla, aralarında bir boş satırla. Başlık satırı
+  (komut, saat, `commit … bundle …`, run_id) her blokta dosyadadır.
+- Dosyaya yalnız blok girer (COPY START … COPY END). `Running:` satırı, adımların ekran çıktısı ve
+  `outputs/<run_id>/enclave/<adım>.log` girmez; `run all`'da da yalnız sondaki tek blok.
+- `last` bloğu yeniden basar, dosyaya ikinci kez eklemez (`Already in logs/enclave/… (not saved again)`).
+- VM'de `logs/` commit'lenmez. Gün sonunda (ya da istediğin an) dosyayı metin editöründe aç, hepsini kopyala,
+  Mac'teki repoda aynı adla `logs/enclave/<tarih>.log` olarak kaydet (varsa üzerine yaz: VM'deki dosya yalnız
+  büyür, `git diff` yeni blokları gösterir) ve commit'le. Kopyalamadan önce yine göz at; DHA çıktı kuralları geçerli.
+- `logs/archive/`: 2026-11-20'ye kadar terminalden elle kopyalanan loglar (adları rastgele, bir kısmı başlıksız);
+  olduğu gibi kalır, yenileri buraya yazılmaz.
 
 ## 2. VM gereksinimleri (R1–R9)
 
@@ -313,7 +334,7 @@ Faz 2 (C3) aynı yoldan: `run ingest --cohorts c3`, sonra `run nb2` (hızlı den
 | `mapping c1 c2` | adapter eşlemesi IRIS'te tutuyor mu |
 | `run ingest\|nb0\|nb1\|nb2\|kpi` | adımı çalıştırır, özet bloğu basar |
 | `show ADIM [DOSYA]` | bir run'ın çıktı tablosunu basar (sayımlar bastırılmış) |
-| `last` | son bloğu yeniden basar |
+| `last` | son bloğu yeniden basar (günlük dosyaya tekrar eklemez) |
 
 Ortak seçenekler: `--max-rows N` (tablo satırı), `--iris-sqlite DIZIN` (prova, §9).
 
