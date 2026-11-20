@@ -61,6 +61,9 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   1.4.1  2026-11-20  Framework Match by variable: the ingest report carries `delivery` (delivery_facts: view /
+#                      column per core variable, share of drug rows and family-history records not in the requested
+#                      code system); <cohort>/ingest.json keeps it for NB0 (framework.py). Canonical data unchanged
 #   1.4.0  2026-11-20  1c · LabResultItem: a decimal comma ("6,2") is read as a point; a result that is not a
 #                      finite number ("<5.0", text) is dropped and counted by kind | shape (labs "missing required
 #                      value" ERROR); comparators are not read as their bound
@@ -91,7 +94,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.4.0"
+INGEST_VERSION = "1.4.1"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -877,6 +880,56 @@ HANDLERS = {
 
 
 # --------------------------------------------------------------------------
+# Delivery facts for the Applicant Data Requirement Framework Match (NB0, framework.py)
+# --------------------------------------------------------------------------
+def _field(source: str, canonical: str, sources: dict | None = None) -> str:
+    """SOURCES entry + canonical column → "View.Column" as delivered (alternatives joined with " | ")."""
+    spec = (sources or SOURCES)[source]
+    src = {**spec.get("optional_columns", {}), **spec["columns"]}.get(canonical)
+    if src is None:
+        return ""
+    return f"{str(spec.get('table') or spec.get('file') or source).rsplit('.', 1)[-1]}.{label(src)}"
+
+
+def delivery_facts(value_counts: list[dict], sources: dict | None = None) -> dict:
+    """What the source delivered per core variable, in source-neutral terms for framework.py (analysis code reads no
+    source format, rule 7): {"fields": {variable: "View.Column …"}, "medications": {...}, "family_history": {...}}.
+
+    medications / family_history: {"requested_system", "rows", "as_requested_rows"} — rows whose code is already in
+    the requested system (ATC code; ICD-10 / SNOMED code) against all rows; the rest was derived by this adapter
+    (DDC code / drug name → ATC; family history recognised from text). Counts come from the report's value counts
+    ("drug → ATC method", "diabetes recognised by"), before small-cell suppression."""
+    src = sources or SOURCES
+
+    def counts(source: str, field: str) -> dict[str, int]:
+        return {v["value"]: int(v["n_rows"]) for v in value_counts if v["source"] == source and v["field"] == field}
+
+    fields = {}
+    for var, parts in {
+        "sex": [("patient_profile", "sex")], "age": [("patient_profile", "age")],
+        "ethnicity": [("patient_profile", "nationality"), ("patient_profile", "ethnicity_raw")],
+        "bmi": [("observations", "value")], "smoking": [("social_history", "value")],
+        "family_history": [("family_history", "condition")], "cvd": [("diagnoses", "code")],
+        "hypertension": [("diagnoses", "code"), ("medications", "atc_code")],
+    }.items():
+        got = [f for f in (_field(s, c, src) for s, c in parts if s in src) if f]
+        if got:
+            fields[var] = " + ".join(got) if var == "hypertension" else " | ".join(got)
+    if "bmi" in fields:
+        fields["bmi"] += " (LOINC 39156-5 BMI; 8302-2 height + 3141-9 weight)"
+    out: dict = {"fields": fields}
+    meds = counts("medications", "drug → ATC method")
+    if meds:
+        out["medications"] = {"requested_system": "ATC", "rows": sum(meds.values()),
+                              "as_requested_rows": meds.get("ATC code", 0)}
+    fh = counts("family_history", "diabetes recognised by")
+    if fh:
+        out["family_history"] = {"requested_system": "ICD-10 / SNOMED code", "rows": sum(fh.values()),
+                                 "as_requested_rows": fh.get("ICD-10 code", 0) + fh.get("SNOMED code", 0)}
+    return out
+
+
+# --------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------
 def load(raw_dir: Path, cohort: str, sources: dict | None = None, progress=None) -> tuple[Dataset, dict]:
@@ -1025,4 +1078,5 @@ def _load(cohort: str, sources: dict, read, input_kind: str, progress=None) -> t
         frames = [f for f in parts[t] if len(f)]
         df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(SCHEMA[t]))
         tables[t] = coerce(df, t)
+    report["delivery"] = delivery_facts(report["value_counts"], sources)
     return Dataset(source="nabidh", cohort=cohort, tables=tables), report

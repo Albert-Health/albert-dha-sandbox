@@ -349,6 +349,19 @@ CORE_VARIABLES = [
     "sex", "age", "ethnicity", "bmi", "smoking", "family_history", "cvd", "hypertension",
 ]
 
+# What the application asked for, per core variable (Applicant Data Requirement Framework Match, framework.py).
+# The source side (view / column / code system actually delivered) is in the adapter, not here.
+FRAMEWORK_REQUESTED = {
+    "sex": "Sex (Male / Female)",
+    "age": "Age in years, or date of birth",
+    "ethnicity": "Ethnic group, from PARAMS['ethnicity_source'] (nationality, D6)",
+    "bmi": "BMI, or height and weight",
+    "smoking": "Smoking status: never / ex / light / moderate / heavy",
+    "family_history": "Diabetes in a first-degree relative (ICD-10 / SNOMED code)",
+    "cvd": "CVD diagnosis, ICD-10 I20-I25, I50, I6x, G45",
+    "hypertension": "Treated hypertension: diagnosis ICD-10 I10-I16 + antihypertensive drug ATC C02 / C03 / C07 / C08 / C09",
+}
+
 
 # --------------------------------------------------------------------------
 # Matching helpers
