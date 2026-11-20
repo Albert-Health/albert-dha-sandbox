@@ -74,26 +74,26 @@ print("Leicester variant:", LRS_LABEL, "| high-risk threshold:", LRS_THR)
 
 # %% [markdown]
 # ## 1. Completeness — per variable and joint (T2DM vs prediabetes)
+# `measure`: `recorded` = a value is in the record; `present_absent` (CVD, hypertension; family history unless
+# `c1_require_fh_record`, D17) = no record means absent, so 100% by definition — not a fill rate (`meets_90` = "-").
+# `family_history_recorded`: a FamilyHistory record or Z83.3 (the fill rate of family history).
+# Joint: core-7 = the 8 core variables without ethnicity; core-8 = core-7 + ethnicity (by ethnicity source: §1b).
 
 # %%
-ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
 rows, joint = [], []
 for c, s in snaps.items():
     for grp, g in [("all", s), *s.groupby("status")]:
-        for col in ok_cols:
-            rows.append({"cohort": c, "group": grp, "variable": col[3:], "n": len(g),
-                         "complete_pct": round(100 * g[col].astype(bool).mean(), 1)})
-        if lrs.needs_waist(P):          # LRA 2010 only (waist required); LPRS does not need waist
-            rows.append({"cohort": c, "group": grp, "variable": "waist (LRS)", "n": len(g),
-                         "complete_pct": round(100 * g["waist_cm"].notna().mean(), 1)})
-        joint.append({"cohort": c, "group": grp, "n": len(g),
-                      "joint_core8_n": int(g["ok_core8"].sum()), "joint_core8_pct": round(100 * g["ok_core8"].mean(), 1),
-                      "joint_lrs_n": int(g["ok_lrs"].sum()), "joint_lrs_pct": round(100 * g["ok_lrs"].mean(), 1)})
+        rows += [{"cohort": c, "group": grp, **r} for r in phenotype.completeness_by_variable(g, P)]
+        joint.append({"cohort": c, "group": grp, **phenotype.joint_completeness(g)})
 comp = pd.DataFrame(rows)
 joint = pd.DataFrame(joint)
-run.save_table(comp, "nb01/completeness_by_variable.csv", "C1/C2 variable completeness (T2DM / prediabetes)")
-run.save_table(sdc.suppress_small_counts(joint, ["joint_core8_n", "joint_lrs_n"]),
-               "nb01/joint_completeness.csv", "C1/C2 joint completeness")
+run.save_table(sdc.suppress_count_rate_pairs(comp, "n", [("complete_n", "complete_pct")]),
+               "nb01/completeness_by_variable.csv",
+               "C1/C2 variable completeness (T2DM / prediabetes); measure recorded / present_absent")
+run.save_table(sdc.suppress_count_rate_pairs(joint, "n", [(f"joint_{k}_n", f"joint_{k}_pct")
+                                                           for k in ("core7", "core8", "lrs")]),
+               "nb01/joint_completeness.csv",
+               "C1/C2 joint completeness: core-7 (without ethnicity), core-8 (core-7 + ethnicity), Leicester inputs")
 print(comp.pivot_table(index="variable", columns=["cohort", "group"], values="complete_pct").to_string())
 print(joint.to_string(index=False))
 
@@ -104,6 +104,9 @@ print(joint.to_string(index=False))
 
 # %%
 ETH_SOURCES = list(dict.fromkeys([P["ethnicity_source"], "nationality", "ethnicity"]))
+# joint_core7 (without ethnicity) does not depend on the source; joint_core8 = core-7 + this source's ethnicity
+ETH_COMPARE = [("ethnicity_known", "ok_ethnicity"), ("qd_computable", "qd_computable"),
+               ("lrs_computable", "lrs_computable"), ("joint_core7", "ok_core7"), ("joint_core8", "ok_core8")]
 eth_rows, eth_maps = [], []
 for src in ETH_SOURCES:
     p_src = {**P, "ethnicity_source": src}
@@ -119,8 +122,7 @@ for src in ETH_SOURCES:
             s = s.join(lrs.score(s, p=p_src)[["lrs_computable"]])
         for grp, g in [("all", s), *s.groupby("status")]:
             row = {"cohort": c, "group": grp, "ethnicity_source": src, "default": src == P["ethnicity_source"], "n": len(g)}
-            for name, col in [("ethnicity_known", "ok_ethnicity"), ("qd_computable", "qd_computable"),
-                              ("lrs_computable", "lrs_computable"), ("joint_core8", "ok_core8")]:
+            for name, col in ETH_COMPARE:
                 row[f"{name}_n"] = int(g[col].astype(bool).sum())
                 row[f"{name}_pct"] = round(100 * g[col].astype(bool).mean(), 1)
             eth_rows.append(row)
@@ -130,11 +132,12 @@ for src in ETH_SOURCES:
     m.columns = ["source_value", "ethnic_group", "qdiabetes_category", *per_cohort]
     eth_maps.append(m.assign(ethnicity_source=src))
 eth_cmp = pd.DataFrame(eth_rows)
-for name in ("ethnicity_known", "qd_computable", "lrs_computable", "joint_core8"):     # a rate must not reveal a count < 10
+for name, _ in ETH_COMPARE:     # a rate must not reveal a count < 10
     eth_cmp = sdc.suppress_rates(eth_cmp, f"{name}_n", ["n"], [f"{name}_pct"])
 eth_cmp = sdc.suppress_small_counts(eth_cmp, [c for c in eth_cmp.columns if c.endswith("_n")])
 run.save_table(eth_cmp, "nb01/ethnicity_source_compare.csv",
-               "Ethnicity known, QDiabetes / Leicester computable and joint completeness by ethnicity source [D6 pending]")
+               "Ethnicity known, QDiabetes / Leicester computable and joint completeness (core-7 without ethnicity, "
+               "core-8 = core-7 + ethnicity) by ethnicity source [D6 pending]")
 eth_map_all = pd.concat(eth_maps, ignore_index=True)[["ethnicity_source", "source_value", "ethnic_group",
                                                       "qdiabetes_category", *snaps]]
 eth_map_all = sdc.collapse_rare_rows(eth_map_all, list(snaps), ["source_value", "ethnic_group", "qdiabetes_category"],

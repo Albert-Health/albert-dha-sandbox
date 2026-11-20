@@ -188,11 +188,12 @@ print(unmapped if len(unmapped) else "No unmapped codes")
 # C3: at the index date, predictor lookback = `P["predictor_lookback_days"]`.
 # Waist circumference is reported only if the active Leicester variant needs it (`lrs_variant = "assessment_2010"`);
 # the default LPRS (Gray 2012) does not need waist (K-LRS).
+# `measure`: `recorded` = a value is in the record; `present_absent` (CVD, hypertension; family history unless
+# `c1_require_fh_record`, D17) = no record means absent, so 100% by definition — not a fill rate (`meets_90` = "-").
+# `family_history_recorded`: a FamilyHistory record or Z83.3. Joint: core-7 = without ethnicity; core-8 = + ethnicity.
 
 # %%
 comp_rows, joint_rows, snaps = [], [], {}
-ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
-extra_cols = ["waist_cm"] if lrs.needs_waist(P) else []
 for c, d in data.items():
     if c == "c3":
         snap = cohorts.build_c3(d, P)["cohort"]
@@ -203,22 +204,33 @@ for c, d in data.items():
         snap = phenotype.core_snapshot(d, ref, lookback_days=None, p=P).join(pool["status"].rename("group"))
     snaps[c] = snap
     for grp, s in [("all", snap), *snap.groupby("group")]:
-        for col in ok_cols + extra_cols:
-            ok = s[col].notna() if col == "waist_cm" else s[col].astype(bool)
-            comp_rows.append({"cohort": c, "group": grp, "variable": col.replace("ok_", ""),
-                              "n": len(s), "complete_pct": round(100 * ok.mean(), 1)})
-        joint_rows.append({"cohort": c, "group": grp, "n": len(s),
-                           "joint_core8_n": int(s["ok_core8"].sum()),
-                           "joint_core8_pct": round(100 * s["ok_core8"].mean(), 1),
-                           "joint_lrs_n": int(s["ok_lrs"].sum()),
-                           "joint_lrs_pct": round(100 * s["ok_lrs"].mean(), 1)})
+        comp_rows += [{"cohort": c, "group": grp, **r} for r in phenotype.completeness_by_variable(s, P)]
+        joint_rows.append({"cohort": c, "group": grp, **phenotype.joint_completeness(s)})
 comp = pd.DataFrame(comp_rows)
 joint = pd.DataFrame(joint_rows)
-run.save_table(comp, "nb00/core_variable_completeness.csv", "Completeness per variable")
-run.save_table(sdc.suppress_small_counts(joint, ["joint_core8_n", "joint_lrs_n"]),
-               "nb00/joint_completeness.csv", f"Joint completeness (8 core, {lrs.label(P)})")
+run.save_table(sdc.suppress_count_rate_pairs(comp, "n", [("complete_n", "complete_pct")]),
+               "nb00/core_variable_completeness.csv", "Completeness per variable; measure recorded / present_absent")
+run.save_table(sdc.suppress_count_rate_pairs(joint, "n", [(f"joint_{k}_n", f"joint_{k}_pct")
+                                                           for k in ("core7", "core8", "lrs")]),
+               "nb00/joint_completeness.csv",
+               f"Joint completeness (core-7 without ethnicity, core-8 = core-7 + ethnicity, {lrs.label(P)})")
 print(comp[comp["group"] == "all"].pivot(index="variable", columns="cohort", values="complete_pct").to_string())
 print(joint.to_string(index=False))
+
+# KPI note inputs (kpi.py, Data Completeness): the weakest of the other 7 core variables and joint core-7, per cohort
+completeness_kpi = {"data_completeness_without_ethnicity": {}, "joint_core7": {},
+                    "completeness_present_absent": [v for v in codelists.CORE_VARIABLES
+                                                    if phenotype.completeness_measure(v, P) == "present_absent"]}
+for c in data:
+    sub = comp[(comp["cohort"] == c) & (comp["group"] == "all") & comp["variable"].isin(phenotype.CORE7_VARIABLES)]
+    if len(sub):
+        w = sub.sort_values("complete_pct", kind="stable").iloc[0]
+        completeness_kpi["data_completeness_without_ethnicity"][c] = {
+            "variable": w["variable"], "pct": float(w["complete_pct"]), "complete_n": int(w["complete_n"]), "n": int(w["n"])}
+    j = joint[(joint["cohort"] == c) & (joint["group"] == "all")]
+    if len(j):
+        completeness_kpi["joint_core7"][c] = {"pct": float(j["joint_core7_pct"].iloc[0]),
+                                              "core7_n": int(j["joint_core7_n"].iloc[0]), "n": int(j["n"].iloc[0])}
 
 bmi_src = pd.concat({c: s["bmi_source"].fillna("missing").value_counts(normalize=True).round(3) * 100
                      for c, s in snaps.items()}, axis=1)
@@ -340,7 +352,7 @@ kpi.append({"kpi": "Applicant Data Requirement Framework Match", "cohort": "all"
 kpi = pd.DataFrame(kpi)
 run.save_table(kpi, "nb00/kpi_preview.csv", "KPIs fed by NB0")
 core_min = allc[allc["variable"].isin(codelists.CORE_VARIABLES)].groupby("cohort")["complete_pct"].min()
-run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
+run.save_json({**completeness_kpi, "data_completeness_min_core8_pct": core_min.to_dict(),
                "data_completeness_weakest": {c: r["weakest_variable"] for c, r in
                                              kpi[kpi["cohort"] != "all"].set_index("cohort").iterrows()},
                "framework_status": fw_status,                  # Match | Partial | No match (section 5b + groups)

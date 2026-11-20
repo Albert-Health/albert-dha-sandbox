@@ -263,6 +263,18 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   SANDBOX_PARAMS='{"ethnicity_source": "ethnicity"}' bash tools/enclave.sh run nb1
   ```
 
+- Tamlık tablolarını okuma (`completeness_by_variable`, `joint_completeness`, `ethnicity_source_compare`; NB0'da
+  `core_variable_completeness`, `joint_completeness`):
+  - `measure`: `recorded` = değer kayıtta var (cinsiyet, yaş, etnisite, BMI, sigara). `present_absent` = KVH,
+    hipertansiyon ve (D17 `c1_require_fh_record` False iken) aile öyküsü: kayıt yoksa "yok" sayılır, bu yüzden
+    %100 tanım gereğidir, doluluk ölçmez; `meets_90` bu satırlarda `-`. KPI'ın en düşük değeri yine bunları %100
+    sayar.
+  - `family_history_recorded`: aile öyküsünün gerçek doluluğu (FamilyHistory kaydı ya da Z83.3).
+  - `meets_90`: `recorded` değişken için tamlık ≥ %90.
+  - Birlikte tamlık: `joint_core7` = etnisite hariç 7 değişken, `joint_core8` = core-7 + etnisite. core-7 etnisite
+    kaynağına bağlı değildir; `ethnicity_source_compare` core-8'i iki kaynakla (uyruk / EthnicGroup) yan yana verir.
+  - Sayı < 10 → "<10"; sayısı ya da eksik sayısı < 10 olan oran "suppressed (<10)".
+
 ### 6 · KPI (Faz 1'de kısmi)
 
 - [ ] Çalıştır:
@@ -275,6 +287,9 @@ hesaplanmaz. Bu durumda C1 Leicester duyarlılığı çıkmaz.
   hesaplanabilirliği notta) ve Sensitivity (C1 yakalama oranı; eşik yoksa Pending, C1–C2 seçilim etkisi notta).
   Sensitivity hedefe (≥ %70) göre Met / Not Met diye değerlendirilmez; birincil skor ve referans tarihi önceden
   belirlenmedi. Specificity, NPV / PPV, AUROC, C-Index, kalibrasyon ve uyarı oranı Faz 2'de (C3, NB2) dolar.
+- Data Completeness for Required Variables: değer ve Met kararı değişmedi (8 çekirdek değişkenin en düşüğü, NB0).
+  Not (blokta ayrı satır): en zayıf değişken, etnisite hariç en zayıf değişken ("Without ethnicity"), birlikte
+  tamlık core-7 (% ve N) ve tanım gereği %100 olan `present_absent` değişkenler.
 
 ### 7 · Jupyter'de inceleme (isteğe bağlı)
 

@@ -276,10 +276,73 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out["ok_hypertension"] = True   # diagnosis and medication are separate fields; present/absent
     ok_cols = [f"ok_{v}" for v in codelists.CORE_VARIABLES]
     out["ok_core8"] = out[ok_cols].all(axis=1)
+    out["ok_core7"] = out[[f"ok_{v}" for v in CORE7_VARIABLES]].all(axis=1)    # all but ethnicity (D6)
     # Joint completeness for the Leicester score: waist circumference is needed only for the LRA 2010 variant (K-LRS)
     out["ok_lrs"] = out[["ok_sex", "ok_age", "ok_ethnicity", "ok_bmi", "ok_family_history",
                          "ok_hypertension"]].all(axis=1)
     if lrs.needs_waist(p):
         out["ok_lrs"] &= out["waist_cm"].notna()
     out["ref_date"] = ref
+    return out
+
+
+# --------------------------------------------------------------------------
+# Completeness report (C1 / C2 checklist; NB0 and NB1 tables)
+# --------------------------------------------------------------------------
+# Core-7 = the 8 core variables without ethnicity (no nationality column in NABIDH, EthnicGroup mostly empty — D6);
+# core-8 = core-7 + ethnicity.
+CORE7_VARIABLES = [v for v in codelists.CORE_VARIABLES if v != "ethnicity"]
+COMPLETENESS_TARGET_PCT = 90    # KPI "Data Completeness for Required Variables" target (kpi.KPI_ROWS ">= 90%")
+# measure — what "complete" means for a variable:
+#   recorded        a value is in the record (sex, age, ethnicity, BMI, smoking; family history only with
+#                   c1_require_fh_record, D17)
+#   present_absent  a yes / no flag from diagnoses / medication: no record = absent, so every patient has it —
+#                   100% by definition, not a fill rate (the KPI minimum still counts it as 100%)
+RECORDED_NOTE = "a value in the record"
+PRESENT_ABSENT_NOTE = "no record = absent: 100% by definition, not a fill rate"
+NOT_MEASURED = "-"     # meets_90 of a present_absent row ("" or "n/a" would read back as NaN from the CSV)
+FH_RECORDED_NOTE = "FamilyHistory record (positive / negative / other relative) or Z83.3"
+
+
+def completeness_measure(variable: str, p: dict = PARAMS) -> str:
+    """'recorded' or 'present_absent' (see above) for a core variable."""
+    if variable in ("cvd", "hypertension"):
+        return "present_absent"
+    if variable == "family_history" and not p.get("c1_require_fh_record", PARAMS["c1_require_fh_record"]):
+        return "present_absent"
+    return "recorded"
+
+
+def completeness_by_variable(s: pd.DataFrame, p: dict = PARAMS) -> list[dict]:
+    """Per-variable completeness of one patient group (core_snapshot rows): the 8 core variables, the family-history
+    record (`family_history_recorded`, after family_history) and waist circumference for LRA 2010 only.
+    meets_90: complete_pct ≥ COMPLETENESS_TARGET_PCT for recorded values; NOT_MEASURED for present_absent."""
+    items = []
+    for v in codelists.CORE_VARIABLES:
+        measure = completeness_measure(v, p)
+        items.append((v, s[f"ok_{v}"], measure, PRESENT_ABSENT_NOTE if measure == "present_absent" else RECORDED_NOTE))
+        if v == "family_history":
+            items.append(("family_history_recorded", s["family_history_recorded"], "recorded", FH_RECORDED_NOTE))
+    if lrs.needs_waist(p):
+        items.append(("waist (LRS)", s["waist_cm"].notna(), "recorded", f"{RECORDED_NOTE} (LRA 2010 only)"))
+    n, rows = len(s), []
+    for v, ok, measure, note in items:
+        k = int(ok.astype(bool).sum())
+        pct = round(100 * k / n, 1) if n else np.nan
+        rows.append({"variable": v, "measure": measure, "n": n, "complete_n": k, "complete_pct": pct,
+                     "meets_90": NOT_MEASURED if measure == "present_absent" else None if not n
+                     else bool(pct >= COMPLETENESS_TARGET_PCT),
+                     "note": note})
+    return rows
+
+
+def joint_completeness(s: pd.DataFrame) -> dict:
+    """Joint completeness of one patient group: core-7 (all but ethnicity), core-8 (core-7 + ethnicity) and the
+    active Leicester variant's inputs (ok_lrs); N and % each."""
+    n = len(s)
+    out = {"n": n}
+    for name in ("core7", "core8", "lrs"):
+        k = int(s[f"ok_{name}"].astype(bool).sum())
+        out[f"joint_{name}_n"] = k
+        out[f"joint_{name}_pct"] = round(100 * k / n, 1) if n else np.nan
     return out
