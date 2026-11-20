@@ -157,7 +157,8 @@ def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> in
         say(f"{c}: writing canonical tables and checking the schema")
         out_dir = schema.write_dataset(ds, CANONICAL_DIR)
         meta = {"ingest_version": nabidh.INGEST_VERSION, "ingest_run_id": run.run_id, "source": a.source,
-                "cohort": c, "input": "file" if conn is None else "iris"}
+                "cohort": c, "input": "file" if conn is None else "iris",
+                "delivery": rep.get("delivery") or {}}       # what the source delivered per variable (NB0 Framework Match)
         (out_dir / "ingest.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
         run.register_output(out_dir / "ingest.json", f"canonical {a.source} {c} ingest version")
         for f in sorted(out_dir.glob("*.csv")):
