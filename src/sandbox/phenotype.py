@@ -95,6 +95,13 @@ _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none"
 FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
 
 
+def ethnicity_recorded(raw: pd.Series) -> pd.Series:
+    """True where an ethnicity / nationality value is recorded (not empty, "not recorded", "unknown" …)."""
+    txt = raw.astype("string").str.strip().str.lower()
+    missing = txt.isin(_MISSING_ETH).fillna(True).astype(bool)
+    return txt.notna().astype(bool) & ~missing
+
+
 def _z68_to_bmi(code: pd.Series) -> pd.Series:
     """Convert a Z68.xx band to an approximate BMI (band midpoint). Fallback source only."""
     c = codelists.norm_icd(code)
@@ -142,7 +149,7 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     # Ethnic group: from the PARAMS["ethnicity_source"] column (nationality or NABIDH ethnicity)
     src = p.get("ethnicity_source", PARAMS["ethnicity_source"])
     eth = pts[codelists.ETHNICITY_SOURCE_COLUMN[src]].reindex(out.index)
-    eth = eth.where(~eth.astype("string").str.strip().str.lower().isin(_MISSING_ETH).fillna(True))
+    eth = eth.where(ethnicity_recorded(eth))
     out["ethnicity_source_value"] = eth
     out["ethnicity"] = codelists.ethnic_group(eth, src)
 

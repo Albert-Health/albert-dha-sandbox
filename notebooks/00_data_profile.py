@@ -12,6 +12,7 @@
 # - Schema validation (canonical format)
 # - Table volumes, date ranges, facility representation
 # - Requested codes vs received codes (KPI: *Applicant Data Requirement Framework Match*)
+# - Framework Match by variable: Match / Partial / Absent (view / column, derived vs requested code system)
 # - Single and joint completeness of the 8 core variables (KPI: *Data Completeness ≥ 90%*)
 # - Lab distributions, timeline
 #
@@ -34,7 +35,7 @@ if "ipykernel" not in sys.modules:   # no display needed when run as a script
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from sandbox import codelists, cohorts, phenotype, sdc
+from sandbox import codelists, cohorts, framework, phenotype, sdc
 from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, COHORTS, PARAMS
 from sandbox.io import schema
@@ -215,6 +216,22 @@ run.save_table(smk_src.reset_index(names="smoking_source"), "nb00/smoking_source
 print(bmi_src, "\n", smk_src)
 
 # %% [markdown]
+# ## 5b. Framework Match by variable — Match / Partial / Absent
+#
+# Did each of the 8 requested variables arrive, and as requested? **Absent** = no usable value; **Partial** = arrived
+# but not as requested (substitute field, missing levels, derived from another code system, only half of a derived
+# variable, or values for few patients); **Match** = as requested. Rules and thresholds: `sandbox/framework.py`,
+# `PARAMS["framework_*"]` [DECISION PENDING]. How full a variable is stays with the Data Completeness KPI above.
+# The view / column and the share of derived records come from the adapter (`<cohort>/ingest.json`).
+
+# %%
+delivery = {c: framework.read_delivery(CANONICAL_DIR, SOURCE, c) for c in data}
+fw = framework.match_table(data, delivery, P)
+fw_out = framework.suppressed(fw)
+run.save_table(fw_out, "nb00/framework_variables.csv", "Framework Match by variable (Match / Partial / Absent)")
+print(fw_out.drop(columns=["requested"]).to_string(index=False))
+
+# %% [markdown]
 # ## 6. Lab distributions and timeline
 
 # %%
@@ -301,17 +318,21 @@ required_groups = ["t2d", "prediabetes", "hypertension", "cvd", "family_history_
                    "antidiabetic", "hba1c (4548-4)", "fpg (1558-6)", "bmi", "height_cm", "weight_kg",
                    "smoking_status"] + (["waist_cm"] if lrs.needs_waist(P) else [])
 not_received = fm[(~fm["received"]) & fm["group"].isin(required_groups)]
+# Framework Match = Match / Partial / No match: per variable (section 5b) and the requested code groups (section 4)
+fw_status = framework.overall(fw, sorted(not_received["group"].unique()))
+fw_bad = framework.non_match(fw)
 kpi.append({"kpi": "Applicant Data Requirement Framework Match", "cohort": "all", "target": "Match",
-            "actual": "Match" if not_received.empty else f"{not_received['group'].nunique()} groups missing",
-            "met": not_received.empty,
-            "weakest_variable": ", ".join(sorted(not_received["group"].unique())[:6])})
+            "actual": fw_status, "status": fw_status, "met": fw_status == "Match",
+            "weakest_variable": ", ".join([*fw_bad, *sorted(not_received["group"].unique())][:6])})
 kpi = pd.DataFrame(kpi)
 run.save_table(kpi, "nb00/kpi_preview.csv", "KPIs fed by NB0")
 core_min = allc[allc["variable"].isin(codelists.CORE_VARIABLES)].groupby("cohort")["complete_pct"].min()
 run.save_json({"data_completeness_min_core8_pct": core_min.to_dict(),
                "data_completeness_weakest": {c: r["weakest_variable"] for c, r in
                                              kpi[kpi["cohort"] != "all"].set_index("cohort").iterrows()},
-               "framework_match": bool(not_received.empty),
+               "framework_status": fw_status,                  # Match | Partial | No match (section 5b + groups)
+               "framework_variables": fw_bad,                  # {variable: {cohort: Partial | Absent}}
+               "framework_match": bool(not_received.empty),    # requested code groups only (section 4)
                "framework_missing_groups": sorted(not_received["group"].unique().tolist()),
                "framework_required_groups": required_groups,
                "lrs_variant": P["lrs_variant"],

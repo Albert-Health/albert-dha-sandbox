@@ -50,6 +50,15 @@ PARAMS = {
     "ogtt_pre_low": 140.0,
     "random_glucose_dm": 200.0,
 
+    # Applicant Data Requirement Framework Match by variable (framework.py): Match / Partial / Absent. A variable is
+    # Partial when it arrived but not as requested: more than `framework_derived_max_pct` of its records are not in
+    # the requested code system (drug code → ATC, family history from text), a substitute field / only some of the
+    # requested levels came, or (recorded variables only) fewer than `framework_min_patient_pct` of the patients have a
+    # value. How full a variable is stays with the Data Completeness KPI (≥ 90%).
+    # [DECISION PENDING] both thresholds are the developer's proposal; medical team / DFF to confirm.
+    "framework_min_patient_pct": 50,
+    "framework_derived_max_pct": 5,
+
     # C1 / C2 (Interim Data Assessment)
     "c1_cap": 2600,
     "c2_cap": 2600,
