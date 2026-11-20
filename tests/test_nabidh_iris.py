@@ -162,8 +162,10 @@ class TestIrisSources(unittest.TestCase):
         got = ds["conditions"].set_index("patient_id")["date"]
         self.assertEqual(got["A1"], pd.Timestamp("2023-12-31"))
         self.assertEqual(got["A2"], pd.Timestamp("2020-12-30 01:00"))
-        self.assertTrue(pd.isna(got["A3"]))
+        self.assertNotIn("A3", got.index)                          # empty / unparseable date → dropped, counted
+        self.assertNotIn("A4", got.index)
         self.assertEqual(rep["sources"]["diagnoses"]["unparseable_date"], 1)
+        self.assertEqual(rep["sources"]["diagnoses"]["dropped_no_date"], 2)
         conn.close()
 
 

@@ -181,7 +181,9 @@ def validate(ds: Dataset) -> pd.DataFrame:
                 if name == "observations" and col == "date" and "concept" in df:
                     fh = miss & df["concept"].eq("family_history_dm").fillna(False).astype(bool)
                     add(name, "family history without date (date not used, D27)", "INFO", fh.sum())
-                    miss &= ~fh
+                    sm = miss & df["concept"].eq("smoking_status").fillna(False).astype(bool)
+                    add(name, "smoking record without date (used only if all agree, D28)", "INFO", sm.sum())
+                    miss &= ~(fh | sm)
                 add(name, f"missing required {col}", "ERROR" if miss.any() else "INFO", miss.sum())
         if name != "patients" and len(df):
             orphan = ~df["patient_id"].isin(pid_set)

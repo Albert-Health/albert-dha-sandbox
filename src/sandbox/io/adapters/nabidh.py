@@ -68,6 +68,9 @@ from .synthetic import read_raw_csv
 #                      about a study drug (ddc.name_leads_with_study_drug; method "DDC: not a study drug class → name:
 #                      …", counted; the C1 / C2 cholecalciferol code on Xigduo XR 5/1000 rows, 134 each). Report:
 #                      "→ name used" and "name has one (code kept)" replace "drug name has one"
+#                      i42 · rows without a required date are dropped and counted per source (dropped_no_date;
+#                      the analysis cannot place them in time), except undated family history (D27) and smoking
+#                      (D28); the schema check reports undated smoking as INFO, so NB0 no longer stops on them
 #   1.3.0  2026-11-20  1c · LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
 #                      rows with an empty value dropped and counted per code (drop_empty; the text "NULL" = empty).
 #                      Observation (vitals): "0" / "-" = empty (empty_values, counted), height 1.2–2.3 m → cm,
@@ -972,6 +975,29 @@ def load_iris(conn, cohort: str, sources: dict | None = None, cohort_params: dic
     return _load(cohort, sources or SOURCES, read, "iris", progress)
 
 
+# Undated records a decision keeps (observations.concept): family history (D27, date not used) and smoking (D28,
+# used when all of a patient's undated records agree). Every other row without a date is dropped and counted.
+KEEP_UNDATED_CONCEPTS = ("family_history_dm", "smoking_status")
+
+
+def drop_undated(produced: dict, info: dict) -> dict:
+    """Drop canonical rows whose required date is missing (counted in info["dropped_no_date"]). The analysis cannot
+    place them in a time window (phenotype keeps date <= reference), so this changes no score; it keeps NB0's schema
+    check from stopping on them (VM ingest 1.3.0: C1 17 diagnoses, 34 medications without a date)."""
+    out, n = {}, 0
+    for t, d in produced.items():
+        if len(d) and "date" in d and SCHEMA[t].get("date", ("", False))[1]:
+            miss = d["date"].isna()
+            if t == "observations" and "concept" in d:
+                miss &= ~d["concept"].isin(KEEP_UNDATED_CONCEPTS).fillna(False).astype(bool)
+            if miss.any():
+                n += int(miss.sum())
+                d = d[~miss]
+        out[t] = d
+    info["dropped_no_date"] = n
+    return out
+
+
 def _load(cohort: str, sources: dict, read, input_kind: str, progress=None) -> tuple[Dataset, dict]:
     say = progress or (lambda msg: None)
     parts: dict[str, list[pd.DataFrame]] = {t: [] for t in TABLES}
@@ -986,6 +1012,7 @@ def _load(cohort: str, sources: dict, read, input_kind: str, progress=None) -> t
         df = _parse_dates(df, spec, info)
         extra = {"item_filtered": bool(spec.get("filter"))} if spec["kind"] == "smoking" else {}
         produced = HANDLERS[spec["kind"]](df, name, report["value_counts"], **extra)
+        produced = drop_undated(produced, info)
         info.update(got)
         info.update(status="read", rows_out={t: int(len(d)) for t, d in produced.items()})
         report["sources"][name] = info

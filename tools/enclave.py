@@ -976,7 +976,7 @@ def summary_ingest(d: Path, out: Block, a) -> None:
         out("   rows: " + ", ".join(f"{t}={sdc.fmt_count(n)}" for t, n in (s.get("rows") or {}).items()))
         for name, src in (s.get("sources") or {}).items():
             extra = [f"{k}={sdc.fmt_count(v)}" for k, v in src.items()
-                     if k.startswith(("unparseable_", "filtered_out_by_", "dropped_empty_"))
+                     if k.startswith(("unparseable_", "filtered_out_by_", "dropped_empty_", "dropped_no_date"))
                      and not k.endswith("_by_code") and v]
             extra += [f"{k}={v}" for k, v in src.items() if k.startswith("absent") and v]
             # labels with < 10 rows are not named (nabidh._labels)

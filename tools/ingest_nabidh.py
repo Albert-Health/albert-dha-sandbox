@@ -187,7 +187,7 @@ def _ingest(run: Run, a, cohorts, raw_root: Path, conn, target, snap_root) -> in
             bad = {k: v for k, v in s.items() if k.startswith("unparseable_") and v}
             extra = f"  unparseable dates: {bad}" if bad else ""
             for k, v in s.items():
-                if k.startswith("dropped_empty_") and not k.endswith("_by_code") and v:
+                if k.startswith(("dropped_empty_", "dropped_no_date")) and not k.endswith("_by_code") and v:
                     extra += f"  {k}={v}" + (f" ({s[k + '_by_code']})" if s.get(k + "_by_code") else "")
             if s.get("error"):
                 extra += f"  ({s['error'][:120]})"
