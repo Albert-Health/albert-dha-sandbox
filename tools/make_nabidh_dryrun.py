@@ -5,8 +5,10 @@ Follows the views seen in the enclave (2026-11-18):
 - Patient: ID, Age (no date of birth; age as of AGE_REFERENCE_DATE), Gender_Code (M/F),
   EthnicGroup_Description; no nationality. In the other views the patient key is `Patient` (= Patient.ID)
 - Diagnosis (ICD-10 only, incl. Z83.3), Observation (BMI, height, weight — LOINC; no unit column; as in C1,
-  some rows have an empty ObservationValue — the adapter drops them),
-  LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19), SocialHistory (smoking),
+  some rows have an empty ObservationValue or the placeholder "0" — the adapter drops them — and a few heights
+  are in metres),
+  LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19; as on the VM, units in several spellings
+  (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit and some empty ResultValue rows), SocialHistory (smoking),
   FamilyHistory (diabetes), Medication; Encounter only in C3
 - C2 differences: SocialHabitCategory_Description (not _Code), no DrugProduct_Code in Medication
 - Medication: in C1 DrugProduct_Code = DDC product code, in C2 DrugProduct_Description = DDC trade name (a
@@ -93,12 +95,23 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "Diagnosis_Code": icd["code"], "Diagnosis_Description": icd["description"]})
 
     vit = obs[obs["concept"].isin(list(VITAL_LOINC))]
-    vit = pd.concat([vit, vit.iloc[::25].assign(value=pd.NA)], ignore_index=True)    # empty-value rows (as in C1)
+    vit = vit.reset_index(drop=True)
+    # As in the VM checks (2026-11-20): a few heights in metres (the adapter converts them back to cm)
+    metres = vit["concept"].eq("height_cm") & (vit.index % 50 == 7)
+    vit.loc[metres, "value"] = (pd.to_numeric(vit.loc[metres, "value"]) / 100).round(3).astype(str)
+    vit = pd.concat([vit, vit.iloc[::25].assign(value=pd.NA),                         # empty-value rows (as in C1)
+                     vit.iloc[3::30].assign(value="0")], ignore_index=True)           # "0" placeholder rows
     out["observations.csv"] = pd.DataFrame({
         "ID": range(1, len(vit) + 1), "Patient": vit["patient_id"],
         "ObservationCode_Code": vit["concept"].map(VITAL_LOINC), "ObservationCode_Description": vit["concept"],
         "ObservationValue": vit["value"], "ObservationDate": _d(vit["date"])})
-    lab = labs[labs["loinc"].isin(DELIVERED_LABS)]
+    lab = labs[labs["loinc"].isin(DELIVERED_LABS)].reset_index(drop=True)
+    # As in the VM ingest 1.2.1 (2026-11-19): one unit in several spellings, "0" / "NULL" as HbA1c unit, empty values
+    unit = lab["unit"].astype("string")
+    unit = unit.where(lab.index % 5 != 1, unit.str.upper()).where(lab.index % 11 != 2, unit.str.lower())
+    a1c = lab["loinc"].eq("4548-4")
+    unit = unit.where(~(a1c & (lab.index % 40 == 3)), "0").where(~(a1c & (lab.index % 40 == 23)), "NULL")
+    lab = pd.concat([lab.assign(unit=unit), lab.iloc[::60].assign(value=pd.NA)], ignore_index=True)
     out["lab_results.csv"] = pd.DataFrame({
         "ID": range(1, len(lab) + 1), "Encounter": pd.NA, "Patient": lab["patient_id"], "ResultDate": _d(lab["date"]),
         "ResultValue": lab["value"], "ResultValueUnits": lab["unit"], "TestItemCode_Code": lab["loinc"],
