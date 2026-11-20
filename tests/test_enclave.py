@@ -425,6 +425,17 @@ class TestOutputTables(unittest.TestCase):
         self.assertEqual(got["value"].tolist(), ["MG/DL → mg/dL", "0 → <no unit>", "NULL → <no unit>"])
         self.assertEqual(got["n_rows"].tolist(), ["611", "<10", "<10"])
 
+    def test_lab_non_numeric_shapes_in_summary(self):
+        """Non-numeric lab results: the raw values stay hidden below 10 rows, their shapes (no value) are shown."""
+        v = pd.DataFrame({"source": ["lab_results"] * 4,
+                          "field": ["lab value non-numeric (raw)", "rows dropped: non-numeric value",
+                                    "non-numeric value (dropped): kind | shape",
+                                    "non-numeric value (dropped): kind | shape"],
+                          "value": ["<5.0", "<n rows>", "hba1c | <9.9", "fpg | a"],
+                          "n_rows": ["<10", "<10", "<10", "<10"]})
+        got = enclave.field_summary(v, "lab_results", enclave.LAB_FIELDS)
+        self.assertEqual(got["value"].tolist(), ["<n rows>", "hba1c | <9.9", "fpg | a"])
+
     def test_ingest_summary_shows_dropped_empty_values(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "ingest").mkdir()

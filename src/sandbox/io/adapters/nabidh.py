@@ -52,7 +52,7 @@ from pathlib import Path
 import pandas as pd
 
 from ... import codelists
-from .. import iris
+from .. import explore, iris
 from . import ddc
 from ..schema import SCHEMA, TABLES, Dataset, coerce
 from .synthetic import read_raw_csv
@@ -61,6 +61,9 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   unreleased (1c)  2026-11-20  LabResultItem: a decimal comma ("6,2") is read as a point; a result that is not a
+#                      finite number ("<5.0", text) is dropped and counted by kind | shape (labs "missing required
+#                      value" ERROR); comparators are not read as their bound
 #   1.3.0  2026-11-20  1c · LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
 #                      rows with an empty value dropped and counted per code (drop_empty; the text "NULL" = empty).
 #                      Observation (vitals): "0" / "-" = empty (empty_values, counted), height 1.2–2.3 m → cm,
@@ -560,6 +563,29 @@ def norm_lab_unit(unit: pd.Series) -> pd.Series:
     return out.mask((key.isin(LAB_UNIT_EMPTY) | key.eq("")).fillna(False).astype(bool))
 
 
+# Lab result text. VM ingest 1.3.0 (2026-11-20): after the empty values were dropped, labs "missing required value"
+# was still C1 < 10 / C2 10 rows = results that are not a plain number. A decimal comma ("6,2"; 1–2 decimals, so not a
+# thousands separator) is read as a point. Anything else that is not a finite number ("<5.0", ">14", text) is dropped
+# and counted by kind | shape (explore.shape: a digit → 9, letters → a; no value shows). A comparator is not read as
+# its bound: "<5.7" is a normal HbA1c, its bound 5.7 is prediabetes — whether such results count is the medical
+# team's call.
+LAB_DECIMAL_COMMA = re.compile(r"^[+-]?\d+,\d{1,2}$")
+
+
+def parse_lab_value(raw: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Lab result text → (number as text, how: "number" / "decimal comma" / NA = not a finite number).
+    Whitespace incl. non-breaking space is ignored (NFKC + strip)."""
+    txt = raw.astype("string").str.normalize("NFKC").str.strip()
+    comma = txt.str.match(LAB_DECIMAL_COMMA).fillna(False).astype(bool)
+    out = txt.where(~comma, txt.str.replace(",", ".", regex=False))
+    num = pd.to_numeric(out, errors="coerce")
+    ok = (num.notna() & (num.abs() != float("inf"))).fillna(False).astype(bool)
+    how = pd.Series(pd.NA, index=raw.index, dtype=object)
+    how[ok] = "number"
+    how[ok & comma] = "decimal comma"
+    return out.where(ok), how
+
+
 def lab_range_class(kind: pd.Series, unit: pd.Series) -> pd.Series:
     """Kind + unit → LAB_PLAUSIBLE key (same unit rule as phenotype.glycaemic_events)."""
     u = unit.astype("string").str.lower().fillna("")
@@ -620,18 +646,29 @@ def _h_lab_results(df, name, vc):
         vc.append({"source": name, "field": "rows dropped: not a study lab", "value": "<n rows>",
                    "n_rows": int((~in_list).sum())})
     labs = df[keep].assign(code=code[keep], unit=unit[keep]).rename(columns={"code": "loinc"})
+    value, how = parse_lab_value(labs["value"])
+    bad = how.isna()
+    vc += _value_counts(name, "lab value non-numeric (raw)", labs.loc[bad, "value"], top=20)
+    if how.eq("decimal comma").any():
+        vc.append({"source": name, "field": "lab value: decimal comma read as point", "value": "<n rows>",
+                   "n_rows": int(how.eq("decimal comma").sum())})
+    if bad.any():
+        raw = labs.loc[bad, "value"].astype("string").fillna("")
+        shp = kind.loc[raw.index].astype(str) + " | " + raw.map(lambda x: explore.shape(x) if x else "<empty>")
+        vc += _value_counts(name, "non-numeric value (dropped): kind | shape", shp, top=20)
+        vc.append({"source": name, "field": "rows dropped: non-numeric value", "value": "<n rows>",
+                   "n_rows": int(bad.sum())})
+    labs = labs.assign(value=value)[~bad]
+    k_kind, k_unit = kind.loc[labs.index], labs["unit"]
     vc += [{"source": name, "field": "value by kind | unit", "value": label, "n_rows": n}
-           for label, n in lab_value_stats(labs, kind[keep], unit[keep])]
-    rng = lab_range_class(kind[keep], unit[keep])
+           for label, n in lab_value_stats(labs, k_kind, k_unit)]
+    rng = lab_range_class(k_kind, k_unit)
     v = pd.to_numeric(labs["value"], errors="coerce")
     lo, hi = rng.map(lambda r: LAB_PLAUSIBLE[r][0]), rng.map(lambda r: LAB_PLAUSIBLE[r][1])
     outside = (v.notna() & ((v < lo) | (v > hi))).astype(bool)
-    label = (kind[keep].astype(str) + " | " + unit[keep].fillna("<no unit>").astype(str) + " : outside "
+    label = (k_kind.astype(str) + " | " + k_unit.fillna("<no unit>").astype(str) + " : outside "
              + lo.astype(str) + "–" + hi.astype(str) + " " + rng.str.split(" ").str[1] + " (kept)")
     vc += _value_counts(name, "value outside plausible range", label[outside], top=20)
-    vc += _value_counts(name, "lab value non-numeric (raw)",
-                        labs.loc[pd.to_numeric(labs["value"], errors="coerce").isna() & labs["value"].notna(), "value"],
-                        top=20)
     return {"labs": labs}
 
 

@@ -421,7 +421,7 @@ class TestLabResults(unittest.TestCase):
             "A2,E2,2020-02-01,6.1,mmol/L,1558-6,Glucose fasting",       # mmol/L → mg/dL (109.9)
             "A2,E2,2020-02-01,190,mg/dL,2093-3,Cholesterol",            # not a study lab → dropped
             "A1,E3,2021-04-01,6.9,%,LOC-77,Glycated haemoglobin",       # locally coded HbA1c → dropped, listed apart
-            "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # not a number, no unit
+            "A4,E4,2021-04-01,<2.8,,1558-6,FBS",                        # not a number, no unit → dropped, counted
             "A1,E5,2021-05-01,140,mg/dL,4548-4,EAG (ESTIMATED AVERAGE GLUCOSE)",   # HbA1c code, eAG → dropped
             "A2,E6,2021-05-01,180,mg/dL,1558-6,BLOOD SUGAR -RBS",       # fasting code, random → dropped
             "P1,E7,2021-05-01,150,mg/dL,1521-4,GLUCOSE POST PRANDIAL (PPBS)",      # kept (note: not OGTT)
@@ -443,7 +443,7 @@ class TestLabResults(unittest.TestCase):
         lab = labs[labs["patient_id"].isin(["A2", "A3", "A4"]) & labs["unit"].notna()].set_index("patient_id")
         self.assertEqual(lab.loc["A3", ["loinc", "unit"]].tolist(), ["59261-8", "mmol/mol"])
         self.assertEqual(lab.loc["A2", ["loinc", "unit"]].tolist(), ["1558-6", "mmol/L"])
-        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 17})
+        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 16})   # "<2.8" dropped
         self.assertNotIn("2093-3", set(labs["loinc"]))
         self.assertNotIn("LOC-77", set(labs["loinc"]))
         self.assertFalse(self.ds["observations"]["concept"].str.contains("2093-3|LOC-77").any())   # not an observation
@@ -481,7 +481,7 @@ class TestLabResults(unittest.TestCase):
         stats = self.field("value by kind | unit")
         self.assertIn("hba1c | % : 12 patients, p5 5.11 / median 6.1 / p95 7.09", stats)
         small = [k for k in stats if k.startswith(("hba1c_ifcc", "fpg"))]
-        self.assertEqual(len(small), 3)                          # mmol/mol, mmol/L, <no unit>
+        self.assertEqual(len(small), 2)                          # mmol/mol, mmol/L ("<2.8" was the <no unit> row)
         self.assertTrue(all("no distribution" in k for k in small))
 
 
@@ -568,6 +568,67 @@ class TestLabUnitsAndEmptyValues(unittest.TestCase):
         val = schema.validate(schema.Dataset(source="nabidh", cohort="c1", tables=tables))
         mixed = val[(val["table"] == "labs") & (val["check"] == "multiple units per LOINC")].iloc[0]
         self.assertEqual((mixed["severity"], int(mixed["n_affected"]), mixed["detail"]), ("WARN", 1, "1558-6"))
+
+
+class TestLabNonNumericValues(unittest.TestCase):
+    """VM ingest 1.3.0 (2026-11-20): labs "missing required value" ERROR left after the empty values were dropped
+    (C1 < 10, C2 10 rows) = results that are not a plain number."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        d = Path(cls.tmp.name)
+        write_raw(d)
+        _csv(d, "observations.csv", "Patient,ObservationCode_Code,ObservationValue,ObservationDate",
+             ["A1,39156-5,31.2,2020-06-01"])                            # vitals only
+        _csv(d, "lab_results.csv", "Patient,Encounter,ResultDate,ResultValue,ResultValueUnits,TestItemCode_Code,"
+                                   "TestItemCode_Description", [
+            "A1,E1,2021-01-01,6.9,%,4548-4,HbA1c",
+            "A2,E2,2021-01-01, 6.4 ,%,4548-4,HbA1c",               # NBSP / space around → 6.4
+            "A3,E3,2021-01-01,\"6,7\",%,4548-4,HbA1c",                  # decimal comma → 6.7 (dm)
+            "A4,E4,2021-01-01,<5.7,%,4548-4,HbA1c",                     # comparator → dropped (not read as 5.7)
+            "A1,E5,2021-02-01,>14,%,4548-4,HbA1c",                      # comparator → dropped
+            "A2,E6,2021-02-01,Haemolysed,mg/dL,1558-6,Glucose Fasting",  # text → dropped
+            "A3,E7,2021-02-01,\"1,250\",mg/dL,1558-6,Glucose Fasting",   # 3 decimals: not a decimal comma → dropped
+            "A4,E8,2021-02-01,inf,mg/dL,1558-6,Glucose Fasting",        # not finite → dropped
+            "A1,E9,2021-03-01,105,mg/dL,1558-6,Glucose Fasting",
+        ])
+        cls.ds, cls.rep = nabidh.load(d, "c1")
+        cls.vc = pd.DataFrame(cls.rep["value_counts"])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def field(self, name):
+        x = self.vc[(self.vc["source"] == "lab_results") & (self.vc["field"] == name)]
+        return x.set_index("value")["n_rows"].to_dict()
+
+    def test_parse_lab_value(self):
+        value, how = nabidh.parse_lab_value(pd.Series(["5.5", " 6.2 ", "6,2", "-1,5", "<5.0", ">=7", "1,000",
+                                                       "6.2%", "Pending", "inf", "NaN", None]))
+        self.assertEqual(list(value.fillna("<NA>")), ["5.5", "6.2", "6.2", "-1.5"] + ["<NA>"] * 8)
+        self.assertEqual(list(how.fillna("<NA>")), ["number", "number", "decimal comma", "decimal comma"]
+                         + ["<NA>"] * 8)
+
+    def test_non_numeric_dropped_and_counted(self):
+        labs = self.ds["labs"]
+        self.assertEqual(self.rep["sources"]["lab_results"]["rows_out"], {"labs": 4})
+        self.assertFalse(labs["value"].isna().any())
+        val = schema.validate(self.ds)
+        miss = val[(val["table"] == "labs") & (val["check"] == "missing required value")].iloc[0]
+        self.assertEqual((miss["severity"], int(miss["n_affected"])), ("INFO", 0))
+        self.assertEqual(self.field("rows dropped: non-numeric value"), {"<n rows>": 5})
+        self.assertEqual(self.field("non-numeric value (dropped): kind | shape"),
+                         {"hba1c | <9.9": 1, "hba1c | >99": 1, "fpg | a": 2, "fpg | 9,999": 1})   # no values shown
+
+    def test_decimal_comma_and_whitespace_read(self):
+        a1c = self.ds["labs"].set_index("patient_id")["value"]
+        self.assertEqual((a1c["A2"], a1c["A3"]), (6.4, 6.7))
+        self.assertEqual(self.field("lab value: decimal comma read as point"), {"<n rows>": 1})
+        g = phenotype.glycaemic_events(self.ds).set_index("patient_id")
+        self.assertEqual(g.loc["A3", "status"], "dm")
+        self.assertNotIn("A4", g.index)                                  # "<5.7" is not evidence either way
 
 
 class TestVitals(unittest.TestCase):
