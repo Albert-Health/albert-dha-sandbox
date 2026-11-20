@@ -275,6 +275,22 @@ def lookup_code(code, row_route=None, path: Path | None = None) -> tuple[str, li
     return how, list(atcs)
 
 
+def name_leads_with_study_drug(name, path: Path | None = None) -> bool:
+    """Is the drug name about a study drug: its brand stem (the words before the first number, leading form words
+    dropped) is a study trade name / brand, or names a study active ingredient ("DAPAGLIFLOZIN 5 MG-METFORMIN ER …",
+    "DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG", "XIGDUO XR 5/1000"). Free text that only mentions one later on
+    ("VITAMIN D3 1000 IU (ON METFORMIN)", "PANADOL 500 MG, TAKES METFORMIN") is not. Devices never are."""
+    if name is None or pd.isna(name) or _NOT_A_DRUG.search(str(name).upper()):
+        return False
+    _, _, by_trade, by_head = _indexes(path)
+    words = _brand_stem(_norm_text(name)).split()
+    if not words:
+        return False
+    if any(by_trade.get(" ".join(words[:k])) for k in range(min(len(words), 6), 0, -1)) or by_head.get(words[0]):
+        return True
+    return bool(ingredient_atc(" ".join(words)))
+
+
 def lookup_name(name, row_route=None, path: Path | None = None) -> tuple[str, list[str]]:
     """Drug name (free text) → (status, ATC list). Trade name (DDC, start of the name) + active ingredients named.
     status: "name: trade name" · "name: brand first word" · "name: ingredient" · "name: trade name + ingredient" ·

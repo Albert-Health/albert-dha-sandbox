@@ -901,8 +901,10 @@ MED_FIELDS = [
     ("drug_name without study drug class", 15, True),
     ("DDC: not a study drug class (DDC ingredients | route)", 15, True),
     ("DDC: non-systemic route (DDC ingredients | route | row route)", 10, True),
-    ("DDC code without study class, drug name has one", 1, False),
-    ("DDC code without study class, drug name has one: DDC ≠ name ATC ← name", 10, True),
+    ("DDC code without study class → name used", 1, False),
+    ("DDC code without study class → name used: DDC ≠ name ATC ← name", 10, True),
+    ("DDC code without study class, name has one (code kept)", 1, False),
+    ("DDC code without study class, name has one (code kept): DDC ≠ name ATC ← name", 10, True),
 ]
 
 

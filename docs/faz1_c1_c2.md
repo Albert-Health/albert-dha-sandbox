@@ -164,9 +164,16 @@ python3 sandbox_bundle.py checks            # = bash tools/enclave.sh checks; ya
   | ATC | `a99aa99` | Olduğu gibi |
 
   Kodu tanınan ama çalışma sınıfı olmayan satırlar blokta DDC etken maddesiyle listelenir (≥ 10 satır). Bunlar
-  `DDC: not a study drug class` ve `DDC: non-systemic route` satırlarıdır. Kod sınıfsız, ad sınıflı çıkarsa
-  `DDC code without study class, drug name has one` satırında görünür. Böyle satırda kod geçerli kalır; liste
-  kaçan çalışma ilacını görmek için.
+  `DDC: not a study drug class` ve `DDC: non-systemic route` satırlarıdır. Kod sınıfsız, ad sınıflı çıkarsa iki
+  durum var:
+  - Ad bir çalışma ilacıyla başlıyorsa kod yanlış sayılır ve adın ATC'si kullanılır. Bu, ad ticari ad ya da marka
+    olduğunda ya da ilk sayıdan önceki kelimelerde etken madde geçtiğinde olur, ör. `DAPAGLIFLOZIN 5 MG-METFORMIN
+    …`. Satırlar `DDC code without study class → name used` olarak sayılır. Bu bir eşleme kuralıdır, klinik karar
+    değildir. VM ingest 1.3.0'da C1 ve C2'de 134'er Xigduo XR 5/1000 satırı DDC'de kolekalsiferol kodu taşıyordu;
+    A10 kanıtı bu yüzden düşüyordu.
+  - Ad çalışma ilacını yalnız sonradan anıyorsa kod geçerli kalır, ör. `PANADOL 500 MG, TAKES METFORMIN`. Satırlar
+    `name has one (code kept)` olarak sayılır.
+  - Kodu yerel yollu bir çalışma ilacı olan satırlarda (göz damlası vb.) kod her zaman geçerlidir.
 
 - [ ] **1e · Tarih biçimleri ve doluluk** (şekil `9999-99-99` = ISO):
 

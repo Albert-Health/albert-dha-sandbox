@@ -61,9 +61,13 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
-#   unreleased (1c)  2026-11-20  LabResultItem: a decimal comma ("6,2") is read as a point; a result that is not a
+#   1.4.0  2026-11-20  1c · LabResultItem: a decimal comma ("6,2") is read as a point; a result that is not a
 #                      finite number ("<5.0", text) is dropped and counted by kind | shape (labs "missing required
 #                      value" ERROR); comparators are not read as their bound
+#                      1d · Medication: a DDC code outside every study class gives way to a drug name that is
+#                      about a study drug (ddc.name_leads_with_study_drug; method "DDC: not a study drug class → name:
+#                      …", counted; the C1 / C2 cholecalciferol code on Xigduo XR 5/1000 rows, 134 each). Report:
+#                      "→ name used" and "name has one (code kept)" replace "drug name has one"
 #   1.3.0  2026-11-20  1c · LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
 #                      rows with an empty value dropped and counted per code (drop_empty; the text "NULL" = empty).
 #                      Observation (vitals): "0" / "-" = empty (empty_values, counted), height 1.2–2.3 m → cm,
@@ -84,7 +88,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.3.0"
+INGEST_VERSION = "1.4.0"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -752,16 +756,30 @@ def _h_family_history(df, name, vc):
 ATC_LIKE = re.compile(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$")
 
 
+CODE_NAME_CLASH = "DDC: not a study drug class → "    # method prefix when the name is used instead of the code
+
+
 def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
     """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code (or its
     6-digit stem) via the DDC reference (a recognised code has the final say); no code or an unrecognised one → from
-    the drug name. The all-zero placeholder ("0000-000000-0000", C1 / C2 2026-11-19) counts as no code."""
+    the drug name. The all-zero placeholder ("0000-000000-0000", C1 / C2 2026-11-19) counts as no code.
+
+    Mapping rule for code / name clashes (not a clinical rule): when the DDC code's product is outside every study
+    class but the drug name is about a study drug (ddc.name_leads_with_study_drug) and maps to one, the code is taken
+    to be wrong and the name's ATC is used (method "DDC: not a study drug class → name: …", counted). VM ingest 1.3.0
+    (2026-11-20): C1 and C2 each had 134 rows whose code is a cholecalciferol product while the name is
+    dapagliflozin + metformin (Xigduo XR 5/1000) — the A10 evidence was dropped. A code whose product carries a
+    study ingredient by a local route ("DDC: non-systemic route") still has the final say."""
     if code is not None and ddc.is_placeholder(code):
         code = None
     if code is not None:
         if ATC_LIKE.match(code):
             return "ATC code", [code]
         how, atcs = ddc.lookup_code(code, route)
+        if how == "DDC: not a study drug class" and drug is not None and ddc.name_leads_with_study_drug(drug):
+            n_how, n_atcs = ddc.lookup_name(drug, route)
+            if n_atcs:
+                return CODE_NAME_CLASH + n_how, n_atcs
         if how != "not a DDC code":
             return how, atcs
         if drug is None:
@@ -805,27 +823,28 @@ def _h_medications(df, name, vc):
     unknown = how.str.startswith("code not ATC/DDC").fillna(False).astype(bool)
     vc += _value_counts(name, "drug code not ATC/DDC", code[unknown], top=30)
     # i22: which DDC products the codes without a study class are (DDC active ingredient | route; reference data),
-    # and whether the row's drug name would have given a study class (code and name disagree → listed, not used)
-    no_class = how.isin(DDC_NO_CLASS).fillna(False).astype(bool)
-    if no_class.any():
-        chk = {k: _ddc_no_class_check(*k) for k in {k for k, nc in zip(keys, no_class) if nc}}
-        nc_keys = [k for k, nc in zip(keys, no_class) if nc]
-        info = pd.Series([chk[k][0] for k in nc_keys], index=df.index[no_class], dtype="string")
-        h = how[no_class]
+    # and whether the row's drug name gives a study class: name used (the name is about a study drug) or code kept
+    sel = (how.isin(DDC_NO_CLASS) | how.str.startswith(CODE_NAME_CLASH)).fillna(False).astype(bool)
+    if sel.any():
+        sel_keys = [k for k, s in zip(keys, sel) if s]
+        chk = {k: _ddc_no_class_check(*k) for k in set(sel_keys)}
+        info = pd.Series([chk[k][0] for k in sel_keys], index=df.index[sel], dtype="string")
+        name_atc = pd.Series([chk[k][1] for k in sel_keys], index=df.index[sel], dtype=object)
+        h, d = how[sel], drug[sel]
         vc += _value_counts(name, "DDC: not a study drug class (DDC ingredients | route)",
                             info[h.eq("DDC: not a study drug class")], top=30)
+        local = h.eq("DDC: non-systemic route").fillna(False).astype(bool)
         vc += _value_counts(name, "DDC: non-systemic route (DDC ingredients | route | row route)",
-                            info[h.eq("DDC: non-systemic route")] + " | row: "
-                            + route[no_class & how.eq("DDC: non-systemic route")].fillna("-"), top=20)
-        name_atc = pd.Series([chk[k][1] for k in nc_keys], index=df.index[no_class], dtype=object)
-        clash = name_atc.map(len) > 0
-        vc.append({"source": name, "field": "DDC code without study class, drug name has one", "value": "<n rows>",
-                   "n_rows": int(clash.sum())})
-        if clash.any():
-            shown = (info[clash].str.split(" | ", regex=False).str[0].str.slice(0, 28) + " ≠ "
-                     + name_atc[clash].str.join("+") + " ← " + drug[no_class][clash])
-            vc += _value_counts(name, "DDC code without study class, drug name has one: DDC ≠ name ATC ← name",
-                                shown, top=20)
+                            info[local] + " | row: " + route[sel][local].fillna("-"), top=20)
+        used = h.str.startswith(CODE_NAME_CLASH).fillna(False).astype(bool)
+        kept = h.isin(DDC_NO_CLASS).fillna(False).astype(bool) & (name_atc.map(len) > 0)
+        for mask, label in ((used, "DDC code without study class → name used"),
+                            (kept, "DDC code without study class, name has one (code kept)")):
+            vc.append({"source": name, "field": label, "value": "<n rows>", "n_rows": int(mask.sum())})
+            if mask.any():
+                shown = (info[mask].str.split(" | ", regex=False).str[0].str.slice(0, 28) + " ≠ "
+                         + name_atc[mask].str.join("+") + " ← " + d[mask])
+                vc += _value_counts(name, f"{label}: DDC ≠ name ATC ← name", shown, top=20)
     by_name = how.str.contains("name: ", regex=False).fillna(False).astype(bool)
     hit = by_name & (n_atc > 0)
     vc += _value_counts(name, "ATC ← drug_name (name match)", atcs[hit].str.join("+") + " ← " + drug[hit], top=50)
