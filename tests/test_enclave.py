@@ -329,6 +329,47 @@ class TestChecks(unittest.TestCase):
             enclave.main(["checks", "1z", "--iris-sqlite", str(self.dir)])
 
 
+class TestSmokingCheck(unittest.TestCase):
+    """`checks 1s`: counts of where the smoking status comes from; < 10 suppressed; NULL ids don't empty NOT IN."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.tmp.name)
+        ids = [f"P{i:03d}" for i in range(30)]
+        sh = [{"Patient": p, "SocialHabitCategory_Code": "Smoking", "SocialHabitQty_Description": "Never",
+               "EnteredOn": ""} for p in ids[:12]]
+        sh += [{"Patient": p, "SocialHabitCategory_Code": "Smoking", "SocialHabitQty_Description": "Unknown",
+                "EnteredOn": ""} for p in ids[12:20]]
+        sh += [{"Patient": None, "SocialHabitCategory_Code": "Smoking", "SocialHabitQty_Description": "Never",
+                "EnteredOn": ""}]
+        dx = [{"Patient": p, "Diagnosis_Code": "Z72.0", "DiagnosisDate": "2021-01-01"} for p in ids[15:25]]
+        iris.write_sqlite_standin(cls.dir / "c1.sqlite", {
+            "Patient": pd.DataFrame({"ID": ids, "Gender_Code": ["M"] * 30}),
+            "SocialHistory": pd.DataFrame(sh), "Diagnosis": pd.DataFrame(dx)})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def count_after(self, text, label):
+        i = text.index(f"== 1s · c1 · {label}")
+        return text[i:].splitlines()[1].strip()
+
+    def test_counts(self):
+        with temp_outputs():
+            rc, text = run_main(["checks", "1s", "--cohorts", "c1", "--iris-sqlite", str(self.dir)])
+        self.assertEqual(rc, 0, text)
+        self.assertEqual(self.count_after(text, "patients (Patient.ID)"), "30")
+        self.assertEqual(self.count_after(text, "patients with any SocialHistory row"), "20")      # the NULL id not counted
+        self.assertEqual(self.count_after(text, "patients with a tobacco item and a usable value"), "12")
+        self.assertEqual(self.count_after(text, "patients whose tobacco records are all Unknown or empty"), "<10")
+        self.assertEqual(self.count_after(text, "patients with a smoking diagnosis code"), "10")
+        self.assertEqual(self.count_after(text, "patients with neither a SocialHistory row nor a smoking diagnosis code"), "<10")
+        self.assertIn("tables / columns whose name contains 'SMOK'", text)
+        self.assertNotIn("P00", text)                                       # no patient ids in the block
+
+
 class TestIrisSetup(unittest.TestCase):
     def test_writes_private_file_keeps_other_lines(self):
         with tempfile.TemporaryDirectory() as d, temp_outputs():

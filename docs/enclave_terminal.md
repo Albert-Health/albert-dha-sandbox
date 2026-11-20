@@ -103,6 +103,12 @@ Faz 1 adım 1'in değer kontrolleri (1a sigara kalemi, 1c lab / vital birimleri,
 python3 sandbox_bundle.py checks
 ```
 
+C2'de sigara bilgisinin nerede kaybolduğu (SocialHistory sütun profili, Unknown / Other dağılımı, kayıtsız hasta sayısı, sigara tanı kodları, adında SMOK / TOBAC geçen tablo ve sütunlar):
+
+```bash
+python3 sandbox_bundle.py checks 1s
+```
+
 ```bash
 python3 sandbox_bundle.py run kpi
 ```

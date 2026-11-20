@@ -755,6 +755,13 @@ def cmd_values(a, out: Block, run) -> int:
     return 0
 
 
+# SQL pieces for the smoking check (1s): tobacco items as SOURCES['social_history']['filter'], usable = not Unknown /
+# Other / empty, smoking diagnosis codes (codelists smoking_current / smoking_ex, dotted as in Diagnosis_Code)
+SMOKING_ITEMS_SQL = "SocialHabitCategory_Code IN ('Smoking', 'Cigarettes', 'Cigars', 'Cigarettes,Cigars', 'Tobacco')"
+SMOKING_USABLE_SQL = ("SocialHabitQty_Description IS NOT NULL AND "
+                      "UPPER(TRIM(SocialHabitQty_Description)) NOT IN ('UNKNOWN', 'OTHER', '')")
+SMOKING_DX_SQL = "(Diagnosis_Code LIKE 'F17%' OR Diagnosis_Code LIKE 'Z72.0%' OR Diagnosis_Code LIKE 'Z87.891%')"
+
 # Phase 1 step 1 value checks (docs/faz1_c1_c2.md §1) for `checks`: id → (title, [(table, column, top, where)]).
 # Each query is the `values` command on every cohort given (≥ 10 patient rule; continuous numbers → percentiles only).
 VITAL_CODES = ("39156-5", "8302-2", "3141-9")          # BMI, height, weight (Observation has no unit column)
@@ -774,7 +781,65 @@ CHECKS = {
         # ingest 1.3.0: 134 rows per cohort with a cholecalciferol DDC code on Xigduo XR 5/1000 orders (1.4.0 uses
         # the name); which product code the source attached
         ("Medication", "DrugProduct_Code", 20, "UPPER(DrugProduct_Description) LIKE '%DAPAGLIFLOZIN%METFORMIN%'")]),
+    # Why most C2 patients have no usable smoking status (NB1 2026-11-20: C2 smoking missing 84.8%, QDiabetes
+    # computable 14.5%). Besides `values` entries: ("#columns", table) = column profile, ("#count", label, SELECT
+    # with {t} = the cohort's schema) = number of rows the SELECT returns, ("#find", text) = tables / columns named so.
+    "1s": ("smoking: where the status comes from and where it is lost", [
+        ("#columns", "SocialHistory"),
+        ("SocialHistory", "SocialHabitQty_Description", 30, "SocialHabitCategory_Code = 'Smoking'"),
+        ("SocialHistory", "SocialHabitCategory_Code", 30, "UPPER(SocialHabitQty_Description) = 'UNKNOWN'"),
+        ("SocialHistory", "EnteredOn", 30, None),
+        ("#count", "patients (Patient.ID)", "SELECT DISTINCT ID FROM {t}.Patient"),
+        ("#count", "patients with any SocialHistory row", "SELECT DISTINCT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL"),
+        ("#count", "patients with a tobacco item", "SELECT DISTINCT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL AND " + SMOKING_ITEMS_SQL),
+        ("#count", "patients with a tobacco item and a usable value (not Unknown / Other / empty)",
+         "SELECT DISTINCT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL AND " + SMOKING_ITEMS_SQL + " AND "
+         + SMOKING_USABLE_SQL),
+        ("#count", "patients whose tobacco records are all Unknown or empty",
+         "SELECT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL AND " + SMOKING_ITEMS_SQL
+         + " GROUP BY Patient HAVING "
+         "SUM(CASE WHEN SocialHabitQty_Description IS NULL OR UPPER(TRIM(SocialHabitQty_Description)) IN ('UNKNOWN', '') "
+         "THEN 0 ELSE 1 END) = 0"),
+        ("#count", "patients whose tobacco records are all Other",
+         "SELECT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL AND " + SMOKING_ITEMS_SQL
+         + " GROUP BY Patient HAVING "
+         "SUM(CASE WHEN UPPER(TRIM(SocialHabitQty_Description)) = 'OTHER' THEN 0 ELSE 1 END) = 0"),
+        ("#count", "patients with a smoking diagnosis code (F17 / Z72.0 / Z87.891)",
+         "SELECT DISTINCT Patient FROM {t}.Diagnosis WHERE Patient IS NOT NULL AND " + SMOKING_DX_SQL),
+        ("#count", "patients with neither a SocialHistory row nor a smoking diagnosis code",
+         "SELECT ID FROM {t}.Patient WHERE ID NOT IN (SELECT Patient FROM {t}.SocialHistory WHERE Patient IS NOT NULL) "
+         "AND ID NOT IN (SELECT Patient FROM {t}.Diagnosis WHERE Patient IS NOT NULL AND " + SMOKING_DX_SQL + ")"),
+        ("#find", "SMOK"),
+        ("#find", "TOBAC")]),
 }
+
+
+def check_count(a, out: Block, sql: str) -> None:
+    """`checks` count entry: how many rows the SELECT returns (< 10 suppressed); rows are not read."""
+    from sandbox import sdc
+    from sandbox.io import explore
+
+    conn, _ = connect(a)
+    try:
+        n = explore.count_query(conn, sql)
+    finally:
+        conn.close()
+    out(f"  {sdc.fmt_count(n)}")
+
+
+def check_find(a, out: Block, text: str, schema: str) -> None:
+    """`checks` find entry: the cohort schema's tables and columns whose name contains the text (names only)."""
+    from sandbox.io import explore
+
+    conn, _ = connect(a)
+    try:
+        tables, cols = explore.find(conn, text)
+    finally:
+        conn.close()
+    tables = tables[tables["schema"].str.upper() == schema.upper()]
+    cols = cols[cols["schema"].str.upper() == schema.upper()]
+    out(f"  tables: {', '.join(tables['table']) or 'none'}")
+    out("  columns: " + (", ".join(f"{t}.{c}" for t, c in zip(cols["table"], cols["column"])) or "none"))
 
 
 def cmd_checks(a, out: Block, run) -> int:
@@ -786,13 +851,25 @@ def cmd_checks(a, out: Block, run) -> int:
         title, queries = CHECKS[cid]
         out(f"### {cid} · {title} · cohorts {' '.join(a.cohorts)}")
         for cohort in a.cohorts:
-            for table, column, top, where in queries:
+            for entry in queries:
                 out()
-                out(f"== {cid} · {cohort}.{table}.{column}" + (f" · WHERE {where}" if where else ""))
-                q = argparse.Namespace(**{**vars(a), "table": cohort_alias(f"{cohort}.{table}"), "column": column,
-                                          "top": top, "where": where, "patient_col": "auto", "list": False})
                 try:
-                    cmd_values(q, out, run)
+                    if entry[0] == "#count":
+                        out(f"== {cid} · {cohort} · {entry[1]}")
+                        check_count(a, out, entry[2].format(t=cohort_alias(cohort)))
+                    elif entry[0] == "#columns":
+                        out(f"== {cid} · {cohort}.{entry[1]} · column profile")
+                        cmd_columns(argparse.Namespace(**{**vars(a), "table": cohort_alias(f"{cohort}.{entry[1]}"),
+                                                          "where": None}), out, run)
+                    elif entry[0] == "#find":
+                        out(f"== {cid} · {cohort} · tables / columns whose name contains {entry[1]!r}")
+                        check_find(a, out, entry[1], cohort_alias(cohort))
+                    else:
+                        table, column, top, where = entry
+                        out(f"== {cid} · {cohort}.{table}.{column}" + (f" · WHERE {where}" if where else ""))
+                        cmd_values(argparse.Namespace(**{**vars(a), "table": cohort_alias(f"{cohort}.{table}"),
+                                                         "column": column, "top": top, "where": where,
+                                                         "patient_col": "auto", "list": False}), out, run)
                     done += 1
                 except Exception as e:
                     failed += 1
@@ -1256,9 +1333,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample", type=int, default=5000)
     p.add_argument("--list", action="store_true", help="value list for dates / continuous numbers too (≥ 10 patient rule)")
 
-    p = sub.add_parser("checks", parents=[common], help="Phase 1 step 1 value checks in one block: 1a 1c 1d or all")
-    p.add_argument("ids", nargs="*", metavar="ID", help="1a (smoking item), 1c (lab / vital units), 1d (codes); "
-                                                         "default all")
+    p = sub.add_parser("checks", parents=[common], help="Phase 1 step 1 value checks in one block: 1a 1c 1d 1s or all")
+    p.add_argument("ids", nargs="*", metavar="ID", help="1a (smoking item), 1c (lab / vital units), 1d (codes), "
+                                                         "1s (where smoking status is lost); default all")
     p.add_argument("--cohorts", nargs="+", choices=["c1", "c2", "c3"], default=["c1", "c2"], help="default c1 c2")
     p.add_argument("--sample", type=int, default=5000)
 
