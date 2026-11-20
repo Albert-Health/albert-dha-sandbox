@@ -74,7 +74,7 @@ Adapter sözlükleri tahmine dayanıyor. Bu adım onları gerçek değerlerle ta
 hastada geçen değerleri ya da yüzdelikleri basar.
 
 **Tek komut (1a + 1c + 1d, c1 ve c2, tek COPY bloğu):** aşağıdaki `values` sorgularının hepsi (1c'de lab kodu /
-birimi ve vital değerleri, 1d'de tanı / gözlem / aile öyküsü kodları; ilaç kodları ingest bloğunda). Bulunamayan
+birimi ve vital değerleri, 1d'de tanı / gözlem / aile öyküsü kodları ve dapagliflozin + metformin satırlarının ilaç kodu; diğer ilaç kodları ingest bloğunda). Bulunamayan
 tablo ya da sütun tek satırda "not available" yazar, diğerleri çalışır. `git pull` yoksa paketle:
 
 ```bash

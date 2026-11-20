@@ -763,11 +763,14 @@ CHECKS = {
         ("LabResultItem", "TestItemCode_Code", 40, None),
         ("LabResultItem", "ResultValueUnits", 30, None),
         *[("Observation", "ObservationValue", 30, f"ObservationCode_Code = '{k}'") for k in VITAL_CODES]]),
-    "1d": ("codes: diagnosis, observation, family history", [
+    "1d": ("codes: diagnosis, observation, family history, Xigduo drug code", [
         ("Diagnosis", "Diagnosis_Code", 40, None),
         ("Observation", "ObservationCode_Code", 40, None),
         ("FamilyHistory", "FamilyMember_Description", 30, None),
-        ("FamilyHistory", "Diagnosis_Code", 30, None)]),
+        ("FamilyHistory", "Diagnosis_Code", 30, None),
+        # ingest 1.3.0: 134 rows per cohort with a cholecalciferol DDC code on Xigduo XR 5/1000 orders (1.4.0 uses
+        # the name); which product code the source attached
+        ("Medication", "DrugProduct_Code", 20, "UPPER(DrugProduct_Description) LIKE '%DAPAGLIFLOZIN%METFORMIN%'")]),
 }
 
 
