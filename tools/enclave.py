@@ -85,7 +85,8 @@ SUMMARY_TABLES = {
             ("nb01/score_summary.csv", None, None), ("nb01/joint_completeness.csv", None, None)],
     "nb2": [("nb02/coverage.csv", None, None), ("nb02/performance.csv", None, None)],
     "kpi": [("kpi/kpi_table.csv", None, ["kpi", "target", "actual", "met"]),
-            ("kpi/kpi_table.csv", "audit_notes", ["kpi", "notes"])],          # open run ids (no patient data)
+            ("kpi/kpi_table.csv", "audit_notes", ["kpi", "notes"]),          # open run ids (no patient data)
+            ("kpi/kpi_table.csv", "completeness_notes", ["kpi", "notes"])],  # weakest variable, without ethnicity
 }
 _COUNTISH = re.compile(r"(^n$|^np$|^n_|_n$|count|patients|^rows|_rows$|events)", re.IGNORECASE)
 _NOT_COUNT = re.compile(r"(pct|percent|rate|ratio|share|sens|median|mean)", re.IGNORECASE)
@@ -1159,6 +1160,13 @@ def summary_tables(step: str):
                 if "notes" not in df.columns:
                     continue
                 df = df[df["kpi"].eq("Audit Trail Completeness") & df["notes"].fillna("").astype(str).ne("")]
+                if df.empty:
+                    continue
+            elif filt == "completeness_notes":      # aggregates only (kpi._completeness_note, counts < 10 suppressed)
+                if "notes" not in df.columns:
+                    continue
+                df = df[df["kpi"].eq("Data Completeness for Required Variables")
+                        & df["notes"].fillna("").astype(str).ne("")]
                 if df.empty:
                     continue
             if cols:

@@ -459,6 +459,44 @@ class TestOutputTables(unittest.TestCase):
         got = enclave.framework_pivot(df)
         self.assertEqual(got[["c1", "c2"]].values.tolist(), [["<10 patients", 8.2]])
 
+    def test_completeness_tables_and_kpi_note_in_block(self):
+        """NB1 per-variable completeness (measure / meets_90 / note) and joint core-7 reach the block; the KPI step
+        prints the Data Completeness note (weakest variable, without ethnicity) in full."""
+        note = ("Weakest variable: C1 ethnicity 0.0% · Without ethnicity (weakest of the other 7): C1 smoking 92.0% · "
+                "Joint core-7 (all but ethnicity): C1 90.0% (N=900/1000)")
+        absent = "no record = absent: 100% by definition, not a fill rate"
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "nb01").mkdir()
+            (Path(d) / "kpi").mkdir()
+            pd.DataFrame({"cohort": ["c1"] * 3, "group": ["all", "all", "T2DM"],
+                          "variable": ["cvd", "family_history_recorded", "cvd"],
+                          "measure": ["present_absent", "recorded", "present_absent"], "n": [1000, 1000, 600],
+                          "complete_n": [1000, 5, 600], "complete_pct": [100.0, "suppressed (<10)", 100.0],
+                          "meets_90": ["-", False, "-"],
+                          "note": [absent, "FamilyHistory record or Z83.3", absent]}
+                         ).to_csv(Path(d) / "nb01" / "completeness_by_variable.csv", index=False)
+            pd.DataFrame({"cohort": ["c1"], "group": ["all"], "n": [1000], "joint_core7_n": [900],
+                          "joint_core7_pct": [90.0], "joint_core8_n": [0], "joint_core8_pct": [0.0]}
+                         ).to_csv(Path(d) / "nb01" / "joint_completeness.csv", index=False)
+            pd.DataFrame({"kpi": ["Audit Trail Completeness", "Data Completeness for Required Variables"],
+                          "target": ["100%", ">= 90%"], "actual": ["100.0% (1/1 runs)", "C1 0.0%"],
+                          "met": ["Met", "Not Met"], "notes": [None, note]}
+                         ).to_csv(Path(d) / "kpi" / "kpi_table.csv", index=False)
+            block = enclave.Block("HEADER")
+            with contextlib.redirect_stdout(io.StringIO()):
+                enclave.summary_tables("nb1")(Path(d), block, mock.Mock(max_rows=60))
+                enclave.summary_tables("kpi")(Path(d), block, mock.Mock(max_rows=60))
+        text = "\n".join(block.lines)
+        self.assertIn("-- nb01/completeness_by_variable.csv (2 rows)", text)    # group "all" only
+        line = next(ln for ln in block.lines if "family_history_recorded" in ln)
+        self.assertIn("recorded", line)
+        self.assertIn("<10", line)                                               # complete_n 5
+        self.assertIn("100% by definition, not a fill rate", text)
+        self.assertNotIn("NaN", next(ln for ln in block.lines if " cvd " in ln))   # meets_90 "-", not NaN
+        self.assertIn("joint_core7_pct", text)
+        self.assertIn(note, text)                                                # not truncated
+        self.assertEqual(sum("Data Completeness for Required Variables" in ln for ln in block.lines), 2)
+
     def test_failure_lines(self):
         log = ["x", "Traceback (most recent call last):", f'  File "{ROOT}/tools/x.py", line 3, in <module>',
                "ValueError: bad"]

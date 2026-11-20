@@ -78,3 +78,13 @@ def suppress_small_counts(df: pd.DataFrame, count_cols, threshold: int | None = 
         out[c] = out[c].astype(object)
         out.loc[mask, c] = f"<{threshold}"
     return out
+
+
+def suppress_count_rate_pairs(df: pd.DataFrame, den_col: str, pairs, threshold: int | None = None) -> pd.DataFrame:
+    """Counts with their rates over one denominator, e.g. ("complete_n", "complete_pct") over "n": each rate is
+    suppressed where its count or (denominator − count) is under the threshold (suppress_rates), then the counts and
+    the denominator ('<threshold')."""
+    out = df
+    for num, rate in pairs:
+        out = suppress_rates(out, num, [den_col], [rate], threshold)
+    return suppress_small_counts(out, [den_col, *(num for num, _ in pairs)], threshold)

@@ -116,6 +116,37 @@ def _selection_effect(nb1: dict) -> str:
             + (f"; |SMD| > 0.1: {', '.join(imb[:8])}" if imb else "; no variable with |SMD| > 0.1"))
 
 
+def _safe_pct(pct, k, n) -> str:
+    """A rate as text, unless its count or (n − count) is under the small-cell threshold (sdc.suppress_rates)."""
+    t = PARAMS["small_cell_threshold"]
+    if any(0 < x < t for x in (k, n - k)):
+        return f"suppressed (<{t})"
+    return _pct(pct) or "—"
+
+
+def _completeness_note(nb0: dict) -> str:
+    """Data Completeness note: the weakest variable, the weakest of the other 7 (without ethnicity), joint core-7 and
+    the present / absent variables (100% by definition). The KPI value itself stays the minimum over the 8."""
+    parts = []
+    weakest, mins = nb0.get("data_completeness_weakest") or {}, nb0.get("data_completeness_min_core8_pct") or {}
+    if weakest:
+        parts.append("Weakest variable: " + "; ".join(
+            f"{c.upper()} {v}" + (f" {_pct(mins[c])}" if c in mins else "") for c, v in weakest.items()))
+    wo = nb0.get("data_completeness_without_ethnicity") or {}
+    if wo:
+        parts.append("Without ethnicity (weakest of the other 7): " + "; ".join(
+            f"{c.upper()} {r['variable']} {_safe_pct(r['pct'], r['complete_n'], r['n'])}" for c, r in wo.items()))
+    j7 = nb0.get("joint_core7") or {}
+    if j7:
+        parts.append("Joint core-7 (all but ethnicity): " + "; ".join(
+            f"{c.upper()} {_safe_pct(r['pct'], r['core7_n'], r['n'])} "
+            f"(N={sdc.fmt_count(r['core7_n'])}/{sdc.fmt_count(r['n'])})" for c, r in j7.items()))
+    pa = nb0.get("completeness_present_absent")
+    if pa:
+        parts.append(f"Present / absent, 100% by definition (not a fill rate): {', '.join(pa)}")
+    return " · ".join(parts)
+
+
 NB2_ONLY = ["Specificity", "NPV & PPV", "AUROC", "C-Index", "Precision / Recall / F1", "Recalibration Slope / O:E",
             "Alert Rate per 1,000 Patients"]
 
@@ -145,7 +176,7 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
         dc = nb0["data_completeness_min_core8_pct"]
         set_("Data Completeness for Required Variables", "; ".join(f"{c.upper()} {v:.1f}%" for c, v in dc.items()),
              "Met" if all(v >= 90 for v in dc.values()) else "Not Met", "NB0",
-             "Weakest variable: " + ", ".join(f"{c}={v}" for c, v in nb0.get("data_completeness_weakest", {}).items()))
+             _completeness_note(nb0))
 
     lname = (nb2 or nb1).get("lrs_label", "LRS")
     lvariant = (nb2 or nb1).get("lrs_variant")
