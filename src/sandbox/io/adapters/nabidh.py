@@ -61,6 +61,9 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
+#   unreleased (breakdowns): schema check counts rows dated exactly 1970-01-01 (Unix epoch) or 1900-01-01 per table
+#                      and date column (WARN in the ingest summary; rows kept, dropping them is a decision) — report
+#                      only, canonical data unchanged
 #   1.4.1  2026-11-20  Framework Match by variable: the ingest report carries `delivery` (delivery_facts: view /
 #                      column per core variable, share of drug rows and family-history records not in the requested
 #                      code system); <cohort>/ingest.json keeps it for NB0 (framework.py). Canonical data unchanged

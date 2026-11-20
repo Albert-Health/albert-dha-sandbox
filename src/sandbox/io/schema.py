@@ -66,6 +66,9 @@ SCHEMA: dict[str, dict[str, tuple[str, bool]]] = {
 }
 TABLES = tuple(SCHEMA)
 OPTIONAL_TABLES = ("encounters",)
+# Days that look like a source system's default rather than a real date (1970-01-01 = Unix epoch). validate() counts
+# them per table and date column (WARN); the rows are kept — whether to drop them is a medical team decision.
+PLACEHOLDER_DATES = ("1970-01-01", "1900-01-01")
 
 
 @dataclass
@@ -192,6 +195,12 @@ def validate(ds: Dataset) -> pd.DataFrame:
             future = df["date"] > pd.Timestamp.today()
             old = df["date"] < pd.Timestamp("1900-01-01")
             add(name, "implausible date", "WARN" if (future | old).any() else "INFO", (future | old).sum())
+        for col in [c for c, (typ, _) in SCHEMA[name].items() if typ == "date"]:
+            if col in df.columns and len(df):
+                day = pd.to_datetime(df[col], errors="coerce").dt.normalize()
+                for ph in PLACEHOLDER_DATES:
+                    n = int((day == pd.Timestamp(ph)).sum())
+                    add(name, f"{col} exactly {ph} (placeholder? counted, kept)", "WARN" if n else "INFO", n)
 
     labs = ds["labs"]
     if len(labs):

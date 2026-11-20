@@ -93,6 +93,15 @@ def dm_evidence(ds: Dataset, glyc: pd.DataFrame | None = None) -> pd.DataFrame:
 _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none", "other - not stated"}
 # FamilyHistory values that count as "record present" (unknown / unmapped do not count)
 FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
+# Plausible range of each vital (inclusive). core_snapshot leaves out values outside it (BMI from height / weight
+# too); breakdowns.vital_plausibility counts them (NB0 nb00/vital_plausibility.csv). Data-quality bounds, not a
+# study parameter.
+VITAL_PLAUSIBLE_RANGE = {"bmi": (12, 80), "height_cm": (120, 230), "weight_kg": (25, 350), "waist_cm": (40, 250)}
+
+
+def _plausible(num: pd.DataFrame, concept: str) -> pd.DataFrame:
+    """Rows of one vital whose numeric value `v` is inside VITAL_PLAUSIBLE_RANGE."""
+    return num[(num["concept"] == concept) & num["v"].between(*VITAL_PLAUSIBLE_RANGE[concept])]
 
 
 def ethnicity_recorded(raw: pd.Series) -> pd.Series:
@@ -158,14 +167,14 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     obs_win = _window(obs_all, ref, lookback_days)
     num = obs_win.assign(v=pd.to_numeric(obs_win["value"], errors="coerce"))
 
-    bmi_direct = _latest(num[(num["concept"] == "bmi") & num["v"].between(12, 80)], "v")
-    w = _latest(num[(num["concept"] == "weight_kg") & num["v"].between(25, 350)], "v")
+    bmi_direct = _latest(_plausible(num, "bmi"), "v")
+    w = _latest(_plausible(num, "weight_kg"), "v")
     # Height is stable in adults: latest value from the full history
     obs_hist = _window(obs_all, ref, None)
     numh = obs_hist.assign(v=pd.to_numeric(obs_hist["value"], errors="coerce"))
-    h = _latest(numh[(numh["concept"] == "height_cm") & numh["v"].between(120, 230)], "v")
+    h = _latest(_plausible(numh, "height_cm"), "v")
     bmi_hw = (w / (h.reindex(w.index) / 100) ** 2).dropna()
-    bmi_hw = bmi_hw[bmi_hw.between(12, 80)]
+    bmi_hw = bmi_hw[bmi_hw.between(*VITAL_PLAUSIBLE_RANGE["bmi"])]
 
     cond_win = _window(ds["conditions"], ref, lookback_days)
     z68 = cond_win[codelists.match_dx(cond_win, "bmi_code")]
@@ -180,7 +189,7 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
     out.loc[fill, "bmi"] = bmi_z68.reindex(out.index)[fill]
     out.loc[fill, "bmi_source"] = "z68_band"
 
-    out["waist_cm"] = _latest(num[(num["concept"] == "waist_cm") & num["v"].between(40, 250)], "v").reindex(out.index)
+    out["waist_cm"] = _latest(_plausible(num, "waist_cm"), "v").reindex(out.index)
 
     # Smoking: latest status (full history, up to ref) — structured field first, then diagnosis code.
     # Only recognised values (never/ex/current/light/moderate/heavy …) count; "unknown" or values

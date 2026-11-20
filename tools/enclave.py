@@ -75,6 +75,7 @@ RUN_ALL = ("ingest", "nb0", "nb1", "kpi")
 # summary tables printed into the block after a run: (file, row filter, columns)
 SUMMARY_TABLES = {
     "nb0": [("nb00/schema_validation.csv", "issues", None), ("nb00/volume.csv", None, None),
+            ("nb00/vital_plausibility.csv", None, None),
             ("nb00/framework_match.csv", "framework_pivot", None),
             ("nb00/framework_variables.csv", None,
              ["cohort", "variable", "source_field", "route", "patients_with_value", "pct_patients", "status", "reason"]),
@@ -84,6 +85,7 @@ SUMMARY_TABLES = {
             ("nb01/ethnicity_source_compare.csv", "group_all", None),
             ("nb01/ethnicity_mapping_by_source.csv", None, None),
             ("nb01/score_computability.csv", None, None), ("nb01/score_missing_reasons.csv", None, None), ("nb01/smoking_source.csv", None, None),
+            ("nb01/htn_derivation.csv", "group_all", None), ("nb01/smoking_level.csv", None, None),
             ("nb01/c1_detection_rate.csv", None,
              ["cohort", "reference", "group", "score", "n", "n_computable", "n_flagged", "sens_computable",
               "ci_low", "ci_high", "threshold"]),

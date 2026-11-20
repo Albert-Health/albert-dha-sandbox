@@ -43,7 +43,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from sandbox import codelists, cohorts, metrics, phenotype, sdc
+from sandbox import breakdowns, codelists, cohorts, metrics, phenotype, sdc
 from sandbox.audit import Run
 from sandbox.config import CANONICAL_DIR, PARAMS
 from sandbox.io import schema
@@ -262,6 +262,32 @@ dist = pd.concat([
      .assign(cohort=c, lrs_variant=LRS_LABEL).reset_index() for c, s in snaps.items()])
 run.save_table(dist, "nb01/score_summary.csv", "Score summaries (descriptive)")
 print(dist.to_string(index=False))
+
+# %% [markdown]
+# ## 3b. Treated hypertension and smoking level (how two score inputs are derived)
+# - Hypertension: patients with a diagnosis only / medication only / both / neither. QDiabetes counts diagnosis AND
+#   medication, LPRS medication only, LRA 2010 diagnosis OR medication (`counted_as_treated_by`).
+# - Smoking: the QDiabetes level each patient gets (non / ex / light / moderate / heavy / missing) by what it was
+#   recorded as. NABIDH SocialHistory has no structured ex-smoker value (`nabidh.SMOKING_VALUES`): "ex" comes only
+#   from a diagnosis code (`n_from_diagnosis_code`). Occasional / rare → light and "current" without intensity →
+#   `qd_smoking_current_category` are interim [DECISION PENDING — D7]; "other" is not mapped → missing.
+
+# %%
+htn = pd.concat([breakdowns.htn_derivation(s).assign(cohort=c) for c, s in snaps.items()], ignore_index=True)
+htn = htn[["cohort", *htn.columns.drop("cohort")]]
+htn_out = sdc.suppress_small_counts(sdc.suppress_rates(htn, "n", ["n_group"], ["pct"]), ["n", "n_group"])
+run.save_table(htn_out, "nb01/htn_derivation.csv",
+               "Hypertension diagnosis / medication / both / neither, and which set each score counts as treated")
+print(htn.to_string(index=False))
+
+sm_lvl = pd.concat([breakdowns.smoking_levels(s, data[c]["observations"], P).assign(cohort=c)
+                    for c, s in snaps.items()], ignore_index=True)
+sm_lvl = sm_lvl[["cohort", *sm_lvl.columns.drop("cohort")]]
+sm_lvl_out = sdc.suppress_rates(sm_lvl, "n", ["n_cohort"], ["pct"])
+sm_lvl_out = sdc.suppress_small_counts(sm_lvl_out, ["n", "n_from_diagnosis_code"]).drop(columns="n_cohort")
+run.save_table(sm_lvl_out, "nb01/smoking_level.csv",
+               "QDiabetes smoking level per patient by what it was recorded as [D7 pending]")
+print(sm_lvl.to_string(index=False))
 
 # %% [markdown]
 # ## 4. C1 — detection rate in known positives (sensitivity)
