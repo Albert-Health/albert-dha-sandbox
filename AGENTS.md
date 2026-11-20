@@ -84,7 +84,7 @@ tools/                 check_environment, ingest_nabidh, make_nabidh_dryrun, bui
                        çıktı COPY bloğu), build_bundle (git pull'suz VM için enclave + Faz 1 adımları tek dosyada,
                        dist/sandbox_bundle.py)
 docs/                  gap.md (açık işler + kararlar), faz1_c1_c2.md (Faz 1 enclave yapılacaklar listesi),
-                       reports/ (C1 / C2 gün sonu raporları, Markdown + JSON; medikal ekip buradan okur; yalnız toplam sayılar),
+                       reports/ (C1 / C2 gün sonu raporları, tek dosya HTML + JSON; medikal ekip buradan okur; yalnız toplam sayılar),
                        enclave_terminal.md (komut rehberi), evidence_package/ şablonları
 tests/                 unittest (pytest yok)
 logs/enclave/          VM'den taşınan COPY blokları, günde bir dosya (<UTC tarih>.log); logs/archive/ eski elle kopyalar
