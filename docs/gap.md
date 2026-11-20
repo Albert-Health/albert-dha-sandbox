@@ -27,6 +27,8 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | K18b | Blok tabloları (yaş, C1–C2 SMD, tesis) + oran sızıntısı (SDC) | Kısmen (2026-11-20; VM'de henüz koşmadı) | **Yapıldı:** bloğa NB0 `nb00/demographics.csv` (`age_outside_25_84_n/_pct` = QDiabetes 25 ≤ yaş < 85 dışı, `age_missing_n`), `nb00/facility_representation.csv` (tesis yoksa tek satır not; eşleme DHA sorusu) ve NB1 `nb01/selection_effect_smd.csv` kısa biçimi (variable, c1, c2, smd, `|smd|>0.1`) girdi. K18'deki SDC notunun ilk yarısı kapandı: `smoking_source`, `score_missing_reasons`, `score_computability`, `score_summary` (yüksek risk %; < 10 skor üzerinde medyan / çeyrek), NB0 `framework_match` / `framework_variables`, NB2 `coverage` ve KPI değerleri (Data Completeness, Joint Completeness, C1 yakalama; `sdc.safe_rate`) sayı ya da N − sayı < 10 ise oranı gizliyor; SMD'de gizli payın SMD'si de gizli. **Açık (SDC):** (1) tamamlayıcı çıkarım — grup N'i + diğer kategoriler → gizli kategori (smoking_level, htn_derivation, smoking_source, score_missing_reasons; sayı + N basılan tablolarda N − sayı) hiçbir tabloda ele alınmıyor; (2) tablolar arası: KPI notundaki "max |SMD|" gizli bir SMD'yi verebilir, `demographics.csv` `age_25_84_pct` (blokta yok, `show` ile) eksik yaş sayısını yaklaşık verir; (3) NB2 `performance.csv` eşik metrikleri (IPCW ağırlıklı sens / spec / PPV / NPV; alert/1000 × n = işaretlenen sayı) gizlenmiyor — Faz 2, eşik D5 bekliyor |
 
 ## 2. Medikal ekipten kararlar (config parametresiyle)
+**Karar paketi (2026-11-20):** Faz 1'in (C1 / C2) beklediği sorular bağlam, varsayılan, seçenek, etki ve geliştirici önerisiyle tek belgede (İngilizce, DFF / DHA ile paylaşılabilir): [Phase 1 (C1/C2) Decision Pack](https://claude.ai/artifact/4f6qU3GPJdmU7JngbQ8xmp). Kısım A ↔ bu tablo: A1 D6 + D12 · A2 D7 · A3 D32 + D17 · A4 D29 + D30 · A5 D33 + D5 / D23 / D22 · A6 D31 · A7 D34 · A8 D25 · A9 D26 · A10 D35.
+
 | # | Karar | Parametre | Varsayılan | Bağlam |
 |---|---|---|---|---|
 | D1 | Outcome washout (index sonrası N gün içindeki olay = prevalent, hasta çıkarılır) | `outcome_washout_days` | **90 [KARAR]** (v2: 0 → duyarlılık) | Sentetikte olayların %74'ü ≤30 gün |
@@ -60,8 +62,14 @@ danışman kararı · **[DIŞ]** DHA / NABIDH / DFF'ten bilgi · **[KISIT]** rap
 | D29 | Framework Match "Partial" eşikleri: türetilmiş kayıt payı (ilaç → ATC, aile öyküsü metin) ve kayıtlı değişkenin en az hasta payı | `framework_derived_max_pct`, `framework_min_patient_pct` | **%5 ve %50 [KARAR BEKLİYOR]** | Geliştiricinin önerisi; medikal ekip / DFF onaylamadı. Tamlık KPI'sının (≥ %90) yerine geçmez: bu eşik yalnız değişkenin çok az hastaya geldiğini yakalar. Sigara düzeyi kontrolü `small_cell_threshold` (10 hasta) kullanır |
 | D30 | Framework Match "Partial" graduation oranında nasıl sayılsın | `kpi.graduation` (şimdilik kodda değişiklik yok) | **Ne Met ne Not Met [KARAR BEKLİYOR]** | Framework Match kritik değil; "Partial" değerlendirilen KPI'lar arasına girmez (`non_critical_evaluable` dışında). DFF Partial'ı hangi tarafa saydığını bildirmeli |
 | D31 | Yer tutucu tarihler (tam 1970-01-01 / 1900-01-01; C1'in en eski tanı tarihi 1970-01-01) | (yok; `schema.PLACEHOLDER_DATES`) | **Sayılır (WARN), atılmaz [KARAR BEKLİYOR]** | Seçenekler: (a) olduğu gibi kullan, (b) satırı at, (c) tarihi boş say (tarihsiz kayıt kuralları: D27 / D28). Etki önce VM'de sayılsın (ingest özeti "schema check (non-INFO)") |
+| D32 | Data Completeness KPI tanımı: 8 çekirdek değişkenin en düşüğü mü, etnisite hariç 7'nin mi; KVH / HT / aile öyküsü (var / yok → tanım gereği %100) nasıl sayılsın | `kpi.py` (`data_completeness_min_core8_pct`; PARAMS anahtarı yok) | **8'in minimumu [KARAR BEKLİYOR]** (medikal ekip + DFF) | VM run_all (2026-11-20): C1 %0,0, C2 %0,0 → Not Met (etnisite). Core-7 KPI notunda yanında (ingest 1.4.2, VM'de koşmadı; QDiabetes hesaplanabilirliğinden beklenen C1 ~%97, C2 ~%15). D17 ve §3 DFF "Joint Completeness" maddesiyle bağlı. Paket A3 |
+| D33 | C1 raporu yakalama oranını (bilinen pozitiflerde duyarlılık) gösterecek mi: AGENTS.md ve §5 2026-11-14 kaydı "C1 birincil amaç = yakalama oranı" der, medikal ekip "C1 / C2'de performans ölçülmez" der | — (NB1 §4 `nb01/c1_detection_rate.csv`; KPI "Sensitivity" satırı) | **Hesaplanır, eşik yok → Pending [KARAR BEKLİYOR]** | Keşif run'ı (QDiabetes 10 y ≥ %5,6, karar değil; logs_02.log): C1 %47,1 (veri sonu) / %36,9 (ilk kanıt). Gösterilecekse önce D5, D23, D22; gösterilmeyecekse AGENTS.md ve §5 2026-11-14 kaydı düzeltilir. Paket A5 |
+| D34 | Kapanmamış audit run `20261119T054135Z_nb00_data_profile_b068d0` (run_end yok) → Audit Trail (Critical) %98,6 (71/72) Not Met → "Do Not Graduate" | `kpi.audit_completeness` (istisna yok) | **Açık run sayılır [KARAR BEKLİYOR]** (DFF) | `audit_log.jsonl` append-only. Seçenekler: (a) audit'li araç açık run'a "run abandoned" olayı ekler (neden, operatör), (b) config'te belgelenmiş istisna listesi, (c) olduğu gibi raporla, (d) yeni audit log. Geliştirici önerisi (a) + sonlandırma sinyalinde de run_end; uygulanmadı. Paket A7 |
+| D35 | Lab sonucu kuralları: karşılaştırmalı sonuç ("<5.7"), 1521-4 altındaki tokluk şekeri (PPBS), akla yatkın aralık dışı değer | `nabidh.LAB_PLAUSIBLE` (adapter) | **Karşılaştırmalı atılır; PPBS ve aralık dışı tutulur [KARAR BEKLİYOR]** | K11'deki açık uçlar; her biri bugün < 10 satır. Paket A10 |
 
 ## 3. Dış taraflar
+**Karar paketi (2026-11-20):** DHA / NABIDH soruları Kısım B'de (B1–B12), bağlam ve cevabın neyi değiştirdiğiyle: [Phase 1 (C1/C2) Decision Pack](https://claude.ai/artifact/4f6qU3GPJdmU7JngbQ8xmp).
+
 **DHA / NABIDH [DIŞ]:** C3 teslimi takipte diyabet gelişen hastaları da içeriyor mu (v2 spec'e göre evet; NB2'nin duyarlılık / AUROC / kalibrasyonu buna dayanır — yalnız "gelişmeyenler" teslim edildiyse C3'ten yalnız özgüllük çıkar); veri sözlüğü; IRIS namespace adı, NABIDH verisinin hangi şema / tablolarda olduğu, kohortların nasıl ayrıldığı (şema başına mı, kohort tablosu mu); etnisite/uyruk kategori listesi; birimler;
 C3'te cap/örneklem neden uygulandı ve tam eligible N; VM ortamı (K4 — DHA çözüyor);
 **enclave'de görülenle (2026-11-18) açılan sorular:** HSAA Patient.Age hangi güne göre, doğum yılı / tarihi
@@ -69,6 +77,13 @@ verilebilir mi (D24); uyruk sütunu verilebilir mi (D6); Observation'da (vital) 
 DDC ürün kodu mu (C1 / C2'de evet, 2026-11-19); 6 haneli ve `VMP<id>,<doz>,<form>` kodlar hangi sistemden, C3 Medication'da kod verilebilir mi (K12); C1 Encounter view'ında `dha-sbx-000010` kullanıcısına SELECT yetkisi yok
 ("Privilege violation", opsiyonel kaynak — ingest atlıyor);
 enclave'den çıktı çıkarma kuralları (küçük hücre eşiği, figür onayı).
+
+**Paketle eklenen sorular [DIŞ] (2026-11-20):** view'larda tesis (facility / provider / kaynak sistem) sütunu var mı —
+adapter eşlemiyor, `nb00/facility_representation.csv` NABIDH'te boş (B3); 1970-01-01 / 1900-01-01 sistem varsayılanı mı
+(D31, B6); SocialHabitQty "Other" ve "Unknown" ne demek, Cigarettes / Cigars altındaki sayısal miktarların birimi, ex-smoker
+değeri var mı, SocialHistory'de başka tarih sütunu var mı (D7, D28, B7); Observation'da değeri boş satırlar (C1 21.520, C2
+3.548; run_all.log) başka sütunda mı (B8); Xigduo XR order'larında kolekalsiferol DDC kodu (C1 / C2 134'er satır) kaynakta
+eşleme hatası mı (K12, B10).
 
 **DFF / Precoh [DIŞ]:** "Joint Completeness — QDiabetes"nin 8 çekirdek değişkenle yeniden tanımı;
 AUROC 0.75'in tanımı (sansürlü veride horizon'da zaman-bağımlı); 4 TBD KPI slotu (önerimiz: skor
