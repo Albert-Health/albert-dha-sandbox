@@ -47,21 +47,34 @@ class TestHtnDerivation(unittest.TestCase):
     CATEGORY = {"A": "diagnosis only", "B": "medication only", "C": "diagnosis and medication", "D": "neither"}
 
     def setUp(self):
-        ds = dataset("ABCD", conditions=[("A", "I10", "2019-01-01"), ("C", "I11.9", "2019-01-01")],
-                     medications=[("B", "C09AA02", "2019-02-01"), ("C", "C07AB02", "2019-02-01")])
-        self.snap = snapshot(ds)
+        self.ds = dataset("ABCD", conditions=[("A", "I10", "2019-01-01"), ("C", "I11.9", "2019-01-01")],
+                          medications=[("B", "C09AA02", "2019-02-01"), ("C", "C07AB02", "2019-02-01")])
+        self.snap = snapshot(self.ds)
 
     def test_counted_by_matches_phenotype_and_scorers(self):
-        """HTN_COUNTED_BY is a label: it must say what the code does (snapshot columns and the score inputs)."""
-        s = self.snap
-        used = {"QDiabetes": qd.prepare_inputs(s)["htn"].astype(bool),
-                "LPRS": lprs.score(s)["lrs_htn"].gt(0),
-                "LRA 2010": lrs.score_assessment_2010(s)["lrs_htn"].gt(0)}
-        for score, col in breakdowns.HTN_SCORE_COLUMN.items():
-            for pid, cat in self.CATEGORY.items():
-                want = cat in breakdowns.HTN_COUNTED_BY[score]
-                self.assertEqual(bool(s.loc[pid, col]), want, (score, pid))
-                self.assertEqual(bool(used[score][pid]), want, (score, pid))
+        """htn_counted_by is a label: it must say what the code does (snapshot columns and the score inputs), under
+        both QDiabetes rules (D36: diagnosis OR drug by default; diagnosis AND drug = QDiabetes-2018, sensitivity)."""
+        for rule in phenotype.QD_TREATED_HTN_RULES:
+            p = {**PARAMS, "qd_treated_htn": rule}
+            s = snapshot(self.ds, p)
+            used = {"QDiabetes": qd.prepare_inputs(s)["htn"].astype(bool),
+                    "LPRS": lprs.score(s)["lrs_htn"].gt(0),
+                    "LRA 2010": lrs.score_assessment_2010(s)["lrs_htn"].gt(0)}
+            counted = breakdowns.htn_counted_by(p)
+            for score, col in breakdowns.HTN_SCORE_COLUMN.items():
+                for pid, cat in self.CATEGORY.items():
+                    want = cat in counted[score]
+                    self.assertEqual(bool(s.loc[pid, col]), want, (rule, score, pid))
+                    self.assertEqual(bool(used[score][pid]), want, (rule, score, pid))
+
+    def test_qdiabetes_rule(self):
+        """D36: a diagnosis or a drug alone counts for QDiabetes by default; only both under "dx_and_med"."""
+        self.assertEqual(PARAMS["qd_treated_htn"], "dx_or_med")
+        self.assertEqual(self.snap["htn_treated_qd"].to_dict(), {"A": True, "B": True, "C": True, "D": False})
+        strict = snapshot(self.ds, {**PARAMS, "qd_treated_htn": "dx_and_med"})
+        self.assertEqual(strict["htn_treated_qd"].to_dict(), {"A": False, "B": False, "C": True, "D": False})
+        with self.assertRaisesRegex(ValueError, "qd_treated_htn"):
+            snapshot(self.ds, {**PARAMS, "qd_treated_htn": "dx"})
 
     def test_table(self):
         t = breakdowns.htn_derivation(self.snap.assign(status=["T2DM", "T2DM", "Prediabetes", "Prediabetes"]))
@@ -70,6 +83,9 @@ class TestHtnDerivation(unittest.TestCase):
         self.assertEqual(a["n"].tolist(), [1, 1, 1, 1])
         self.assertEqual(a["pct"].tolist(), [25.0] * 4)
         self.assertEqual(a["counted_as_treated_by"].tolist(),
+                         ["QDiabetes, LRA 2010", "QDiabetes, LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "none"])
+        strict = breakdowns.htn_derivation(self.snap, group_col=None, p={**PARAMS, "qd_treated_htn": "dx_and_med"})
+        self.assertEqual(strict["counted_as_treated_by"].tolist(),
                          ["LRA 2010", "LPRS, LRA 2010", "QDiabetes, LPRS, LRA 2010", "none"])
         t2 = t[t["group"] == "T2DM"].set_index("htn_category")
         self.assertEqual(t2["n"].tolist(), [1, 1, 0, 0])

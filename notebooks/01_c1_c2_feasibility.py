@@ -263,15 +263,16 @@ print(dist.to_string(index=False))
 
 # %% [markdown]
 # ## 3b. Treated hypertension and smoking level (how two score inputs are derived)
-# - Hypertension: patients with a diagnosis only / medication only / both / neither. QDiabetes counts diagnosis AND
-#   medication, LPRS medication only, LRA 2010 diagnosis OR medication (`counted_as_treated_by`).
+# - Hypertension: patients with a diagnosis only / medication only / both / neither. QDiabetes counts diagnosis OR
+#   medication (`qd_treated_htn`, D36; the QDiabetes-2018 definition, diagnosis AND medication, as a sensitivity run),
+#   LPRS medication only, LRA 2010 diagnosis OR medication (`counted_as_treated_by`).
 # - Smoking: the QDiabetes level each patient gets (non / ex / light / moderate / heavy / missing) by what it was
 #   recorded as. NABIDH SocialHistory has no structured ex-smoker value (`nabidh.SMOKING_VALUES`): "ex" comes only
 #   from a diagnosis code (`n_from_diagnosis_code`). Occasional / rare → light and "current" without intensity →
 #   `qd_smoking_current_category` are interim [DECISION PENDING — D7]; "other" is not mapped → missing.
 
 # %%
-htn = pd.concat([breakdowns.htn_derivation(s).assign(cohort=c) for c, s in snaps.items()], ignore_index=True)
+htn = pd.concat([breakdowns.htn_derivation(s, p=P).assign(cohort=c) for c, s in snaps.items()], ignore_index=True)
 htn = htn[["cohort", *htn.columns.drop("cohort")]]
 htn_out = sdc.suppress_small_counts(sdc.suppress_rates(htn, "n", ["n_group"], ["pct"]), ["n", "n_group"])
 run.save_table(htn_out, "nb01/htn_derivation.csv",

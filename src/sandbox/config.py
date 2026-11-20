@@ -100,6 +100,11 @@ PARAMS = {
     "qd_force_reduced_model": True,          # [DECIDED: 2026-11-13, ensargunesdogdu] D9: stays out of scope
     "qd_townsend": 0.0,                      # [DECIDED: 2026-11-13, ensargunesdogdu] D10: out of scope → 0
     "qd_smoking_current_category": 3,        # "current" without intensity → 3=moderate [DECISION PENDING] D7
+    # Treated hypertension as QDiabetes reads it. QDiabetes-2018 defines it as a hypertension diagnosis AND an
+    # antihypertensive drug ("dx_and_med"); here a diagnosis OR a drug counts ("dx_or_med"): NABIDH has many patients
+    # with only one of the two (VM 2026-11-20, C1: diagnosis only 10.4%, drug only 5.0%, both 28.1%).
+    # [DECIDED: 2026-11-20, ensargunesdogdu] D36. "dx_and_med" = the published definition, for a sensitivity run.
+    "qd_treated_htn": "dx_or_med",
     # [DECIDED: 2026-11-13, ensargunesdogdu] D8: no smoking record = unknown (not counted as non-smoker) →
     # QDiabetes is not computed; the missingness reason is reported as "smoking_missing".
     "qd_missing_smoking_as_non": False,

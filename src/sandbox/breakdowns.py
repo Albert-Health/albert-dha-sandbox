@@ -24,20 +24,27 @@ from .scores import qdiabetes2018a as qd
 HTN_CATEGORIES = {"diagnosis only": (True, False), "medication only": (False, True),
                   "diagnosis and medication": (True, True), "neither": (False, False)}
 # Snapshot column each score reads as hypertension, and the categories that column is True for.
-# QDiabetes: htn_treated_qd = diagnosis AND medication; LPRS (scores/lprs.py): htn_med = medication;
-# LRA 2010 (scores/lrs.py): htn_lrs = diagnosis OR medication. tests/test_breakdowns.py checks both against the code.
+# QDiabetes: htn_treated_qd = diagnosis OR medication, or diagnosis AND medication (PARAMS["qd_treated_htn"], D36);
+# LPRS (scores/lprs.py): htn_med = medication; LRA 2010 (scores/lrs.py): htn_lrs = diagnosis OR medication.
+# tests/test_breakdowns.py checks both against the code.
 HTN_SCORE_COLUMN = {"QDiabetes": "htn_treated_qd", "LPRS": "htn_med", "LRA 2010": "htn_lrs"}
-HTN_COUNTED_BY = {"QDiabetes": {"diagnosis and medication"},
-                  "LPRS": {"medication only", "diagnosis and medication"},
-                  "LRA 2010": {"diagnosis only", "medication only", "diagnosis and medication"}}
+_ANY = {"diagnosis only", "medication only", "diagnosis and medication"}
+QD_HTN_COUNTED = {"dx_or_med": _ANY, "dx_and_med": {"diagnosis and medication"}}
 
 
-def htn_derivation(snap: pd.DataFrame, group_col: str | None = "status") -> pd.DataFrame:
+def htn_counted_by(p: dict = PARAMS) -> dict[str, set[str]]:
+    """{score: the hypertension categories it counts as treated} under these parameters."""
+    return {"QDiabetes": QD_HTN_COUNTED[p.get("qd_treated_htn", PARAMS["qd_treated_htn"])],
+            "LPRS": {"medication only", "diagnosis and medication"}, "LRA 2010": _ANY}
+
+
+def htn_derivation(snap: pd.DataFrame, group_col: str | None = "status", p: dict = PARAMS) -> pd.DataFrame:
     """Patients per treated-hypertension category, overall ("all") and per `group_col` value.
 
     Columns: group, htn_category, n, n_group, pct (of n_group), counted_as_treated_by (scores that count the category
     as hypertension; "none" for neither).
     """
+    counted = htn_counted_by(p)
     groups = [("all", snap)]
     if group_col and group_col in snap.columns:
         groups += list(snap.groupby(group_col))
@@ -48,7 +55,7 @@ def htn_derivation(snap: pd.DataFrame, group_col: str | None = "status") -> pd.D
             n = int(((dx == want_dx) & (med == want_med)).sum())
             rows.append({"group": grp, "htn_category": cat, "n": n, "n_group": len(g),
                          "pct": round(100 * n / len(g), 1) if len(g) else None,
-                         "counted_as_treated_by": ", ".join(s for s, cats in HTN_COUNTED_BY.items() if cat in cats)
+                         "counted_as_treated_by": ", ".join(s for s, cats in counted.items() if cat in cats)
                          or "none"})
     return pd.DataFrame(rows, columns=["group", "htn_category", "n", "n_group", "pct", "counted_as_treated_by"])
 

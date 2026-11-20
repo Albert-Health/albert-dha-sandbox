@@ -93,6 +93,8 @@ def dm_evidence(ds: Dataset, glyc: pd.DataFrame | None = None) -> pd.DataFrame:
 _MISSING_ETH = {"", "not recorded", "unknown", "not stated", "na", "n/a", "none", "other - not stated"}
 # FamilyHistory values that count as "record present" (unknown / unmapped do not count)
 FH_RECORDED_VALUES = {"positive", "negative", "positive_non_first_degree"}
+# PARAMS["qd_treated_htn"] (D36): diagnosis OR drug, or the QDiabetes-2018 definition diagnosis AND drug
+QD_TREATED_HTN_RULES = ("dx_or_med", "dx_and_med")
 # Plausible range of each vital (inclusive). core_snapshot leaves out values outside it (BMI from height / weight
 # too); breakdowns.vital_plausibility counts them (NB0 nb00/vital_plausibility.csv). Data-quality bounds, not a
 # study parameter.
@@ -261,7 +263,10 @@ def core_snapshot(ds: Dataset, ref: pd.Series, lookback_days: int | None,
         ids = set(med_win.loc[codelists.match_atc(med_win, grp), "patient_id"])
         out[col] = out.index.isin(ids)
 
-    out["htn_treated_qd"] = out["htn_dx"] & out["htn_med"]      # QDiabetes: diagnosis AND medication
+    htn_rule = p.get("qd_treated_htn", PARAMS["qd_treated_htn"])  # QDiabetes (D36): dx_or_med | dx_and_med
+    if htn_rule not in QD_TREATED_HTN_RULES:
+        raise ValueError(f"qd_treated_htn = {htn_rule!r}; expected one of {', '.join(QD_TREATED_HTN_RULES)}")
+    out["htn_treated_qd"] = (out["htn_dx"] | out["htn_med"]) if htn_rule == "dx_or_med" else (out["htn_dx"] & out["htn_med"])
     out["htn_lrs"] = out["htn_dx"] | out["htn_med"]             # LRA 2010: diagnosis OR medication
     # LPRS (Gray 2012) uses medication only: htn_med
 
