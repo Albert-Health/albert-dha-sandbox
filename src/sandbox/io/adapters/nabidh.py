@@ -61,10 +61,17 @@ from .synthetic import read_raw_csv
 # the canonical data (<cohort>/ingest.json → NB0 / NB1 blocks). Bump it when adapter or ingest behaviour changes:
 #   MAJOR canonical schema · MINOR mapping / dictionary / handler (canonical data may change) · PATCH report / output.
 # Log (newest first):
-#   unreleased (1c)  2026-11-20  LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
+#   1.3.0  2026-11-20  1c · LabResultItem: one spelling per unit (LAB_UNITS; "0" / "NULL" unit = no unit),
 #                      rows with an empty value dropped and counted per code (drop_empty; the text "NULL" = empty).
 #                      Observation (vitals): "0" / "-" = empty (empty_values, counted), height 1.2–2.3 m → cm,
 #                      value distribution per vital in the report
+#                      1d · Medication: a 6-digit code = DDC scientific code stem, looked up when every product
+#                      of the stem agrees; the all-zero placeholder "0000-000000-0000" = no code (→ name). Report:
+#                      "drug code format" counts; DDC codes without a study class listed by DDC ingredient | route
+#                      (i22) and code / name disagreement counted (code keeps the final say). Diagnosis: a cell with
+#                      several comma-separated codes → one row per code, trailing dot removed (counted). Family
+#                      history: a relationship not in FH_RELATION_DEGREE is decided by its words ("maternal aunt" →
+#                      other); report lists the codes recognised by text only
 #   1.2.1  2026-11-19  Progress lines on screen: IRIS connection, each view's query, rows so far, mapping time
 #                      (output only; canonical data unchanged)
 #   1.2.0  2026-11-19  Observation: rows with an empty value are dropped and counted per code (SOURCES drop_empty;
@@ -74,7 +81,7 @@ from .synthetic import read_raw_csv
 #   1.0.0  2026-11-19  HSAA views; LabResultItem labs with units (eAG / RBS dropped by name, plausibility
 #                      report); SocialHistory tobacco item filter + intensity dictionary; family history: ICD-10 /
 #                      SNOMED code first then text, negation, relative degree, prediabetes dropped; DDC → ATC
-INGEST_VERSION = "1.2.1"
+INGEST_VERSION = "1.3.0"
 
 CSV_OPTIONS = {"sep": ",", "encoding": "utf-8-sig"}
 DATE_FORMAT: str | None = None          # None = ISO-8601 / pandas inference; e.g. "%d/%m/%Y"; "horolog" (IRIS)
@@ -115,10 +122,11 @@ IRIS_COHORTS: dict[str, dict[str, str]] = {
 #   date_format       overrides DATE_FORMAT for this source
 #
 # HSAA views (2026-11-18, check_environment [mapping] output): the patient key is the numeric `ID` in the
-# Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C2 has
-# SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in Medication; C1 has no SELECT
-# permission on Encounter (optional, skipped). Code systems (ICD-10 / LOINC) and value dictionaries are not
-# verified yet — to be checked with enclave.sh values / columns (docs/gap.md K3).
+# Patient view and the `Patient` column carrying the same value in the other views. Cohort differences: C3 (read as
+# "C2" before ingest 1.1.0) has SocialHabitCategory_Description instead of _Code and no DrugProduct_Code in
+# Medication — the real C2 has drug codes (VM ingest 2026-11-19: DDC code 21,099 rows, scientific code 3,127); C1
+# has no SELECT permission on Encounter (optional, skipped). Code systems (VM checks 2026-11-20, C1 / C2):
+# Diagnosis_Code is ICD-10-CM with dots (split_dx_codes), ObservationCode_Code LOINC (only 3141-9, 8302-2, 39156-5).
 # In the C1 DDL (2026-11-19) but not mapped: Diagnosis.DiagnosisGroup (values unknown), Medication
 # ToTime / DoseQuantity / DoseUoM_Description, Observation.Encounter, LabResultItem ID / Encounter.
 SOURCES: dict[str, dict] = {
@@ -182,7 +190,8 @@ SOURCES: dict[str, dict] = {
     "medications": {
         "file": "medications.csv", "table": "{schema}.Medication", "kind": "medications",
         "columns": {"patient_id": "Patient", "date": "FromTime"},
-        # atc_code ← DrugProduct_Code: ATC or DDC product code (C1); absent in C2 → name (DrugProduct_Description)
+        # atc_code ← DrugProduct_Code: ATC or DDC product / scientific code (C1, C2); absent in C3 → name
+        # (DrugProduct_Description)
         "optional_columns": {"atc_code": "DrugProduct_Code", "drug_name": "DrugProduct_Description",
                              "route": "Route_Description"},
     },
@@ -234,6 +243,9 @@ FH_STATUS_VALUES = {
 }
 # Relationship → degree. QDiabetes and LRS count first-degree relatives (mother, father, sibling, child).
 # Second degree → positive_non_first_degree (recorded, not counted positive). Empty / unknown relationship → positive.
+# NABIDH FamilyMember_Description (VM checks, 2026-11-20): Father, Mother, Brother, Sister, Child, Parent (C1 ≥ 10
+# patients; C2 the same without Parent) — all here; the rest (C1 5, C2 4 values in < 10 patients) unseen. A value not
+# in the dictionary is decided by its words (FH_TEXT_SECOND_DEGREE / FH_TEXT_FIRST_DEGREE, as for the text).
 FH_RELATION_DEGREE = {
     **{k: "first" for k in ["mother", "father", "parent", "parents", "brother", "sister", "sibling", "siblings",
                             "son", "daughter", "child", "children", "first degree", "first-degree",
@@ -445,9 +457,32 @@ def _h_patients(df, name, vc):
     return {"patients": df}
 
 
+def split_dx_codes(code: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Diagnosis_Code cell → (one code per element, as a list; cell had a trailing dot; number of codes in the cell).
+    NABIDH Diagnosis_Code (VM checks, 2026-11-20) is ICD-10-CM with dots ("E11.9", "R73.03", "E11.3393"); a few C1
+    cells end in a dot ("E11.9.") and a few C2 cells hold 2–3 codes ("E11.9, I10"). Matching (codelists.norm_icd)
+    ignores dots but reads only the start of the cell, so a second code was lost → split on comma, strip the dot."""
+    raw = code.astype("string").str.strip()
+    trailing = raw.str.contains(r"\.(?:\s*,|$)", regex=True).fillna(False).astype(bool)
+    parts = raw.str.split(r"\s*,\s*", regex=True)
+    parts = parts.map(lambda p: p if not isinstance(p, list) else
+                      ([c.rstrip(".").strip() for c in p if c.rstrip(".").strip()] or [pd.NA]))
+    n = parts.map(lambda p: len(p) if isinstance(p, list) else 1)
+    return parts, trailing, n
+
+
 def _h_conditions(df, name, vc):
     vc += _value_counts(name, "code_system", df["code_system"])
     df["code_system"] = norm_code_system(df["code_system"])
+    parts, trailing, n = split_dx_codes(df["code"])
+    if trailing.any():
+        vc.append({"source": name, "field": "code: trailing dot removed", "value": "<n rows>",
+                   "n_rows": int(trailing.sum())})
+    if (n > 1).any():
+        vc += _value_counts(name, "code cell with several codes → one row each",
+                            n[n > 1].astype(str) + " codes in the cell")
+    df = df.assign(code=parts).explode("code").reset_index(drop=True)
+    df["code"] = df["code"].astype("string")
     return {"conditions": df}
 
 
@@ -632,6 +667,9 @@ def _h_family_history(df, name, vc):
         is_dm = how.notna()
         shown = df[cond_cols].astype("string").fillna("").agg(" | ".join, axis=1)
         vc += _value_counts(name, "diabetes recognised by", how[is_dm])
+        if "condition" in df:                       # codes that only the text recognised (local numbers, "Diabetes")
+            vc += _value_counts(name, "text only: Diagnosis_Code", df.loc[how.eq("text only").fillna(False)
+                                                                          .astype(bool), "condition"], top=20)
         vc += _value_counts(name, f"{' | '.join(cond_cols)} (non-diabetes, dropped)", shown[~is_dm & ~pre], top=30)
         vc += _value_counts(name, f"{' | '.join(cond_cols)} (prediabetes, dropped)", shown[pre], top=20)
         df = df[is_dm]
@@ -656,7 +694,15 @@ def _h_family_history(df, name, vc):
     if "relation" in df:
         rel = _norm_text(df["relation"])
         deg = rel.map(FH_RELATION_DEGREE)
-        label = deg.astype(object).where(deg.notna(), "unmapped (treated as first)")
+        # Not in the dictionary: the words decide, as in the text ("paternal grandmother", "maternal aunt" → other;
+        # "grandmother and mother" → first); none of them → treated as first, as before
+        by_word = deg.isna() & rel.notna()
+        w2 = rel.str.contains(FH_TEXT_SECOND_DEGREE, na=False).astype(bool)
+        w1 = rel.str.contains(FH_TEXT_FIRST_DEGREE, na=False).astype(bool)
+        deg = deg.where(~(by_word & w1), "first").where(~(by_word & w2 & ~w1), "other")
+        by_word &= deg.notna()
+        label = deg.astype(object).where(~by_word, (deg.astype("string") + " (by word)").astype(object))
+        label = label.where(deg.notna(), "unmapped (treated as first)")
         label = label.where(rel.notna(), "not recorded (treated as first)")
         vc += _value_counts(name, "relation → degree", rel.fillna("<empty>").astype(str) + " → " + label.astype(str))
         second |= deg.eq("other").fillna(False).astype(bool)
@@ -670,8 +716,11 @@ ATC_LIKE = re.compile(r"^[A-Z]\d{2}([A-Z]{1,2}\d{0,2})?$")
 
 
 def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
-    """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code via the
-    DDC reference (a recognised code has the final say); no code or an unrecognised one → from the drug name."""
+    """One drug record → (method, ATC list). An ATC-shaped code as is; a DDC product / scientific code (or its
+    6-digit stem) via the DDC reference (a recognised code has the final say); no code or an unrecognised one → from
+    the drug name. The all-zero placeholder ("0000-000000-0000", C1 / C2 2026-11-19) counts as no code."""
+    if code is not None and ddc.is_placeholder(code):
+        code = None
     if code is not None:
         if ATC_LIKE.match(code):
             return "ATC code", [code]
@@ -687,11 +736,22 @@ def _resolve_drug(code, drug, route) -> tuple[str, list[str]]:
     return ddc.lookup_name(drug, route)
 
 
+DDC_NO_CLASS = ("DDC: not a study drug class", "DDC: non-systemic route")
+
+
+def _ddc_no_class_check(code, drug, route) -> tuple[str, list[str]]:
+    """A DDC code without a study class: (DDC "ingredients | route", ATC the drug name would give). A non-empty ATC
+    means code and name disagree — report only; the code keeps the final say."""
+    info = ddc.code_info(code) or "?"
+    return info, (ddc.lookup_name(drug, route)[1] if drug is not None else [])
+
+
 def _h_medications(df, name, vc):
-    """Drug → ATC (io/adapters/ddc.py). C1: DrugProduct_Code = DDC product code; C2: no code, DrugProduct_Description
-    (name) → DDC trade name + active ingredient. Combination product → one row per active ingredient. A record
-    outside the study drug classes does not enter the canonical table (atc_code is required); how many dropped and
-    why is in value_counts."""
+    """Drug → ATC (io/adapters/ddc.py). C1 / C2: DrugProduct_Code = DDC product or scientific code (a few rows carry a
+    6-digit stem, a VMP formulary code or the all-zero placeholder); C3: no code, DrugProduct_Description (name) →
+    DDC trade name + active ingredient. Combination product → one row per active ingredient. A record outside the
+    study drug classes does not enter the canonical table (atc_code is required); how many dropped and why is in
+    value_counts, with the DDC active ingredient of the codes without a study class."""
     empty = pd.Series(pd.NA, index=df.index, dtype="string")
     code = (df["atc_code"] if "atc_code" in df else empty).astype("string").str.strip().str.upper().replace("", pd.NA)
     drug = (df["drug_name"] if "drug_name" in df else empty).astype("string").str.strip().replace("", pd.NA)
@@ -703,8 +763,32 @@ def _h_medications(df, name, vc):
     n_atc = atcs.map(len)
 
     vc += _value_counts(name, "drug → ATC method", how)
+    fmt_of = {c: ddc.code_format(c) for c in {k[0] for k in keys}}
+    vc += _value_counts(name, "drug code format", pd.Series([fmt_of[k[0]] for k in keys], index=df.index))
     unknown = how.str.startswith("code not ATC/DDC").fillna(False).astype(bool)
     vc += _value_counts(name, "drug code not ATC/DDC", code[unknown], top=30)
+    # i22: which DDC products the codes without a study class are (DDC active ingredient | route; reference data),
+    # and whether the row's drug name would have given a study class (code and name disagree → listed, not used)
+    no_class = how.isin(DDC_NO_CLASS).fillna(False).astype(bool)
+    if no_class.any():
+        chk = {k: _ddc_no_class_check(*k) for k in {k for k, nc in zip(keys, no_class) if nc}}
+        nc_keys = [k for k, nc in zip(keys, no_class) if nc]
+        info = pd.Series([chk[k][0] for k in nc_keys], index=df.index[no_class], dtype="string")
+        h = how[no_class]
+        vc += _value_counts(name, "DDC: not a study drug class (DDC ingredients | route)",
+                            info[h.eq("DDC: not a study drug class")], top=30)
+        vc += _value_counts(name, "DDC: non-systemic route (DDC ingredients | route | row route)",
+                            info[h.eq("DDC: non-systemic route")] + " | row: "
+                            + route[no_class & how.eq("DDC: non-systemic route")].fillna("-"), top=20)
+        name_atc = pd.Series([chk[k][1] for k in nc_keys], index=df.index[no_class], dtype=object)
+        clash = name_atc.map(len) > 0
+        vc.append({"source": name, "field": "DDC code without study class, drug name has one", "value": "<n rows>",
+                   "n_rows": int(clash.sum())})
+        if clash.any():
+            shown = (info[clash].str.split(" | ", regex=False).str[0].str.slice(0, 28) + " ≠ "
+                     + name_atc[clash].str.join("+") + " ← " + drug[no_class][clash])
+            vc += _value_counts(name, "DDC code without study class, drug name has one: DDC ≠ name ATC ← name",
+                                shown, top=20)
     by_name = how.str.contains("name: ", regex=False).fillna(False).astype(bool)
     hit = by_name & (n_atc > 0)
     vc += _value_counts(name, "ATC ← drug_name (name match)", atcs[hit].str.join("+") + " ← " + drug[hit], top=50)

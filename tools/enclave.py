@@ -895,20 +895,29 @@ def failure_lines(lines: list[str]) -> list[str]:
 # Drug → ATC summary (ingest value_counts, source "medications"): (field, max rows, hide small values).
 # Code / name lists never print a value seen in < 10 rows; counts are already suppressed in the file.
 MED_FIELDS = [
-    ("drug → ATC method", 20, False), ("rows dropped: no study drug class", 1, False),
+    ("drug → ATC method", 20, False), ("drug code format", 10, False), ("rows dropped: no study drug class", 1, False),
     ("combination products (rows → several ATC rows)", 1, False), ("ATC (3 chars) after mapping", 20, False),
     ("drug code not ATC/DDC", 10, True), ("ATC ← drug_name (name match)", 15, True),
     ("drug_name without study drug class", 15, True),
+    ("DDC: not a study drug class (DDC ingredients | route)", 15, True),
+    ("DDC: non-systemic route (DDC ingredients | route | row route)", 10, True),
+    ("DDC code without study class, drug name has one", 1, False),
+    ("DDC code without study class, drug name has one: DDC ≠ name ATC ← name", 10, True),
 ]
 
 
 # Family history summary (source "family_history"): the end of the field name matches (e.g. "condition | condition_text
 # (non-diabetes, dropped)"). Text values with < 10 rows are not printed.
 FH_FIELDS = [
-    ("diabetes recognised by", 5, False), ("relation → degree", 12, True), ("(prediabetes, dropped)", 10, True),
+    ("diabetes recognised by", 5, False), ("text only: Diagnosis_Code", 12, True), ("relation → degree", 12, True),
+    ("(prediabetes, dropped)", 10, True),
     ("(non-diabetes, dropped)", 10, True), ("condition_text negated → negative", 5, True),
     ("second-degree relative in text", 5, True),
 ]
+
+
+# Diagnosis clean-up (source "diagnoses"): Diagnosis_Code cells with several codes (split) and trailing dots (counts).
+DX_FIELDS = [("code cell with several codes → one row each", 5, False), ("code: trailing dot removed", 1, False)]
 
 
 # Lab summary (source "lab_results", LabResultItem): kept codes, value distribution per kind | unit (in groups with
@@ -988,6 +997,10 @@ def summary_ingest(d: Path, out: Block, a) -> None:
             if len(m):
                 out("   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):")
                 out.table(m, a.max_rows)
+            dx = field_summary(v_all, "diagnoses", DX_FIELDS)
+            if len(dx):
+                out("   diagnoses (Diagnosis_Code clean-up):")
+                out.table(dx, a.max_rows)
             lab = field_summary(v_all, "lab_results", LAB_FIELDS)
             if len(lab):
                 out("   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values "

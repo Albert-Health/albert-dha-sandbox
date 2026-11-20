@@ -10,10 +10,10 @@ Follows the views seen in the enclave (2026-11-18):
   LabResultItem (HbA1c, FPG, OGTT — LOINC, with units; C1 DDL 2026-11-19; as on the VM, units in several spellings
   (mg/dL, MG/DL, mg/dl), "0" / "NULL" as HbA1c unit and some empty ResultValue rows), SocialHistory (smoking),
   FamilyHistory (diabetes), Medication; Encounter only in C3
-- C2 differences: SocialHabitCategory_Description (not _Code), no DrugProduct_Code in Medication
-- Medication: in C1 DrugProduct_Code = DDC product code, in C2 DrugProduct_Description = DDC trade name (a
-  single-ingredient, systemic DDC product matching the synthetic drug name; this exercises the io/adapters/ddc.py
-  mapping)
+- C3 differences: SocialHabitCategory_Description (not _Code; C1 and C2 have _Code, VM checks 2026-11-20)
+- Medication: in C1 / C2 DrugProduct_Code = DDC product code (the real C2 has drug codes, VM ingest 2026-11-19); in
+  C3 no DrugProduct_Code, DrugProduct_Description = DDC trade name (a single-ingredient, systemic DDC product
+  matching the synthetic drug name; this exercises the io/adapters/ddc.py name mapping)
 - not delivered: waist circumference, other vitals, random glucose
 SYNTHETIC — not real patient data. The first line of each file says so.
 
@@ -118,7 +118,7 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "TestItemCode_Description": lab["test_name"]})
 
     sm = obs[obs["concept"] == "smoking_status"]
-    item = "SocialHabitCategory_Description" if cohort == "c2" else "SocialHabitCategory_Code"
+    item = "SocialHabitCategory_Description" if cohort == "c3" else "SocialHabitCategory_Code"
     out["social_history.csv"] = pd.DataFrame({
         "ID": range(1, len(sm) + 1), "EnteredOn": _d(sm["date"]), "Patient": sm["patient_id"],
         item: "Tobacco", "SocialHabitQty_Description": sm["value"]})
@@ -134,7 +134,7 @@ def convert(ds: schema.Dataset, cohort: str) -> dict[str, pd.DataFrame]:
         "ID": range(1, len(meds) + 1), "FromTime": _d(meds["date"]), "Patient": meds["patient_id"],
         "ToTime": pd.NA, "DrugProduct_Code": code, "DrugProduct_Description": meds["drug_name"],
         "Route_Description": meds["route"]})
-    if cohort == "c2":                                         # no code; name = DDC trade name
+    if cohort == "c3":                                         # no code; name = DDC trade name
         med["DrugProduct_Description"] = meds["drug_name"].map(prod["trade_name"]).fillna(meds["drug_name"])
         med = med.drop(columns=["DrugProduct_Code"])
     out["medications.csv"] = med
