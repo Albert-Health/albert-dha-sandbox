@@ -113,6 +113,21 @@ class TestLPRS(unittest.TestCase):
         r = lrs.score(_snap(htn_lrs=True, htn_med=True, htn_treated_lprs=False), p=P2012).iloc[0]
         self.assertAlmostEqual(r["lrs_score"], 7.0435310 - 0.5498978, places=6)
 
+    def test_unknown_ethnicity_scenarios(self):
+        # NB1 §4b: unknown ethnicity scored as White (BME 0) or as Other (BME 1); known values kept; D12 unchanged
+        snap = pd.concat([_snap(ethnicity="Not recorded"), _snap(ethnicity="Western"), _snap(ethnicity="Indian")],
+                         ignore_index=True)
+        d12 = lrs.score(snap, p=P2012)
+        self.assertEqual(d12["lrs_computable"].tolist(), [False, True, True])
+        white = lrs.score(snap, p={**P2012, "lrs_unknown_ethnicity_as": "white"})
+        other = lrs.score(snap, p={**P2012, "lrs_unknown_ethnicity_as": "other"})
+        self.assertEqual(white["lrs_ethnicity"].round(7).tolist(), [0.0, 0.0, 0.7565977])
+        self.assertEqual(other["lrs_ethnicity"].round(7).tolist(), [0.7565977, 0.0, 0.7565977])
+        self.assertAlmostEqual(other["lrs_score"][0] - white["lrs_score"][0], 0.7565977, places=6)
+        self.assertAlmostEqual(other["lrs_score"][0], 7.0435310, places=6)        # = the full reference (BME)
+        with self.assertRaisesRegex(ValueError, "lrs_unknown_ethnicity_as"):
+            lrs.score(snap, p={**P2012, "lrs_unknown_ethnicity_as": "asian"})
+
     def test_missing_inputs(self):
         r = lrs.score(_snap(bmi=np.nan), p=P2012).iloc[0]
         self.assertTrue(np.isnan(r["lrs_score"]))

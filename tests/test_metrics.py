@@ -115,6 +115,19 @@ class TestDetectionRate(unittest.TestCase):
         self.assertAlmostEqual(r["sens_all"], 8 / 12)
         self.assertAlmostEqual(r["ci_low"], 0.4902, places=4)
 
+    def test_detection_sweep(self):
+        # 10 positives, scores 1..9 and one not computable; score >= t flagged
+        s = [1, 2, 3, 4, 5, 6, 7, 8, 9, None]
+        t = metrics.detection_sweep(s, [0, 5, 9.5]).set_index("threshold")
+        self.assertEqual(t["n"].tolist(), [10, 10, 10])
+        self.assertEqual(t["n_computable"].tolist(), [9, 9, 9])
+        self.assertEqual(t["n_flagged"].tolist(), [9, 5, 0])
+        self.assertAlmostEqual(t.loc[5, "sens_computable"], 5 / 9)
+        lo, hi = metrics.wilson_ci(5, 9)
+        self.assertAlmostEqual(t.loc[5, "ci_low"], lo)
+        self.assertAlmostEqual(t.loc[5, "ci_high"], hi)
+        self.assertEqual(t.loc[0, "sens_computable"], 1.0)
+
     def test_detection_rate_empty(self):
         r = metrics.detection_rate([])
         self.assertEqual(r["n"], 0)

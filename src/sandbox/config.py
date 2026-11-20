@@ -132,6 +132,14 @@ PARAMS = {
     "lprs_treated_htn": "dx_or_med",
     "lrs_high_risk_threshold": 16,           # assessment_2010 only: ≥16 high risk (NHS Health Check)
     "lrs_unknown_ethnicity_as_missing": True,  # both variants: "Not recorded" → score not computed [DECISION PENDING] D12
+    # LPRS ethnicity scenarios (NB1 §4b) while ethnicity is not delivered: an unknown ethnicity is scored as White (BME 0)
+    # in one run and as Other (BME 1) in the other; the two bound LPRS. None = D12 above. Known values are kept.
+    # NB1 always reports both scenarios next to the main run; setting this in SANDBOX_PARAMS makes one the main run.
+    "lrs_unknown_ethnicity_as": None,        # None | "white" | "other"
+    # Threshold grids for NB1 §4b's sensitivity sweep in known positives. Descriptive only: which threshold to use is
+    # D5 (QDiabetes) and D23 (LPRS) [DECISION PENDING]; the grid only shows what each value would flag.
+    "qd_sweep_thresholds_pct": [1, 2.5, 5, 7.5, 10, 15, 20],               # QDiabetes 10-year risk, %
+    "lprs_sweep_thresholds": [4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5],     # LPRS score (linear predictor)
 
     # Recalibration (Arm 2)
     "recal_split": "temporal",               # "temporal" (by index date) | "random"

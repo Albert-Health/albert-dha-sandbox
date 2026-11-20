@@ -52,12 +52,21 @@ COEF = {
 DEV_AGE_RANGE = (40, 75)         # development population (informational; no restriction applied)
 
 
+UNKNOWN_ETHNICITY_AS = {"white": 0.0, "other": 1.0}
+
+
 def bme_flag(ethnicity: pd.Series, p: dict = PARAMS) -> pd.Series:
-    """Non-white = 1.0, white = 0.0; not recorded → NaN (if D12 is on)."""
+    """Non-white = 1.0, white = 0.0; not recorded → NaN (if D12 is on), or the scenario value of
+    `lrs_unknown_ethnicity_as` ("white" → 0.0, "other" → 1.0; NB1 §4b) — known values are kept either way."""
     eth = ethnicity.astype("string").str.strip().str.lower()
     unknown = (eth.isna() | eth.isin(codelists.ETHNICITY_UNKNOWN)).fillna(True).astype(bool)
     white = eth.isin(codelists.LRS_WHITE).fillna(False).astype(bool)
     out = pd.Series(np.where(white, 0.0, 1.0), index=ethnicity.index, dtype=float)
+    scenario = p.get("lrs_unknown_ethnicity_as")
+    if scenario is not None:
+        if scenario not in UNKNOWN_ETHNICITY_AS:
+            raise ValueError(f"lrs_unknown_ethnicity_as = {scenario!r}; expected None, 'white' or 'other'")
+        return out.where(~unknown, UNKNOWN_ETHNICITY_AS[scenario])
     if p["lrs_unknown_ethnicity_as_missing"]:
         out = out.where(~unknown)
     return out

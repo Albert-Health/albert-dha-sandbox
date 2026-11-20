@@ -349,6 +349,55 @@ run.save_table(det_out, "nb01/c1_detection_rate.csv",
 print(detection.to_string(index=False))
 
 # %% [markdown]
+# ## 4b. LPRS ethnicity scenarios and a threshold sweep (until ethnicity and the thresholds are decided)
+# - LPRS needs ethnicity. Nationality is not delivered, so under D12 no patient gets a score. Two scenarios bound it:
+#   every unknown ethnicity scored as White (BME 0), then as Other (BME 1) (`lrs_unknown_ethnicity_as`); known values
+#   (EthnicGroup source) are kept. Reported next to the main run; D12 itself is unchanged.
+# - Sensitivity at a grid of thresholds: QDiabetes 10-year risk (`qd_sweep_thresholds_pct`) and the LPRS score in
+#   both scenarios (`lprs_sweep_thresholds`). It shows the share of known positives each value would flag; which
+#   threshold to use is D5 / D23. Reference date: data end (§1). With positives only there are no negatives, so
+#   specificity, PPV, F1 and AUROC cannot be computed here; they come from C3 (Phase 2).
+
+# %%
+scen_rows, sweep_rows = [], []
+grids = {"qdiabetes": P["qd_sweep_thresholds_pct"], "lprs_white": P["lprs_sweep_thresholds"],
+         "lprs_other": P["lprs_sweep_thresholds"]}
+for c, s in snaps.items():
+    groups = [("all", s.index)] + [(g, s.index[s["status"] == g]) for g in ("T2DM", "Prediabetes")]
+    scores = {"qdiabetes": (100 * s["qd_risk_10y"]).where(s["qd_computable"].astype(bool))}
+    for scen in ("white", "other"):
+        sc = lprs.score(s, p={**P, "lrs_unknown_ethnicity_as": scen})["lrs_score"]
+        scores[f"lprs_{scen}"] = sc
+        for grp, idx in groups:
+            v = sc.reindex(idx).dropna()
+            scen_rows.append({"cohort": c, "group": grp, "scenario": f"unknown ethnicity = {scen}", "n": len(idx),
+                              "n_computable": len(v),
+                              "pct_computable": round(100 * len(v) / len(idx), 1) if len(idx) else None,
+                              "median": round(v.median(), 2) if len(v) else None,
+                              "p25": round(v.quantile(.25), 2) if len(v) else None,
+                              "p75": round(v.quantile(.75), 2) if len(v) else None})
+    for name, sc in scores.items():
+        for grp, idx in groups:
+            for r in metrics.detection_sweep(sc.reindex(idx), grids[name]).to_dict("records"):
+                sweep_rows.append({"cohort": c, "group": grp, "score": name, **r,
+                                   **{k: round(100 * r[k], 1) for k in ("sens_computable", "ci_low", "ci_high")}})
+    run.log(f"{c} LPRS ethnicity scenarios and threshold sweep")
+scen = pd.DataFrame(scen_rows)
+scen_out = sdc.suppress_rates(scen, "n_computable", ["n"], ["pct_computable"])
+scen_out = sdc.suppress_small_group_stats(scen_out, "n_computable", ["median", "p25", "p75"])
+scen_out = sdc.suppress_small_counts(scen_out, ["n", "n_computable"])
+run.save_table(scen_out, "nb01/lprs_ethnicity_scenarios.csv",
+               "LPRS with unknown ethnicity scored as White, then as Other: patients scored and score distribution")
+sweep = pd.DataFrame(sweep_rows)
+sweep["n_flagged"] = sweep["n_flagged"].astype("Int64")
+sweep_out = sdc.suppress_rates(sweep, "n_flagged", ["n_computable"], ["sens_computable", "ci_low", "ci_high"])
+sweep_out = sdc.suppress_small_counts(sweep_out, ["n", "n_computable", "n_flagged"])
+run.save_table(sweep_out, "nb01/detection_sweep.csv",
+               "Sensitivity in known positives at a grid of thresholds (QDiabetes 10-year risk %, LPRS both scenarios)")
+print(scen.to_string(index=False))
+print(sweep[sweep["group"] == "all"].to_string(index=False))
+
+# %% [markdown]
 # ## 5. Ethnic group mapping check (nationality / ethnicity → group → QDiabetes)
 # Source: `PARAMS["ethnicity_source"]`. "Other (unmapped nationality)" rows are candidates to add to the
 # mapping table (codelists.NATIONALITY_COUNTRIES) [decision pending — D6].

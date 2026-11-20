@@ -248,6 +248,20 @@ def detection_rate(flag) -> dict:
             "sens_all": k / n if n_comp else float("nan")}
 
 
+def detection_sweep(score, thresholds) -> pd.DataFrame:
+    """Sensitivity in a positives-only cohort (C1 / C2) at each threshold: score >= t → flagged; NaN = not computable.
+    One row per threshold: n, n_computable, n_flagged, sens_computable, ci_low, ci_high (Wilson 95%). Descriptive:
+    with no negatives, specificity / PPV / F1 / AUROC cannot come from here (detection_rate)."""
+    s = pd.to_numeric(pd.Series(score), errors="coerce")
+    rows = []
+    for t in thresholds:
+        r = detection_rate((s >= t).astype("boolean").mask(s.isna()))
+        rows.append({"threshold": t, **{k: r[k] for k in ("n", "n_computable", "n_flagged", "sens_computable",
+                                                          "ci_low", "ci_high")}})
+    return pd.DataFrame(rows, columns=["threshold", "n", "n_computable", "n_flagged", "sens_computable", "ci_low",
+                                       "ci_high"])
+
+
 # --------------------------------------------------------------------------
 # Bootstrap
 # --------------------------------------------------------------------------
