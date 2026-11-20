@@ -73,6 +73,14 @@ göz at.
 Adapter sözlükleri tahmine dayanıyor. Bu adım onları gerçek değerlerle tamamlar. `values` yalnız ≥ 10
 hastada geçen değerleri ya da yüzdelikleri basar.
 
+**Tek komut (1a + 1c + 1d, c1 ve c2, tek COPY bloğu):** aşağıdaki `values` sorgularının hepsi (1c'de lab kodu /
+birimi ve vital değerleri, 1d'de tanı / gözlem / aile öyküsü kodları; ilaç kodları ingest bloğunda). Bulunamayan
+tablo ya da sütun tek satırda "not available" yazar, diğerleri çalışır. `git pull` yoksa paketle:
+
+```bash
+python3 sandbox_bundle.py checks            # = bash tools/enclave.sh checks; yalnız biri: checks 1c
+```
+
 - [ ] **1a · Sigara kalemi.** Ingest SocialHistory'de birden çok kalem görürse durur, çünkü hangisinin sigara
   olduğunu bilmez. Önce bunlar:
 

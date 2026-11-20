@@ -8,6 +8,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -282,6 +283,50 @@ class TestEnclaveCli(_Db, unittest.TestCase):
         self.assertIn("Summary: R9", text)
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             enclave.main(["req", "R10"])
+
+
+class TestChecks(unittest.TestCase):
+    """`checks`: the step 1 queries in one block; a missing table is one line, not a stop; < 10 patients not shown."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.tmp.name)
+        ids = [f"P{i:03d}" for i in range(30)]
+        obs = [{"PatientID": p, "ObservationCode_Code": "8302-2", "ObservationValue": f"{150 + i * 1.3:.1f}"}
+               for i, p in enumerate(ids)]
+        obs += [{"PatientID": ids[-1], "ObservationCode_Code": "ZZ-9", "ObservationValue": "777"}] * 12
+        iris.write_sqlite_standin(cls.dir / "c1.sqlite", {"Observation": pd.DataFrame(obs)})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_one_block_missing_tables_reported(self):
+        with temp_outputs():
+            rc, text = run_main(["checks", "1c", "1D", "--cohorts", "c1", "--iris-sqlite", str(self.dir)])
+        self.assertEqual(rc, 0, text)
+        self.assertEqual(text.count("COPY START"), 1)
+        self.assertEqual(text.strip().splitlines()[-1], enclave.MARK_END)
+        self.assertIn("== 1c · c1.Observation.ObservationValue · WHERE ObservationCode_Code = '8302-2'", text)
+        self.assertIn("Distribution (sample)", text)                    # continuous → percentiles, no value list
+        self.assertIn("== 1c · c1.LabResultItem.TestItemCode_Code", text)
+        self.assertIn("not available", text)                            # no LabResultItem / Diagnosis / FamilyHistory
+        self.assertIn("8302-2", text)
+        self.assertNotIn("ZZ-9", text)                                   # 12 rows but 1 patient
+        self.assertNotIn("777", text)
+        n = len(enclave.CHECKS["1c"][1]) + len(enclave.CHECKS["1d"][1])
+        self.assertRegex(text, rf"checks 1c 1d: (\d+) queries done, (\d+) not available")
+        done, failed = map(int, re.search(r"(\d+) queries done, (\d+) not available", text).groups())
+        self.assertEqual(done + failed, n)
+
+    def test_all_failed_and_unknown_id(self):
+        with temp_outputs():
+            rc, text = run_main(["checks", "1a", "--cohorts", "c1", "--iris-sqlite", str(self.dir)])
+        self.assertEqual(rc, 1, text)                                    # no SocialHistory at all
+        self.assertIn("0 queries done", text)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            enclave.main(["checks", "1z", "--iris-sqlite", str(self.dir)])
 
 
 class TestIrisSetup(unittest.TestCase):

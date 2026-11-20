@@ -577,7 +577,7 @@ def cmd_iris_setup(a, out: Block, run) -> int:
 
 
 def needs_password(a) -> bool:
-    if a.cmd in ("schemas", "tables", "columns", "values", "find", "count", "mapping"):
+    if a.cmd in ("schemas", "tables", "columns", "values", "checks", "find", "count", "mapping"):
         return True
     if a.cmd == "req":
         return "R8" in a.ids
@@ -750,6 +750,52 @@ def cmd_values(a, out: Block, run) -> int:
     out("Shapes (sample, %):")
     out.table(v["shapes"].rename(columns={"pct": "%"}), 10)
     return 0
+
+
+# Phase 1 step 1 value checks (docs/faz1_c1_c2.md §1) for `checks`: id → (title, [(table, column, top, where)]).
+# Each query is the `values` command on every cohort given (≥ 10 patient rule; continuous numbers → percentiles only).
+VITAL_CODES = ("39156-5", "8302-2", "3141-9")          # BMI, height, weight (Observation has no unit column)
+CHECKS = {
+    "1a": ("smoking item", [
+        ("SocialHistory", "SocialHabitCategory_Code", 30, None),
+        ("SocialHistory", "SocialHabitCategory_Description", 30, None),
+        ("SocialHistory", "SocialHabitQty_Description", 30, None)]),
+    "1c": ("lab and vital units", [
+        ("LabResultItem", "TestItemCode_Code", 40, None),
+        ("LabResultItem", "ResultValueUnits", 30, None),
+        *[("Observation", "ObservationValue", 30, f"ObservationCode_Code = '{k}'") for k in VITAL_CODES]]),
+    "1d": ("codes: diagnosis, observation, family history", [
+        ("Diagnosis", "Diagnosis_Code", 40, None),
+        ("Observation", "ObservationCode_Code", 40, None),
+        ("FamilyHistory", "FamilyMember_Description", 30, None),
+        ("FamilyHistory", "Diagnosis_Code", 30, None)]),
+}
+
+
+def cmd_checks(a, out: Block, run) -> int:
+    """All step 1 `values` queries in one block. A query that fails (missing table / column) is reported on one line
+    and the rest still run; the exit code is 1 only if every query failed."""
+    ids = list(CHECKS) if not a.ids or "all" in a.ids else a.ids
+    done = failed = 0
+    for cid in ids:
+        title, queries = CHECKS[cid]
+        out(f"### {cid} · {title} · cohorts {' '.join(a.cohorts)}")
+        for cohort in a.cohorts:
+            for table, column, top, where in queries:
+                out()
+                out(f"== {cid} · {cohort}.{table}.{column}" + (f" · WHERE {where}" if where else ""))
+                q = argparse.Namespace(**{**vars(a), "table": cohort_alias(f"{cohort}.{table}"), "column": column,
+                                          "top": top, "where": where, "patient_col": "auto", "list": False})
+                try:
+                    cmd_values(q, out, run)
+                    done += 1
+                except Exception as e:
+                    failed += 1
+                    msg = str(e).strip().splitlines()[0][:200] if str(e).strip() else ""
+                    out(f"  not available: {type(e).__name__}: {msg}")
+        out()
+    out(f"checks {' '.join(ids)}: {done} queries done, {failed} not available")
+    return 1 if failed and not done else 0
 
 
 def cmd_find(a, out: Block, run) -> int:
@@ -1085,7 +1131,7 @@ def cmd_last(a) -> int:
 
 
 HANDLERS = {"req": cmd_req, "iris-setup": cmd_iris_setup, "schemas": cmd_schemas, "tables": cmd_tables,
-            "columns": cmd_columns, "values": cmd_values, "find": cmd_find, "count": cmd_count,
+            "columns": cmd_columns, "values": cmd_values, "checks": cmd_checks, "find": cmd_find, "count": cmd_count,
             "mapping": cmd_mapping, "run": cmd_run, "show": cmd_show}
 
 
@@ -1137,6 +1183,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample", type=int, default=5000)
     p.add_argument("--list", action="store_true", help="value list for dates / continuous numbers too (≥ 10 patient rule)")
 
+    p = sub.add_parser("checks", parents=[common], help="Phase 1 step 1 value checks in one block: 1a 1c 1d or all")
+    p.add_argument("ids", nargs="*", metavar="ID", help="1a (smoking item), 1c (lab / vital units), 1d (codes); "
+                                                         "default all")
+    p.add_argument("--cohorts", nargs="+", choices=["c1", "c2", "c3"], default=["c1", "c2"], help="default c1 c2")
+    p.add_argument("--sample", type=int, default=5000)
+
     p = sub.add_parser("find", parents=[common], help="tables and columns whose name contains the text")
     p.add_argument("text", metavar="TEXT")
     p.add_argument("--all", action="store_true", help="search system schemas too")
@@ -1182,6 +1234,11 @@ def main(argv: list[str] | None = None) -> int:
         unknown = [x for x in a.ids if x not in REQS]
         if unknown:
             ap.error(f"unknown requirement: {', '.join(unknown)} (R1 … R9 or all)")
+    if a.cmd == "checks":                            # checked here: nargs="*" + choices fails on Python 3.10
+        a.ids = [x.lower() for x in a.ids]
+        unknown = [x for x in a.ids if x not in (*CHECKS, "all")]
+        if unknown:
+            ap.error(f"unknown check: {', '.join(unknown)} ({', '.join(CHECKS)} or all)")
     if needs_password(a):
         ensure_password(a)
     run = open_run(a.cmd)

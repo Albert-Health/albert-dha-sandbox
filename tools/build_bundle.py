@@ -382,6 +382,7 @@ USAGE = f"""python3 {NAME} COMMAND ...   (from the repo root; same commands as b
   bundle-info                     file check, what the bundle carries, DDC reference check
   run ingest --cohorts c1 c2      IRIS -> canonical (data/canonical/nabidh/...) + COPY block
   run nb0 | run nb1 | run kpi     the other steps it carries (bundle-info lists them)
+  checks [1a 1c 1d]               Phase 1 step 1 value checks (c1 c2) in one block
   mapping c1 c2 | schemas | ...   the other enclave.sh commands, with the bundle's adapter
   bundle-extract DIR              write the embedded source files to DIR (to read them)
 """

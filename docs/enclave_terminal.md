@@ -90,6 +90,12 @@ python3 sandbox_bundle.py run nb0
 python3 sandbox_bundle.py run nb1
 ```
 
+Faz 1 adım 1'in değer kontrolleri (1a sigara kalemi, 1c lab / vital birimleri, 1d kodlar; c1 ve c2) tek blokta:
+
+```bash
+python3 sandbox_bundle.py checks
+```
+
 ```bash
 python3 sandbox_bundle.py run kpi
 ```
