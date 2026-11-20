@@ -565,3 +565,571 @@ Full screen output (inside the enclave): outputs/20261120T095641Z_enclave_run_c3
 
 run all · exit codes: ingest 0 · nb0 0 · nb1 0 · kpi 0
 ----8<---- COPY END ----8<----
+
+----8<---- COPY START | enclave run all | 2026-11-20 10:25 UTC | ingest v1.4.2 | commit 0366596 bundle a5e21e3435d8 | python 3.10.12 | 20261120T102546Z_enclave_run_ad28cb ----8<----
+### 1/4 · run ingest
+Step: run ingest · source nabidh · exit code 0 · 39 s
+Run: 20261120T102547Z_ingest_nabidh_11e27e · status: success · 35 outputs
+
+== C1 (ingest v1.4.2): 2596 patients · schema ERROR 0 / WARN 2 · unmapped value rows 434
+   rows: patients=2596, conditions=99467, medications=30737, labs=3142, observations=226200, encounters=0
+   patient_profile  read               read=2596 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=99397 dropped_no_date=17
+   observations     read               read=239815 dropped_empty_value=21520 dropped_empty_value_placeholder=14079 dropped_empty_value_by_code: 8302-2 (7500), 39156-5 (7322), 3141-9 (6698)
+   lab_results      read               read=3147 
+   social_history   read               read=3892 filtered_out_by_item=66 filtered_out_values_item: <empty> (41), Unknown (17), +3 labels < 10 rows
+   family_history   read               read=4094 
+   medications      read               read=24002 dropped_no_date=34
+   encounters       absent (optional)  read=- OperationalError: <SQL ERROR>; Details: [SQLCODE: <-99>:<Privilege violation>]
+[Location: <Prepare>]
+[%msg: <User dha-
+   schema check (non-INFO):
+       table                                                check severity n_affected detail
+    patients                                  sex not Male/Female     WARN        <10      U
+  conditions date exactly 1970-01-01 (placeholder? counted, kept)     WARN        <10    NaN
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                  value n_rows
+  social_history value → canonical       Smoking | other → unmapped:other    428
+  social_history value → canonical   Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical            Cigarettes | 1 → unmapped:1    <10
+  social_history value → canonical        Cigarettes | 1.5 → unmapped:1.5    <10
+  social_history value → canonical Cigarettes,Cigars | .25 → unmapped:.25    <10
+  social_history value → canonical                Cigars | 1 → unmapped:1    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                                          field                                                                            value n_rows
+                                              drug → ATC method                                                                         DDC code  19243
+                                              drug → ATC method                                                              DDC scientific code   3803
+                                              drug → ATC method                                              code not ATC/DDC → name: ingredient    209
+                                              drug → ATC method                                                                 name: trade name    140
+                                              drug → ATC method                                   DDC: not a study drug class → name: ingredient    134
+                                              drug → ATC method                                                         DDC scientific code stem    125
+                                              drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient    114
+                                              drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient    101
+                                              drug → ATC method                                                          DDC: non-systemic route     53
+                                              drug → ATC method                                                           name: brand first word     32
+                                              drug → ATC method                                            code not ATC/DDC → name: non-systemic     21
+                                              drug → ATC method                                              code not ATC/DDC → name: trade name    <10
+                                              drug → ATC method                                                    name: trade name + ingredient    <10
+                                              drug → ATC method                                                                 name: ingredient    <10
+                                              drug → ATC method                                              name: brand first word + ingredient    <10
+                                              drug → ATC method                                                        name: no study drug class    <10
+                                              drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+                                               drug code format                                              DDC product code (9999-999999-9999)  19427
+                                               drug code format                                                 DDC scientific code (999999-999)   3806
+                                               drug code format                                             VMP<id>,<dose>,<form> (no reference)    382
+                                               drug code format                                                                          no code    173
+                                               drug code format                                              6 digits (DDC scientific code stem)    125
+                                               drug code format                                                                            other     71
+                                               drug code format                                                placeholder (all zeros) → no code     18
+                              rows dropped: no study drug class                                                                         <no ATC>     78
+                 combination products (rows → several ATC rows)                                                                         <n rows>   6498
+                                    ATC (3 chars) after mapping                                                                              A10  17720
+                                    ATC (3 chars) after mapping                                                                              C09   5402
+                                    ATC (3 chars) after mapping                                                                              C08   3322
+                                    ATC (3 chars) after mapping                                                                              C07   2643
+                                    ATC (3 chars) after mapping                                                                              C03   1573
+                                    ATC (3 chars) after mapping                                                                              C02    110
+                                    ATC (3 chars) after mapping                                                                              C10    <10
+                                          drug code not ATC/DDC                                                          VMP34433,5 MG-160 MG,TA     32
+                                          drug code not ATC/DDC                                                                VMP4763,750 MG,TI     30
+                                          drug code not ATC/DDC                                                              VMP4763,1,000 MG,TI     22
+                                          drug code not ATC/DDC                                                            VMP45876,5 MG-5 MG,TA     16
+                                          drug code not ATC/DDC                                                         VMP18963,300 MG-25 MG,TA     15
+                                          drug code not ATC/DDC                                                                    VMP182,2 %,OA     15
+                                          drug code not ATC/DDC                                                         VMP34664,5 MG-1.25 MG,TA     14
+                                          drug code not ATC/DDC                                                                 VMP3660,40 MG,TA     12
+                                          drug code not ATC/DDC                                                                VMP4763,500 MG,TI     12
+                                          drug code not ATC/DDC                                             VMP44675,1 MG/0.75 ML (4 MG/3 ML),IJ     11
+                                   ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TABLET,EXTENDED RELEA     87
+                                   ATC ← drug_name (name match)   A10BK01+A10BA02 ← DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDED RELEASE TABLET     33
+                                   ATC ← drug_name (name match)               C08CA01+C09CA03 ← AMLODIPINE BESILATE/VALSARTAN 5 mg-160 mg Tablet     32
+                                   ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 750 mg Tablet, Extended Release 24 hr (TI)     30
+                                   ATC ← drug_name (name match) A10BA02 ← GLUCOPHAGE 1000 MG XR ....(TAKE AFTER MEALS AS ALREADY TAKING BEFORE-/     24
+                                   ATC ← drug_name (name match)             A10BA02 ← METFORMIN HCL 1,000 mg Tablet, Extended Release 24 hr (TI)     20
+                                   ATC ← drug_name (name match)       C07AB07+C08CA01 ← bisoprolol fumarate/amlodipine besilate 5 mg-5 mg Tablet     16
+                                   ATC ← drug_name (name match)             C09CA04+C03AA03 ← IRBESARTAN/HYDROCHLOROTHIAZIDE 300 mg-25 mg Tablet     15
+                                   ATC ← drug_name (name match)                                                         A10BK01+A10BA02 ← xigduo     14
+                                   ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,000 MG TABLET, EXT      14
+                                   ATC ← drug_name (name match)            C09AA04+C03BA11 ← PERINDOPRIL ARGININE/INDAPAMIDE 5 mg-1.25 mg Tablet     14
+                                   ATC ← drug_name (name match)                                                C03CA01 ← FUROSEMIDE 40 mg Tablet     12
+                                   ATC ← drug_name (name match)               A10BA02 ← METFORMIN HCL 500 mg Tablet, Extended Release 24 hr (TI)     12
+                                   ATC ← drug_name (name match)                                                        A10BH01+A10BA02 ← janumet     11
+                                   ATC ← drug_name (name match)         A10BJ06 ← semaglutide (44675) 1 mg/0.75 mL (4 mg/3 mL) Pen Injector (mL)     11
+                             drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     15
+  DDC: non-systemic route (DDC ingredients | route | row route)                                   DILTIAZEM HYDROCHLORIDE | RECTAL | row: Rectal     17
+  ... +7 more rows (raise with --max-rows)
+   diagnoses (Diagnosis_Code clean-up):
+                                        field               value n_rows
+  code cell with several codes → one row each 2 codes in the cell     87
+                   code: trailing dot removed            <n rows>     11
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                          value n_rows
+                 study lab: code | unit | name                              1558-6 | mg/dL | Glucose, Fasting   1436
+                 study lab: code | unit | name                                             4548-4 | % | HBA1C    660
+                 study lab: code | unit | name                      1558-6 | mg/dL | GLUCOSE FASTING (F.B.S.)    372
+                 study lab: code | unit | name                               1558-6 | mg/dL | Glucose Fasting    239
+                 study lab: code | unit | name                     1558-6 | mg/dL | Fasting Blood Sugar (FBS)    193
+                 study lab: code | unit | name                                             4548-4 | % | HbA1c    121
+                 study lab: code | unit | name                        1558-6 | mg/dL | Plasma Fasting Glucose     31
+                 study lab: code | unit | name                           1558-6 | mg/dL | FASTING BLOOD SUGAR     10
+         study lab unit: delivered → canonical                                                  mg/dL → mg/dL   1714
+         study lab unit: delivered → canonical                                                          % → %    802
+         study lab unit: delivered → canonical                                                  MG/DL → mg/dL    619
+         study lab unit: delivered → canonical                                                  mg/dl → mg/dL    <10
+         study lab unit: delivered → canonical                                                  0 → <no unit>    <10
+                          value by kind | unit        fpg | mg/dL : 920 patients, p5 80 / median 97 / p95 165   2319
+                          value by kind | unit        hba1c | % : 460 patients, p5 4.7 / median 5.5 / p95 7.9    802
+                          value by kind | unit ogtt_2h | mg/dL : 18 patients, p5 72.2 / median 98.1 / p95 186     21
+               rows dropped: non-numeric value                                                       <n rows>    <10
+     non-numeric value (dropped): kind | shape                                    hba1c | a a "a" a a a a a a    <10
+  rows dropped: study code, other test by name                                                       <n rows>    <10
+   vitals (Observation; no unit column; distribution in ≥ 10 patients — height ~150–180 cm, weight ~60–100 kg, BMI ~25–32):
+                                  field                                                                value n_rows
+          vital value by concept | unit          bmi | <no unit> : 2595 patients, p5 21 / median 28 / p95 39  12517
+          vital value by concept | unit height_cm | <no unit> : 2596 patients, p5 152 / median 165 / p95 183  91753
+          vital value by concept | unit   weight_kg | <no unit> : 2596 patients, p5 56 / median 79 / p95 116 114025
+  height in metres → cm (1.2–2.3 × 100)                                                             <n rows>    125
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                              field                                      value n_rows
+             diabetes recognised by                                SNOMED code   2354
+             diabetes recognised by                                  text only   1555
+             diabetes recognised by                                ICD-10 code    172
+          text only: Diagnosis_Code                                   Diabetes    800
+          text only: Diagnosis_Code                                   60376773    384
+          text only: Diagnosis_Code                                          2    100
+          text only: Diagnosis_Code                                      82680     65
+          text only: Diagnosis_Code                                          5     42
+          text only: Diagnosis_Code                     AZEGxwEmLzUcjUNUwKgAAg     35
+          text only: Diagnosis_Code                                   22112772     31
+          text only: Diagnosis_Code                                  121589010     16
+          text only: Diagnosis_Code                                  197763012     10
+                  relation → degree                             father → first   1887
+                  relation → degree                             mother → first   1865
+                  relation → degree                            brother → first    145
+                  relation → degree                             sister → first    117
+                  relation → degree                              child → first     39
+                  relation → degree                             parent → first     12
+  condition_text negated → negative No History Of Diabetes mellitus (disorder)     31
+== C2 (ingest v1.4.2): 2600 patients · schema ERROR 0 / WARN 1 · unmapped value rows 308
+   rows: patients=2600, conditions=90249, medications=33112, labs=2296, observations=117201, encounters=165479
+   patient_profile  read               read=2600 absent_optional_columns=['nationality', 'date_of_birth']
+   diagnoses        read               read=90190 dropped_no_date=36
+   observations     read               read=118603 dropped_empty_value=3548 dropped_empty_value_placeholder=2441 dropped_empty_value_by_code: 8302-2 (1502), 3141-9 (1241), 39156-5 (805)
+   lab_results      read               read=2309 dropped_empty_value=<10 dropped_empty_value_by_code: +1 labels < 10 rows
+   social_history   read               read=1617 filtered_out_by_item=150 filtered_out_values_item: <empty> (138), +5 labels < 10 rows
+   family_history   read               read=681 
+   medications      read               read=24653 dropped_no_date=<10
+   encounters       read               read=165479 
+   schema check (non-INFO):
+     table               check severity n_affected detail
+  patients sex not Male/Female     WARN        <10      U
+   unmapped values (to add to the adapter dictionaries; < 10 suppressed):
+          source             field                                value n_rows
+  social_history value → canonical     Smoking | other → unmapped:other    306
+  social_history value → canonical Cigarettes | <empty> → unmapped:<NA>    <10
+  social_history value → canonical        Cigarettes | 15 → unmapped:15    <10
+   drug → ATC (DDC code / drug name; code and name lists omit values with < 10 rows):
+                                                            field                                                                            value n_rows
+                                                drug → ATC method                                                                         DDC code  21027
+                                                drug → ATC method                                                              DDC scientific code   3107
+                                                drug → ATC method                                                         DDC scientific code stem    138
+                                                drug → ATC method                                   DDC: not a study drug class → name: ingredient    135
+                                                drug → ATC method                                              code not ATC/DDC → name: ingredient     86
+                                                drug → ATC method                                                                 name: trade name     31
+                                                drug → ATC method                                                          DDC: non-systemic route     30
+                                                drug → ATC method                           code not ATC/DDC → name: brand first word + ingredient     29
+                                                drug → ATC method                                 code not ATC/DDC → name: trade name + ingredient     23
+                                                drug → ATC method                                            code not ATC/DDC → name: non-systemic     22
+                                                drug → ATC method                                                                 name: ingredient    <10
+                                                drug → ATC method                                                    name: trade name + ingredient    <10
+                                                drug → ATC method                DDC: not a study drug class → name: brand first word + ingredient    <10
+                                                drug → ATC method                                                        name: no study drug class    <10
+                                                drug → ATC method                      DDC: not a study drug class → name: trade name + ingredient    <10
+                                                drug → ATC method                                                           name: brand first word    <10
+                                                drug → ATC method                                     code not ATC/DDC → name: no study drug class    <10
+                                                drug → ATC method                                                      DDC: not a study drug class    <10
+                                                drug → ATC method                                              name: brand first word + ingredient    <10
+                                                 drug code format                                              DDC product code (9999-999999-9999)  21217
+                                                 drug code format                                                 DDC scientific code (999999-999)   3109
+                                                 drug code format                                              6 digits (DDC scientific code stem)    139
+                                                 drug code format                                             VMP<id>,<dose>,<form> (no reference)    122
+                                                 drug code format                                                                          no code     35
+                                                 drug code format                                                                            other     17
+                                                 drug code format                                                placeholder (all zeros) → no code     14
+                                rows dropped: no study drug class                                                                         <no ATC>     57
+                   combination products (rows → several ATC rows)                                                                         <n rows>   7937
+                                      ATC (3 chars) after mapping                                                                              A10  17685
+                                      ATC (3 chars) after mapping                                                                              C09   6381
+                                      ATC (3 chars) after mapping                                                                              C08   4104
+                                      ATC (3 chars) after mapping                                                                              C07   2626
+                                      ATC (3 chars) after mapping                                                                              C03   2197
+                                      ATC (3 chars) after mapping                                                                              C02    125
+                                      ATC (3 chars) after mapping                                                                              C10    <10
+                                            drug code not ATC/DDC                                                            VMP46490,5 MG-5 MG,TA     22
+                                            drug code not ATC/DDC                                                                    VMP182,2 %,OA     16
+                                            drug code not ATC/DDC                                                           VMP41724,25 MG-5 MG,TA     12
+                                            drug code not ATC/DDC                                                  VMP42576,100 UNIT/ML (70-30),IO     10
+                                     ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TABLET,EXTENDED RELEA     83
+                                     ATC ← drug_name (name match)   A10BK01+A10BA02 ← DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDED RELEASE TABLET     34
+                                     ATC ← drug_name (name match)      C07AB07+C09AA04 ← bisoprolol fumarate/perindopril arginine 5 mg-5 mg Tablet     22
+                                     ATC ← drug_name (name match) A10BK01+A10BA02 ← DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,000 MG TABLET, EXT      17
+                                     ATC ← drug_name (name match)                    A10BK03+A10BH05 ← empagliflozin/linagliptin 25 mg-5 mg Tablet     12
+                                     ATC ← drug_name (name match)      A10A ← insulin degludec/insulin aspart 100 unit/mL (70-30) Insulin Pen (mL)     10
+                               drug_name without study drug class                                                diltiazem HCl 2 % Ointment (gram)     16
+    DDC: non-systemic route (DDC ingredients | route | row route)                                   DILTIAZEM HYDROCHLORIDE | RECTAL | row: Rectal     10
+                         DDC code without study class → name used                                                                         <n rows>    140
+  DDC code without study class → name used: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN 5 MG-METFORMIN ER 1,000 MG TAB     83
+  DDC code without study class → name used: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN/METFORMIN 5 MG/1000 MG EXTENDE     34
+  DDC code without study class → name used: DDC ≠ name ATC ← name CHOLECALCIFEROL ≠ A10BK01+A10BA02 ← DAPAGLIFLOZIN PROPANED 5 MG-METFORMIN ER 1,0     17
+           DDC code without study class, name has one (code kept)                                                                         <n rows>      0
+   diagnoses (Diagnosis_Code clean-up):
+                                        field               value n_rows
+  code cell with several codes → one row each 2 codes in the cell     89
+  code cell with several codes → one row each 3 codes in the cell    <10
+                   code: trailing dot removed            <n rows>    <10
+   lab (LabResultItem; kind | unit distribution in ≥ 10 patients; code / name lists omit values with < 10 rows):
+                                         field                                                         value n_rows
+                 study lab: code | unit | name                             1558-6 | mg/dL | Glucose, Fasting   1277
+                 study lab: code | unit | name                    1558-6 | mg/dL | Fasting Blood Sugar (FBS)    300
+                 study lab: code | unit | name                                            4548-4 | % | HBA1C    255
+                 study lab: code | unit | name                     1558-6 | mg/dL | GLUCOSE FASTING (F.B.S.)    132
+                 study lab: code | unit | name                                            4548-4 | % | HbA1c     69
+                 study lab: code | unit | name                              1558-6 | mg/dL | Glucose Fasting     66
+                 study lab: code | unit | name                          1558-6 | mg/dL | Fasting Blood Sugar     64
+                 study lab: code | unit | name                4548-4 | % | GLYCOSYLATED HEMOGLOBIN (HBA1C %)     35
+                 study lab: code | unit | name                       1558-6 | mg/dL | Plasma Fasting Glucose     23
+                 study lab: code | unit | name                    1521-4 | mg/dL | Blood Sugar Level - 2 Hrs     14
+         study lab unit: delivered → canonical                                                 mg/dL → mg/dL   1703
+         study lab unit: delivered → canonical                                                         % → %    373
+         study lab unit: delivered → canonical                                                 MG/DL → mg/dL    209
+         study lab unit: delivered → canonical                                                 mg/dl → mg/dL     15
+         study lab unit: delivered → canonical                                              NULL → <no unit>    <10
+         study lab unit: delivered → canonical                                                 0 → <no unit>    <10
+                          value by kind | unit    fpg | mg/dL : 727 patients, p5 81.1 / median 101 / p95 181   1888
+                          value by kind | unit    hba1c | % : 208 patients, p5 4.99 / median 5.78 / p95 8.68    373
+                          value by kind | unit ogtt_2h | mg/dL : 29 patients, p5 85.3 / median 124 / p95 246     35
+               rows dropped: non-numeric value                                                      <n rows>     10
+     non-numeric value (dropped): kind | shape                                   hba1c | a a "a" a a a a a a    <10
+     non-numeric value (dropped): kind | shape                                                     fpg | a.9    <10
+  rows dropped: study code, other test by name                                                      <n rows>    <10
+   vitals (Observation; no unit column; distribution in ≥ 10 patients — height ~150–180 cm, weight ~60–100 kg, BMI ~25–32):
+                                  field                                                                value n_rows
+          vital value by concept | unit           bmi | <no unit> : 301 patients, p5 21 / median 27 / p95 38   1724
+          vital value by concept | unit height_cm | <no unit> : 2435 patients, p5 151 / median 165 / p95 182  52822
+          vital value by concept | unit   weight_kg | <no unit> : 2484 patients, p5 55 / median 78 / p95 112  60509
+  height in metres → cm (1.2–2.3 × 100)                                                             <n rows>     42
+   family history (how diabetes was recognised; text lists omit values with < 10 rows):
+                      field           value n_rows
+     diabetes recognised by       text only    424
+     diabetes recognised by     SNOMED code    223
+     diabetes recognised by     ICD-10 code     33
+  text only: Diagnosis_Code        Diabetes    317
+  text only: Diagnosis_Code               2     36
+  text only: Diagnosis_Code        60376773     13
+  text only: Diagnosis_Code        22112772     12
+          relation → degree  mother → first    297
+          relation → degree  father → first    279
+          relation → degree brother → first     39
+          relation → degree  sister → first     37
+          relation → degree   child → first     21
+Full screen output (inside the enclave): outputs/20261120T102546Z_enclave_run_ad28cb/enclave/ingest.log
+
+### 2/4 · run nb0
+Step: run nb0 · source nabidh · exit code 0 · 21 s
+Data: c1 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e); c2 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e)
+Run: 20261120T102626Z_nb00_data_profile_308dbb · status: success · 18 outputs
+
+-- nb00/schema_validation.csv (3 rows)
+       table                                                check severity n_affected detail cohort
+    patients                                  sex not Male/Female     WARN        <10      U     c1
+  conditions date exactly 1970-01-01 (placeholder? counted, kept)     WARN        <10    NaN     c1
+    patients                                  sex not Male/Female     WARN        <10      U     c2
+-- nb00/volume.csv (12 rows)
+  cohort        table   rows patients   date_min   date_max
+      c1     patients   2596     2596        NaN        NaN
+      c1   conditions  99467     2595 1970-01-01 2026-06-30
+      c1  medications  30737     1533 2009-12-30 2026-07-19
+      c1         labs   3142     1112 2021-02-24 2026-06-13
+      c1 observations 226200     2596 1969-04-27 2026-11-17
+      c1   encounters      0        0        NaN        NaN
+      c2     patients   2600     2600        NaN        NaN
+      c2   conditions  90249     2564 1984-04-11 2026-07-01
+      c2  medications  33112     1480 2018-11-05 2026-07-03
+      c2         labs   2296      828 2021-02-24 2026-06-21
+      c2 observations 117201     2495 1971-11-03 2026-10-28
+      c2   encounters 165479     2573 1976-01-01 2026-11-17
+-- nb00/facility_representation.csv: no facility in any cohort (facility_id empty / unknown; the adapter maps none yet — DHA question)
+-- nb00/vital_plausibility.csv (8 rows)
+  cohort  variable plausible_range   rows rows_out_of_range rows_below rows_non_numeric patients patients_out_of_range patients_without_plausible_value
+      c1       bmi           12–80  12517                94        <10                0     2595                    80                               11
+      c1 height_cm         120–230  91753               892        876               52     2596                   492                              <10
+      c1 weight_kg          25–350 114025               402        349               47     2596                   270                                0
+      c1  waist_cm          40–250      0                 0          0                0        0                     0                                0
+      c2       bmi           12–80   1724                14          0                0      301                    13                              <10
+      c2 height_cm         120–230  52822               384        376               24     2435                   182                              <10
+      c2 weight_kg          25–350  60509               211        196              <10     2484                    94                                0
+      c2  waist_cm          40–250      0                 0          0                0        0                     0                                0
+-- nb00/demographics.csv (2 rows)
+  cohort    n  age_median age_iqr age_missing_n age_outside_25_84_n  age_outside_25_84_pct  male_pct
+      c1 2596        45.5   38–52             0                   0                    0.0      40.1
+      c2 2600        48.4   41–57             0                   0                    0.0      60.7
+-- nb00/framework_match.csv (37 rows)
+       domain                   group               c1           c2
+    diagnosis                bmi_code              7.9          5.0
+    diagnosis                     cvd             19.3         16.9
+    diagnosis       family_history_dm             12.0          5.1
+    diagnosis                     gdm              0.0          0.0
+    diagnosis            hypertension             38.4         45.5
+    diagnosis     learning_disability              0.0          0.0
+    diagnosis                 obesity             19.8         10.7
+    diagnosis                    pcos              0.0          0.0
+    diagnosis             prediabetes             83.9         65.0
+    diagnosis   schizophrenia_bipolar              0.0          0.0
+    diagnosis         smoking_current              0.5          0.4
+    diagnosis              smoking_ex     <10 patients <10 patients
+    diagnosis           smoking_never              0.0          0.0
+    diagnosis                     t1d              0.0          0.0
+    diagnosis                     t2d             46.6         53.5
+          lab            fpg (1558-6)             35.4         28.0
+          lab         hba1c (17856-6)              0.0          0.0
+          lab          hba1c (4548-4)             17.7          8.0
+          lab    hba1c_ifcc (59261-8)              0.0          0.0
+          lab        ogtt_2h (1521-4)              0.7          1.1
+          lab random_glucose (2339-0)              0.0          0.0
+          lab random_glucose (2345-7)              0.0          0.0
+   medication            antidiabetic             47.3         42.6
+   medication        antihypertensive             33.1         36.3
+   medication  atypical_antipsychotic              0.0          0.0
+   medication          corticosteroid              0.0          0.0
+   medication                  statin     <10 patients <10 patients
+  observation             alcohol_use              0.0          0.0
+  observation                     bmi suppressed (<10)         11.6
+  observation                     dbp              0.0          0.0
+  observation               height_cm            100.0         93.7
+  observation                  hip_cm              0.0          0.0
+  observation              pack_years              0.0          0.0
+  observation                     sbp              0.0          0.0
+  observation          smoking_status             99.6         50.5
+  observation                waist_cm              0.0          0.0
+  observation               weight_kg            100.0         95.5
+-- nb00/framework_variables.csv (16 rows)
+  cohort       variable                                                                    source_field        route patients_with_value     pct_patients  status                                                                                                           reason
+      c1            sex                                                             Patient.Gender_Code as_requested                2595 suppressed (<10)   Match                                                                                                              NaN
+      c1            age                                                                     Patient.Age as_requested                2596            100.0   Match                                                                                                              NaN
+      c1      ethnicity                           Patient.Nationality | Patient.EthnicGroup_Description   substitute                 168              6.5 Partial     requested nationality not delivered; only ethnicity_raw has values; values for only 6.5% of patients (< 50%)
+      c1            bmi Observation.ObservationValue (LOINC 39156-5 BMI; 8302-2 height + 3141-9 weight) as_requested                2595 suppressed (<10)   Match                                                                                                              NaN
+      c1        smoking                                        SocialHistory.SocialHabitQty_Description as_requested                2522             97.1 Partial                                                                                  level seen in < 10 patients: ex
+      c1 family_history                                                    FamilyHistory.Diagnosis_Code      derived                2585             99.6 Partial                                            38% of the records not in the requested system (ICD-10 / SNOMED code)
+      c1            cvd                                                        Diagnosis.Diagnosis_Code as_requested                 502             19.3   Match                                                                                                              NaN
+      c1   hypertension                          Diagnosis.Diagnosis_Code + Medication.DrugProduct_Code      derived                1128             43.5 Partial                                                         drug: 100% of the rows not in the requested system (ATC)
+      c2            sex                                                             Patient.Gender_Code as_requested                2598 suppressed (<10)   Match                                                                                                              NaN
+      c2            age                                                                     Patient.Age as_requested                2600            100.0   Match                                                                                                              NaN
+      c2      ethnicity                           Patient.Nationality | Patient.EthnicGroup_Description   substitute                 267             10.3 Partial    requested nationality not delivered; only ethnicity_raw has values; values for only 10.3% of patients (< 50%)
+      c2            bmi Observation.ObservationValue (LOINC 39156-5 BMI; 8302-2 height + 3141-9 weight) as_requested                2431             93.5   Match                                                                                                              NaN
+      c2        smoking                                        SocialHistory.SocialHabitQty_Description as_requested                 381             14.7 Partial                                       level seen in < 10 patients: ex; values for only 14.7% of patients (< 50%)
+      c2 family_history                                                    FamilyHistory.Diagnosis_Code      derived                 508             19.5 Partial 62% of the records not in the requested system (ICD-10 / SNOMED code); values for only 19.5% of patients (< 50%)
+      c2            cvd                                                        Diagnosis.Diagnosis_Code as_requested                 440             16.9   Match                                                                                                              NaN
+      c2   hypertension                          Diagnosis.Diagnosis_Code + Medication.DrugProduct_Code      derived                1272             48.9 Partial                                                         drug: 100% of the rows not in the requested system (ATC)
+-- nb00/unmapped_codes.csv (0 rows)
+  (empty)
+-- nb00/kpi_preview.csv (3 rows)
+                                                         kpi cohort target  actual   met                                 weakest_variable  status
+  Data Completeness for Required Variables (min over 8 core)     c1 >= 90%    0.0% False                                        ethnicity     NaN
+  Data Completeness for Required Variables (min over 8 core)     c2 >= 90%    0.0% False                                        ethnicity     NaN
+                  Applicant Data Requirement Framework Match    all  Match Partial False ethnicity, smoking, family_history, hypertension Partial
+Full screen output (inside the enclave): outputs/20261120T102546Z_enclave_run_ad28cb/enclave/nb0.log
+
+### 3/4 · run nb1
+Step: run nb1 · source nabidh · exit code 0 · 27 s
+Data: c1 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e); c2 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e)
+Run: 20261120T102647Z_nb01_c1_c2_feasibility_879aa1 · status: success · 16 outputs
+
+-- nb01/completeness_by_variable.csv (18 rows)
+  cohort group                variable        measure    n complete_n     complete_pct meets_90                                                                 note
+      c1   all                     sex       recorded 2595       2594 suppressed (<10)     True                                                a value in the record
+      c1   all                     age       recorded 2595       2595            100.0     True                                                a value in the record
+      c1   all               ethnicity       recorded 2595          0              0.0    False                                                a value in the record
+      c1   all                     bmi       recorded 2595       2594 suppressed (<10)     True                                                a value in the record
+      c1   all                 smoking       recorded 2595       2521             97.1     True                                                a value in the record
+      c1   all          family_history present_absent 2595       2595            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c1   all family_history_recorded       recorded 2595       2584             99.6     True FamilyHistory record (positive / negative / other relative) or Z83.3
+      c1   all                     cvd present_absent 2595       2595            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c1   all            hypertension present_absent 2595       2595            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all                     sex       recorded 2564       2562 suppressed (<10)     True                                                a value in the record
+      c2   all                     age       recorded 2564       2564            100.0     True                                                a value in the record
+      c2   all               ethnicity       recorded 2564          0              0.0    False                                                a value in the record
+      c2   all                     bmi       recorded 2564       2424             94.5     True                                                a value in the record
+      c2   all                 smoking       recorded 2564        381             14.9    False                                                a value in the record
+      c2   all          family_history present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all family_history_recorded       recorded 2564        507             19.8    False FamilyHistory record (positive / negative / other relative) or Z83.3
+      c2   all                     cvd present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+      c2   all            hypertension present_absent 2564       2564            100.0        -              no record = absent: 100% by definition, not a fill rate
+-- nb01/ethnicity_source_compare.csv (4 rows)
+  cohort group ethnicity_source  default    n ethnicity_known_n  ethnicity_known_pct qd_computable_n  qd_computable_pct lrs_computable_n  lrs_computable_pct joint_core7_n  joint_core7_pct joint_core8_n  joint_core8_pct
+      c1   all      nationality     True 2595                 0                  0.0            2519               97.1                0                 0.0          2519             97.1             0              0.0
+      c2   all      nationality     True 2564                 0                  0.0             372               14.5                0                 0.0           372             14.5             0              0.0
+      c1   all        ethnicity    False 2595               168                  6.5            2519               97.1              168                 6.5          2519             97.1           162              6.2
+      c2   all        ethnicity    False 2564               266                 10.4             372               14.5              237                 9.2           372             14.5            31              1.2
+-- nb01/ethnicity_mapping_by_source.csv (6 rows)
+  ethnicity_source                     source_value                     ethnic_group               qdiabetes_category   c1   c2
+       nationality                        <missing>                        <missing>                          WhiteNA 2595 2564
+         ethnicity                        <missing>                        <missing>                          WhiteNA 2427 2298
+         ethnicity                            Arabs                            Arabs                            Other   13  <10
+         ethnicity                    Not Available                    Not Available                            Other   43  121
+         ethnicity                                U                                U                            Other   91  119
+         ethnicity (values with < 10 patients each) (values with < 10 patients each) (values with < 10 patients each)   21   20
+-- nb01/selection_effect_smd.csv (14 rows)
+               variable     c1     c2    smd  |smd|>0.1
+                    age 46.145 49.723 -0.331       True
+                    bmi 28.254 28.524 -0.048      False
+                   male  0.400  0.607 -0.422       True
+  t2dm (vs prediabetes)  0.470  0.547 -0.155       True
+         family_history  0.987  0.196  2.710       True
+                    cvd  0.193  0.172  0.057      False
+                 htn_dx  0.385  0.462 -0.157       True
+                htn_med  0.331  0.368 -0.078      False
+        smoking_current  0.132  0.022  0.422       True
+                has_a10  0.474  0.432  0.084      False
+            eth_Emirati    NaN    NaN    NaN      False
+             eth_Indian    NaN    NaN    NaN      False
+          eth_Pakistani    NaN    NaN    NaN      False
+           eth_Filipino    NaN    NaN    NaN      False
+-- nb01/score_computability.csv (6 rows)
+  cohort       group    n  qd_computable_pct  lrs_computable_pct  lrs_outside_dev_age_pct    qd_variant                 lrs_variant
+      c1         all 2595               97.1                 0.0                     30.2 reduced_8core LPRS (Gray 2012 — no waist)
+      c1 Prediabetes 1376               96.4                 0.0                     38.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c1        T2DM 1219               97.8                 0.0                     20.8 reduced_8core LPRS (Gray 2012 — no waist)
+      c2         all 2564               14.5                 0.0                     23.1 reduced_8core LPRS (Gray 2012 — no waist)
+      c2 Prediabetes 1162               18.2                 0.0                     30.5 reduced_8core LPRS (Gray 2012 — no waist)
+      c2        T2DM 1402               11.5                 0.0                     17.0 reduced_8core LPRS (Gray 2012 — no waist)
+-- nb01/score_missing_reasons.csv (12 rows)
+  cohort     score          reason    n              pct
+      c1 qdiabetes smoking_missing   74              2.9
+      c1 qdiabetes             sex  <10 suppressed (<10)
+      c1 qdiabetes     bmi_missing  <10 suppressed (<10)
+      c1       lrs       ethnicity 2595            100.0
+      c1       lrs             sex  <10 suppressed (<10)
+      c1       lrs     bmi_missing  <10 suppressed (<10)
+      c2 qdiabetes smoking_missing 2183             85.1
+      c2 qdiabetes     bmi_missing  140              5.5
+      c2 qdiabetes             sex  <10 suppressed (<10)
+      c2       lrs       ethnicity 2564            100.0
+      c2       lrs     bmi_missing  140              5.5
+      c2       lrs             sex  <10 suppressed (<10)
+-- nb01/smoking_source.csv (10 rows)
+  cohort             smoking_source    n              pct
+      c1         undated_consistent 2387             92.0
+      c1                 structured  122              4.7
+      c1 missing (undated conflict)   60              2.3
+      c1                    missing   14              0.5
+      c1             diagnosis_code   12              0.5
+      c2                    missing 2175             84.8
+      c2         undated_consistent  335             13.1
+      c2                 structured   31              1.2
+      c2             diagnosis_code   15              0.6
+      c2 missing (undated conflict)  <10 suppressed (<10)
+-- nb01/htn_derivation.csv (8 rows)
+  cohort group             htn_category    n n_group  pct     counted_as_treated_by
+      c1   all           diagnosis only  269    2595 10.4 QDiabetes, LPRS, LRA 2010
+      c1   all          medication only  130    2595  5.0 QDiabetes, LPRS, LRA 2010
+      c1   all diagnosis and medication  729    2595 28.1 QDiabetes, LPRS, LRA 2010
+      c1   all                  neither 1467    2595 56.5                      none
+      c2   all           diagnosis only  328    2564 12.8 QDiabetes, LPRS, LRA 2010
+      c2   all          medication only   88    2564  3.4 QDiabetes, LPRS, LRA 2010
+      c2   all diagnosis and medication  856    2564 33.4 QDiabetes, LPRS, LRA 2010
+      c2   all                  neither 1292    2564 50.4                      none
+-- nb01/smoking_level.csv (18 rows)
+  cohort qd_smoking_level                                                   recorded_as    n              pct n_from_diagnosis_code
+      c1              non                                                         never 2177             83.9                     0
+      c1               ex                                                            ex  <10 suppressed (<10)                   <10
+      c1            light                                                         light  179              6.9                     0
+      c1         moderate                                                      moderate   45              1.7                     0
+      c1         moderate               current, intensity not recorded (D7 → moderate)   10              0.4                    10
+      c1            heavy                                                         heavy  108              4.2                     0
+      c1          missing                                undated records disagree (D28)   60              2.3                     0
+      c1          missing                                             no smoking record   10              0.4                     0
+      c1          missing records present, none usable (unknown / unmapped, e.g. other)  <10 suppressed (<10)                     0
+      c2              non                                                         never  318             12.4                     0
+      c2               ex                                                            ex  <10 suppressed (<10)                   <10
+      c2            light                                                         light   26              1.0                     0
+      c2         moderate                                                      moderate   11              0.4                     0
+      c2         moderate               current, intensity not recorded (D7 → moderate)  <10 suppressed (<10)                   <10
+      c2            heavy                                                         heavy   11              0.4                     0
+      c2          missing                                             no smoking record 1248             48.7                     0
+      c2          missing records present, none usable (unknown / unmapped, e.g. other)  927             36.2                     0
+      c2          missing                                undated records disagree (D28)  <10 suppressed (<10)                     0
+-- nb01/c1_detection_rate.csv (24 rows)
+  cohort      reference       group     score    n n_computable n_flagged  sens_computable  ci_low  ci_high                        threshold
+      c1       data_end         all       lrs 2595            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end         all qdiabetes 2595         2519       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end        T2DM       lrs 1219            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end        T2DM qdiabetes 1219         1192       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1       data_end Prediabetes       lrs 1376            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1       data_end Prediabetes qdiabetes 1376         1327       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence         all       lrs 2595            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence         all qdiabetes 2595         2036       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence        T2DM       lrs 1219            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence        T2DM qdiabetes 1219          901       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c1 first_evidence Prediabetes       lrs 1376            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c1 first_evidence Prediabetes qdiabetes 1376         1135       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end         all       lrs 2564            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end         all qdiabetes 2564          372       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end        T2DM       lrs 1402            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end        T2DM qdiabetes 1402          161       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2       data_end Prediabetes       lrs 1162            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2       data_end Prediabetes qdiabetes 1162          211       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence         all       lrs 2564            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence         all qdiabetes 2564          269       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence        T2DM       lrs 1402            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence        T2DM qdiabetes 1402          101       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+      c2 first_evidence Prediabetes       lrs 1162            0       NaN              NaN     NaN      NaN Pending (D23: no LPRS threshold)
+      c2 first_evidence Prediabetes qdiabetes 1162          168       NaN              NaN     NaN      NaN       Pending (D5: no threshold)
+-- nb01/score_summary.csv (4 rows)
+       status  qd_median_pct  lrs_median  lrs_p25  lrs_p75  lrs_high_risk_pct cohort                 lrs_variant
+  Prediabetes           3.19         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+         T2DM           8.26         NaN      NaN      NaN                NaN     c1 LPRS (Gray 2012 — no waist)
+  Prediabetes           2.97         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+         T2DM           6.41         NaN      NaN      NaN                NaN     c2 LPRS (Gray 2012 — no waist)
+-- nb01/joint_completeness.csv (6 rows)
+  cohort       group    n joint_core7_n  joint_core7_pct joint_core8_n  joint_core8_pct joint_lrs_n  joint_lrs_pct
+      c1         all 2595          2519             97.1             0              0.0           0            0.0
+      c1 Prediabetes 1376          1327             96.4             0              0.0           0            0.0
+      c1        T2DM 1219          1192             97.8             0              0.0           0            0.0
+      c2         all 2564           372             14.5             0              0.0           0            0.0
+      c2 Prediabetes 1162           211             18.2             0              0.0           0            0.0
+      c2        T2DM 1402           161             11.5             0              0.0           0            0.0
+Full screen output (inside the enclave): outputs/20261120T102546Z_enclave_run_ad28cb/enclave/nb1.log
+
+### 4/4 · run kpi
+Step: run kpi · source nabidh · exit code 0 · 1 s
+Data: c1 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e); c2 ingest v1.4.2 (20261120T102547Z_ingest_nabidh_11e27e)
+Run: 20261120T102714Z_kpi_report_89166a · status: success · 3 outputs
+KPI inputs: nb00 20261120T102626Z_nb00_data_profile_308dbb · nb01 20261120T102647Z_nb01_c1_c2_feasibility_879aa1 · nb02 none
+
+-- kpi/kpi_table.csv (15 rows)
+                                         kpi         target                                                    actual      met
+                    Audit Trail Completeness           100%                                        98.9% (86/87 runs)  Not Met
+               Evidence Package Completeness       Complete                                                       NaN  Pending
+                 Data Security / No-Incident    0 incidents                                               0 incidents      Met
+  Applicant Data Requirement Framework Match          Match Partial: ethnicity, smoking, family_history, hypertension  Partial
+    Data Completeness for Required Variables         >= 90%                                          C1 0.0%; C2 0.0%  Not Met
+                    Joint Completeness - LRS Report % and N                    C1 0.0% (N=0/2595); C2 0.0% (N=0/2564) Reported
+              Joint Completeness - QDiabetes Report % and N                    C1 0.0% (N=0/2595); C2 0.0% (N=0/2564) Reported
+        Sensitivity (Recall, positive class)         >= 70%                                                       NaN  Pending
+                                 Specificity         >= 70%                                                       NaN  Pending
+                                   NPV & PPV     Documented                                                       NaN  Pending
+                                       AUROC        >= 0.75                                                       NaN  Pending
+                                     C-Index      0.55-0.90                                                       NaN  Pending
+                     Precision / Recall / F1     Documented                                                       NaN  Pending
+                   Recalibration Slope / O:E     Documented                                                       NaN  Pending
+               Alert Rate per 1,000 Patients Pending NABIDH                                                       NaN  Pending
+-- kpi/kpi_table.csv (1 rows)
+                       kpi                                                notes
+  Audit Trail Completeness Open runs: 20261119T054135Z_nb00_data_profile_b068d0
+-- kpi/kpi_table.csv (1 rows)
+                                       kpi                                                                                                                                                                                                                                                                                                                 notes
+  Data Completeness for Required Variables Weakest variable: C1 ethnicity 0.0%; C2 ethnicity 0.0% · Without ethnicity (weakest of the other 7): C1 smoking 97.1%; C2 smoking 14.9% · Joint core-7 (all but ethnicity): C1 97.1% (N=2519/2595); C2 14.5% (N=372/2564) · Present / absent, 100% by definition (not a fill rate): family_history, cvd, hypertension
+Full screen output (inside the enclave): outputs/20261120T102546Z_enclave_run_ad28cb/enclave/kpi.log
+
+run all · exit codes: ingest 0 · nb0 0 · nb1 0 · kpi 0
+----8<---- COPY END ----8<----
