@@ -92,7 +92,7 @@ def _load(run_dir: Path | None, rel: str) -> dict:
 def audit_completeness(log: Path = AUDIT_DIR / "audit_log.jsonl", running=()) -> dict:
     """Share of audit runs that were closed. `running`: run ids still in progress (the enclave run that started the
     KPI step, SANDBOX_PARENT_RUN) — not counted, as they close after this step."""
-    starts, ends = set(), set()
+    starts, ends, abandoned = set(), set(), set()
     if log.exists():
         for line in log.read_text(encoding="utf-8").splitlines():
             ev = json.loads(line)
@@ -100,9 +100,12 @@ def audit_completeness(log: Path = AUDIT_DIR / "audit_log.jsonl", running=()) ->
                 starts.add(ev["run_id"])
             elif ev.get("event") == "run_end":
                 ends.add(ev["run_id"])
+                if ev.get("closed_after_the_fact"):      # audit.close_abandoned (D34): closed, and named in the note
+                    abandoned.add(ev["run_id"])
     starts -= set(running)
     pct = 100.0 * len(starts & ends) / len(starts) if starts else float("nan")
-    return {"runs": len(starts), "closed": len(starts & ends), "pct": pct, "open": sorted(starts - ends)}
+    return {"runs": len(starts), "closed": len(starts & ends), "pct": pct, "open": sorted(starts - ends),
+            "abandoned": sorted(starts & abandoned)}
 
 
 def _fmt(x, nd=3):
@@ -252,9 +255,11 @@ def build(nb0: dict, nb1: dict, nb2: dict, evidence: dict, audit: dict, p: dict 
         rows[k].update(actual=actual, met=met, source=source, notes=notes)
 
     if audit.get("runs"):
+        notes = (["Open runs: " + ", ".join(audit["open"][:5])] if audit["open"] else []) + \
+                (["Closed after the fact as abandoned (run_end appended, D34): " + ", ".join(audit["abandoned"][:5])]
+                 if audit.get("abandoned") else [])
         set_("Audit Trail Completeness", f"{audit['pct']:.1f}% ({audit['closed']}/{audit['runs']} runs)",
-             "Met" if audit["pct"] >= 100 else "Not Met", "outputs/audit/audit_log.jsonl",
-             "Open runs: " + ", ".join(audit["open"][:5]) if audit["open"] else "")
+             "Met" if audit["pct"] >= 100 else "Not Met", "outputs/audit/audit_log.jsonl", " · ".join(notes))
     if evidence:
         set_("Evidence Package Completeness", f"{evidence['complete_sections']}/{evidence['total_sections']} sections",
              "Met" if evidence["complete"] else "Not Met", evidence.get("path", ""),

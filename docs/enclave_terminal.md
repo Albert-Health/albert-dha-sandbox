@@ -347,6 +347,7 @@ Faz 2 (C3) aynı yoldan: `run ingest --cohorts c3`, sonra `run nb2` (hızlı den
 | `run ingest\|nb0\|nb1\|nb2\|kpi` | adımı çalıştırır, özet bloğu basar |
 | `show ADIM [DOSYA]` | bir run'ın çıktı tablosunu basar (sayımlar bastırılmış) |
 | `last` | son bloğu yeniden basar (günlük dosyaya tekrar eklemez) |
+| `audit-close` · `audit-close RUN_ID --reason "..."` | audit log'da kapanmamış run'ları listeler / birini "abandoned" olarak kapatır: log'a `run_end` **eklenir**, hiçbir satır silinmez ya da değişmez; KPI notunda görünür (D34) |
 
 Ortak seçenekler: `--max-rows N` (tablo satırı), `--iris-sqlite DIZIN` (prova, §9).
 
@@ -362,6 +363,7 @@ Ortak seçenekler: `--max-rows N` (tablo satırı), `--iris-sqlite DIZIN` (prova
 | `no such schema` / `No such table` | blok yakın adları önerir; `schemas`, `find` ile ara |
 | `run` çıkış kodu ≠ 0 | blokta "Where" ve "Error" satırları var; hasta değeri içermiyorsa bloğu gönder |
 | Blok ekrandan kaydı | `last` |
+| Audit Trail < %100, KPI notunda "Open runs: …" | süreç `run_end` yazamadan bitmiş (terminal kapandı, kill). Önce `audit-close` ile listele, sonra `audit-close RUN_ID --reason "..."`, ardından `run kpi`. Satır silme: log append-only (AGENTS kural 4) |
 
 ## 9. Yerelde prova (enclave dışında)
 

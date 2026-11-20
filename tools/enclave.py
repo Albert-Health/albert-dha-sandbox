@@ -1395,6 +1395,40 @@ def cmd_show(a, out: Block, run) -> int:
     return 0
 
 
+def cmd_audit_close(a, out: Block, run) -> int:
+    """Audit Trail Completeness counts a run without run_end as open (VM: one NB0 run from 2026-11-19, process ended
+    without atexit). The log is append-only: the run is closed by appending a run_end "abandoned" event with the
+    reason (audit.close_abandoned, decision D34), never by editing or deleting lines. This command is itself audited."""
+    from sandbox import audit
+
+    current = run.run_id if run else None
+    still_open = [r for r in audit.open_runs() if r["run_id"] != current]
+    if not a.run_id:
+        out(f"Open runs in the audit log (without this command's own run): {len(still_open)}")
+        for r in still_open:
+            out(f"  {r['run_id']} · {r['name']} · started {r['ts']} · {r['n_outputs']} outputs registered")
+        if still_open:
+            out(f'Close one: {CMD} audit-close RUN_ID --reason "..."  (appends run_end "abandoned"; nothing is deleted)')
+        return 0
+    if a.run_id == current:
+        raise ValueError("this command's own run cannot be closed by it")
+    if not a.reason.strip():
+        raise ValueError('--reason is required, e.g. --reason "process ended without run_end (terminal closed)"')
+    got = audit.close_abandoned(a.run_id, a.reason, closed_by_run=current)
+    ev = got["closed"]
+    out(f"Closed as abandoned: {got['run_id']} · {got['name']} · started {got['ts']} · "
+        f"{got['n_outputs']} outputs registered")
+    out(f"Appended to outputs/audit/audit_log.jsonl: run_end status={ev['status']} closed_after_the_fact=true "
+        f"closed_by_run={ev['closed_by_run']} ts={ev['ts']}")
+    out(f"Reason: {ev['reason'][:200]}")
+    left = [r["run_id"] for r in audit.open_runs() if r["run_id"] != current]
+    out(f"Open runs left (without this command's own run): {len(left)}" + (f" — {', '.join(left[:5])}" if left else ""))
+    out(f"The KPI shows the closure in its note: {CMD} run kpi")
+    if run:
+        run.log("audit run closed as abandoned", closed_run=got["run_id"], reason=ev["reason"])
+    return 0
+
+
 def cmd_last(a) -> int:
     from sandbox.config import OUTPUT_DIR
 
@@ -1413,7 +1447,7 @@ def cmd_last(a) -> int:
 
 HANDLERS = {"req": cmd_req, "iris-setup": cmd_iris_setup, "schemas": cmd_schemas, "tables": cmd_tables,
             "columns": cmd_columns, "values": cmd_values, "checks": cmd_checks, "find": cmd_find, "count": cmd_count,
-            "mapping": cmd_mapping, "run": cmd_run, "show": cmd_show}
+            "mapping": cmd_mapping, "run": cmd_run, "show": cmd_show, "audit-close": cmd_audit_close}
 
 
 # --------------------------------------------------------------------------
@@ -1492,6 +1526,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("show", parents=[common], help="print a run's output table (counts suppressed)")
     p.add_argument("run", metavar="RUN", help="step name (ingest, nb0, nb1, nb2, kpi), last or a run_id")
     p.add_argument("path", nargs="?", metavar="FILE", help="e.g. nb01/score_summary.csv (empty: list)")
+
+    p = sub.add_parser("audit-close", help="list runs left open in the audit log, or close one as abandoned "
+                                           "(appends run_end; nothing is deleted)")
+    p.add_argument("run_id", nargs="?", metavar="RUN_ID", help="the open run to close (empty: list open runs)")
+    p.add_argument("--reason", default="", help="why it never closed (required to close; written to the audit log)")
 
     sub.add_parser("last", help="reprint the last COPY block")
     sub.add_parser("help", help="this help")

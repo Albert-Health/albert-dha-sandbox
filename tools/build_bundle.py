@@ -385,6 +385,7 @@ USAGE = f"""python3 {NAME} COMMAND ...   (from the repo root; same commands as b
   run all                         ingest c1 c2 -> nb0 -> nb1 -> kpi in one COPY block
   checks [1a 1c 1d]               Phase 1 step 1 value checks (c1 c2) in one block
   mapping c1 c2 | schemas | ...   the other enclave.sh commands, with the bundle's adapter
+  audit-close [RUN_ID --reason ..] list runs left open in the audit log / close one as abandoned
   bundle-extract DIR              write the embedded source files to DIR (to read them)
 Every COPY block is also appended to logs/enclave/<UTC date>.log in the repo root (the block only).
 """

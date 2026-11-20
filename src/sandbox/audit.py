@@ -113,6 +113,70 @@ def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
+def _on_terminate(signum, frame):                     # noqa: ARG001
+    raise SystemExit(128 + signum)
+
+
+def _exit_on_terminate() -> None:
+    """SIGTERM (kill) and SIGHUP (terminal closed) end the process without atexit, so the run would stay open in the
+    audit log (VM, 2026-11-19). Turn them into SystemExit: atexit then writes run_end "failed_or_interrupted". Only
+    where the signal still has its default handler, and only from the main thread. SIGKILL cannot be caught: a run
+    killed that way is closed afterwards with `close_abandoned`."""
+    import signal
+    import threading
+
+    if threading.current_thread() is not threading.main_thread():
+        return
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is not None and signal.getsignal(sig) == signal.SIG_DFL:
+            signal.signal(sig, _on_terminate)
+
+
+ABANDONED = "abandoned"
+
+
+def read_log(log: Path | None = None) -> list[dict]:
+    """The audit log's events, in order ([] if there is no log)."""
+    log = log or AUDIT_DIR / "audit_log.jsonl"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def open_runs(log: Path | None = None) -> list[dict]:
+    """Runs with a run_start and no run_end: [{run_id, name, ts, n_outputs}] in log order."""
+    events = read_log(log)
+    ended = {e["run_id"] for e in events if e.get("event") == "run_end"}
+    outputs: dict[str, int] = {}
+    for e in events:
+        if e.get("event") == "output":
+            outputs[e["run_id"]] = outputs.get(e["run_id"], 0) + 1
+    return [{"run_id": e["run_id"], "name": e.get("name"), "ts": e.get("ts"), "n_outputs": outputs.get(e["run_id"], 0)}
+            for e in events if e.get("event") == "run_start" and e["run_id"] not in ended]
+
+
+def close_abandoned(run_id: str, reason: str, closed_by_run: str | None, log: Path | None = None) -> dict:
+    """Close a run that never wrote run_end (process killed, terminal closed) by APPENDING a run_end event with status
+    "abandoned", the reason, who closed it and from which (audited) run. Nothing in the log is edited or deleted: the
+    run's own events stay as they were, and the closure is visible in the log and in the KPI note (decision D34)."""
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("a reason is required (it is written to the audit log)")
+    run = next((r for r in open_runs(log) if r["run_id"] == run_id), None)
+    if run is None:
+        known = {e["run_id"] for e in read_log(log) if e.get("event") == "run_start"}
+        raise LookupError(f"{run_id} is not an open run" + (" (it already has a run_end)" if run_id in known else
+                                                             " (no run_start with this id)"))
+    event = {"event": "run_end", "run_id": run_id, "status": ABANDONED, "closed_after_the_fact": True,
+             "reason": reason, "closed_by": getpass.getuser(), "closed_by_run": closed_by_run,
+             "n_outputs": run["n_outputs"], "ts": _now()}
+    log = log or AUDIT_DIR / "audit_log.jsonl"
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event, default=str, ensure_ascii=False) + "\n")
+    return {**run, "closed": event}
+
+
 class Run:
     def __init__(self, name: str, params: dict | None = None, source: str | None = None):
         ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")   # UTC: ordering independent of the machine
@@ -135,6 +199,7 @@ class Run:
         self._finished = False
         # Write run_end even if the script fails (no gap in the audit trail)
         atexit.register(self._close_if_open)
+        _exit_on_terminate()
 
     def _close_if_open(self) -> None:
         if not self._finished:
